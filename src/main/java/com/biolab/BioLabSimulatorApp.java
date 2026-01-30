@@ -5,11 +5,15 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * Main application window for the Bio-Lab Evolution Simulator.
  */
 public class BioLabSimulatorApp extends JFrame {
+    private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
+
     private static final int WINDOW_WIDTH = 1200;
     private static final int WINDOW_HEIGHT = 800;
     private static final int CANVAS_HEIGHT = 650;
@@ -96,6 +100,8 @@ public class BioLabSimulatorApp extends JFrame {
                     try {
                         Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
                     } catch (InterruptedException e) {
+                        LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
+                        Thread.currentThread().interrupt(); // Restore interrupt status
                         break;
                     }
                 }
@@ -197,7 +203,7 @@ public class BioLabSimulatorApp extends JFrame {
             temperatureSlider.setPaintLabels(true);
             temperatureSlider.setBackground(new Color(40, 40, 50));
             temperatureSlider.setForeground(Color.WHITE);
-            temperatureSlider.addChangeListener(e -> {
+            temperatureSlider.addChangeListener(_ -> {
                 double temp = temperatureSlider.getValue() / 100.0;
                 engine.getEnvironment().setTemperature(temp);
             });
@@ -212,7 +218,7 @@ public class BioLabSimulatorApp extends JFrame {
             toxicitySlider.setPaintLabels(true);
             toxicitySlider.setBackground(new Color(40, 40, 50));
             toxicitySlider.setForeground(Color.WHITE);
-            toxicitySlider.addChangeListener(e -> {
+            toxicitySlider.addChangeListener(_ -> {
                 double tox = toxicitySlider.getValue() / 100.0;
                 engine.getEnvironment().setToxicity(tox);
             });
@@ -248,13 +254,26 @@ public class BioLabSimulatorApp extends JFrame {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Could not set system look and feel, using default", e);
         }
 
         // Launch on EDT (Event Dispatch Thread)
         SwingUtilities.invokeLater(() -> {
-            BioLabSimulatorApp app = new BioLabSimulatorApp();
-            app.setVisible(true);
+            try {
+                BioLabSimulatorApp app = new BioLabSimulatorApp();
+                app.setVisible(true);
+                LOGGER.info("Bio-Lab Simulator started successfully");
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Failed to start Bio-Lab Simulator", e);
+                // Show user-friendly error dialog
+                JOptionPane.showMessageDialog(
+                    null,
+                    "Failed to start the Bio-Lab Simulator.\nPlease check the logs for details.\n\nError: " + e.getMessage(),
+                    "Startup Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                System.exit(1);
+            }
         });
     }
 }

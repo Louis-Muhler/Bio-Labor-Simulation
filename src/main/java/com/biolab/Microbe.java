@@ -1,14 +1,13 @@
 package com.biolab;
 
 import java.awt.Color;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Represents a single microbe entity in the simulation.
  * Each microbe has genes that determine its survival capabilities.
  */
 public class Microbe {
-    private static final Random RANDOM = new Random();
 
     // Position
     private double x;
@@ -18,10 +17,10 @@ public class Microbe {
     private double velocityX;
     private double velocityY;
 
-    // Genes (0.0 to 1.0)
-    private double heatResistance;
-    private double toxinResistance;
-    private double speed;
+    // Genes (0.0 to 1.0) - immutable after creation
+    private final double heatResistance;
+    private final double toxinResistance;
+    private final double speed;
 
     // Vital stats
     private double health;
@@ -38,9 +37,10 @@ public class Microbe {
     public Microbe(double x, double y) {
         this.x = x;
         this.y = y;
-        this.heatResistance = RANDOM.nextDouble();
-        this.toxinResistance = RANDOM.nextDouble();
-        this.speed = RANDOM.nextDouble();
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        this.heatResistance = random.nextDouble();
+        this.toxinResistance = random.nextDouble();
+        this.speed = random.nextDouble();
         this.health = MAX_HEALTH;
         this.age = 0;
         randomizeVelocity();
@@ -67,7 +67,7 @@ public class Microbe {
      * Mutates a gene value slightly.
      */
     private double mutate(double value) {
-        double mutation = (RANDOM.nextDouble() - 0.5) * 0.1; // ±5% mutation
+        double mutation = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.1; // ±5% mutation
         double newValue = value + mutation;
         return Math.max(0.0, Math.min(1.0, newValue)); // Clamp to [0, 1]
     }
@@ -76,7 +76,8 @@ public class Microbe {
      * Sets random velocity based on speed gene.
      */
     private void randomizeVelocity() {
-        double angle = RANDOM.nextDouble() * 2 * Math.PI;
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        double angle = random.nextDouble() * 2 * Math.PI;
         double magnitude = speed * 2.0; // Scale speed
         this.velocityX = Math.cos(angle) * magnitude;
         this.velocityY = Math.sin(angle) * magnitude;
@@ -100,7 +101,7 @@ public class Microbe {
         }
 
         // Occasionally change direction
-        if (RANDOM.nextDouble() < 0.02) {
+        if (ThreadLocalRandom.current().nextDouble() < 0.02) {
             randomizeVelocity();
         }
     }
