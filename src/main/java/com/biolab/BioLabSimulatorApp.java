@@ -203,7 +203,7 @@ public class BioLabSimulatorApp extends JFrame {
             temperatureSlider.setPaintLabels(true);
             temperatureSlider.setBackground(new Color(40, 40, 50));
             temperatureSlider.setForeground(Color.WHITE);
-            temperatureSlider.addChangeListener(_ -> {
+            temperatureSlider.addChangeListener(e -> {
                 double temp = temperatureSlider.getValue() / 100.0;
                 engine.getEnvironment().setTemperature(temp);
             });
@@ -218,7 +218,7 @@ public class BioLabSimulatorApp extends JFrame {
             toxicitySlider.setPaintLabels(true);
             toxicitySlider.setBackground(new Color(40, 40, 50));
             toxicitySlider.setForeground(Color.WHITE);
-            toxicitySlider.addChangeListener(_ -> {
+            toxicitySlider.addChangeListener(e -> {
                 double tox = toxicitySlider.getValue() / 100.0;
                 engine.getEnvironment().setToxicity(tox);
             });
