@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -14,16 +15,21 @@ import java.util.logging.Level;
 public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
-    private static final int WINDOW_WIDTH = 1200;
-    private static final int WINDOW_HEIGHT = 800;
-    private static final int CANVAS_HEIGHT = 650;
     private static final int INITIAL_POPULATION = 1500;
-    private static final int TARGET_FPS = 60;
 
+    private final SettingsManager settingsManager;
     private final SimulationEngine engine;
     private final SimulationCanvas canvas;
     private final ControlPanel controlPanel;
     private volatile boolean running = true;
+    private volatile boolean paused = false;
+    private SettingsOverlay settingsOverlay;
+    
+    // Dynamic settings
+    private int windowWidth;
+    private int windowHeight;
+    private int canvasHeight;
+    private int targetFps;
 
     // FPS tracking
     private long lastFpsTime = System.nanoTime();
@@ -33,8 +39,17 @@ public class BioLabSimulatorApp extends JFrame {
     public BioLabSimulatorApp() {
         super("Bio-Lab Evolution Simulator");
 
+        // Initialize settings manager and load settings
+        settingsManager = new SettingsManager();
+        windowWidth = settingsManager.getWindowWidth();
+        windowHeight = settingsManager.getWindowHeight();
+        targetFps = settingsManager.getTargetFps();
+        
+        // Calculate canvas height (leave room for control panel)
+        canvasHeight = windowHeight - 150;
+
         // Initialize simulation engine
-        engine = new SimulationEngine(WINDOW_WIDTH, CANVAS_HEIGHT, INITIAL_POPULATION);
+        engine = new SimulationEngine(windowWidth, canvasHeight, INITIAL_POPULATION);
 
         // Setup UI components
         canvas = new SimulationCanvas();
@@ -42,6 +57,9 @@ public class BioLabSimulatorApp extends JFrame {
 
         setupUI();
         setupShutdownHook();
+        
+        // Apply initial display mode
+        applyDisplayMode();
 
         // Start simulation loop in a separate thread
         startSimulationLoop();
@@ -49,7 +67,7 @@ public class BioLabSimulatorApp extends JFrame {
 
     private void setupUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+        setSize(windowWidth, windowHeight);
         setResizable(false);
         setLayout(new BorderLayout());
 
@@ -59,7 +77,114 @@ public class BioLabSimulatorApp extends JFrame {
         // Add control panel at bottom
         add(controlPanel, BorderLayout.SOUTH);
 
+        // Add menu bar with settings button
+        setJMenuBar(createMenuBar());
+
         setLocationRelativeTo(null);
+    }
+    
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        
+        JMenu fileMenu = new JMenu("File");
+        
+        JMenuItem settingsItem = new JMenuItem("Settings");
+        settingsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, 
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        settingsItem.addActionListener(e -> showSettingsOverlay());
+        fileMenu.add(settingsItem);
+        
+        fileMenu.addSeparator();
+        
+        JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.addActionListener(e -> {
+            running = false;
+            engine.shutdown();
+            System.exit(0);
+        });
+        fileMenu.add(exitItem);
+        
+        menuBar.add(fileMenu);
+        return menuBar;
+    }
+    
+    private void applyDisplayMode() {
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        
+        if (settingsManager.isFullscreen() && gd.isFullScreenSupported()) {
+            dispose();
+            setUndecorated(true);
+            gd.setFullScreenWindow(this);
+            setVisible(true);
+            LOGGER.info("Switched to fullscreen mode");
+        } else {
+            if (gd.getFullScreenWindow() == this) {
+                gd.setFullScreenWindow(null);
+            }
+            dispose();
+            setUndecorated(false);
+            setSize(windowWidth, windowHeight);
+            setLocationRelativeTo(null);
+            setVisible(true);
+            LOGGER.info("Switched to windowed mode: " + windowWidth + "x" + windowHeight);
+        }
+    }
+    
+    private void showSettingsOverlay() {
+        if (settingsOverlay != null) {
+            return; // Already showing
+        }
+        
+        // Pause simulation
+        paused = true;
+        
+        // Create and show overlay
+        settingsOverlay = new SettingsOverlay(settingsManager, this::closeSettingsOverlay);
+        
+        // Add overlay on top of everything
+        getLayeredPane().add(settingsOverlay, JLayeredPane.POPUP_LAYER);
+        settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
+        settingsOverlay.setVisible(true);
+        settingsOverlay.requestFocusInWindow();
+        
+        LOGGER.info("Settings overlay opened");
+    }
+    
+    private void closeSettingsOverlay() {
+        if (settingsOverlay == null) {
+            return;
+        }
+        
+        // Remove overlay
+        getLayeredPane().remove(settingsOverlay);
+        settingsOverlay = null;
+        
+        // Check if settings changed and need to apply
+        boolean settingsChanged = false;
+        if (windowWidth != settingsManager.getWindowWidth() || 
+            windowHeight != settingsManager.getWindowHeight()) {
+            windowWidth = settingsManager.getWindowWidth();
+            windowHeight = settingsManager.getWindowHeight();
+            canvasHeight = windowHeight - 150;
+            settingsChanged = true;
+        }
+        if (targetFps != settingsManager.getTargetFps()) {
+            targetFps = settingsManager.getTargetFps();
+            settingsChanged = true;
+        }
+        
+        // Apply display mode changes if needed
+        if (settingsChanged) {
+            applyDisplayMode();
+            canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
+            controlPanel.setPreferredSize(new Dimension(windowWidth, 120));
+        }
+        
+        // Resume simulation
+        paused = false;
+        
+        repaint();
+        LOGGER.info("Settings overlay closed");
     }
 
     private void setupShutdownHook() {
@@ -78,20 +203,22 @@ public class BioLabSimulatorApp extends JFrame {
      */
     private void startSimulationLoop() {
         Thread simulationThread = new Thread(() -> {
-            long frameTime = 1_000_000_000 / TARGET_FPS; // nanoseconds per frame
-
             while (running) {
                 long startTime = System.nanoTime();
+                long frameTime = 1_000_000_000 / targetFps; // nanoseconds per frame
 
-                // ===== MULTITHREADING: Engine.update() uses ExecutorService =====
-                // This is where thousands of microbes are updated concurrently
-                engine.update();
+                // Only update if not paused
+                if (!paused) {
+                    // ===== MULTITHREADING: Engine.update() uses ExecutorService =====
+                    // This is where thousands of microbes are updated concurrently
+                    engine.update();
 
-                // Repaint canvas
-                canvas.repaint();
+                    // Repaint canvas
+                    canvas.repaint();
 
-                // Update FPS counter
-                updateFPS();
+                    // Update FPS counter
+                    updateFPS();
+                }
 
                 // Sleep to maintain target FPS
                 long elapsed = System.nanoTime() - startTime;
@@ -127,7 +254,7 @@ public class BioLabSimulatorApp extends JFrame {
      */
     private class SimulationCanvas extends JPanel {
         public SimulationCanvas() {
-            setPreferredSize(new Dimension(WINDOW_WIDTH, CANVAS_HEIGHT));
+            setPreferredSize(new Dimension(windowWidth, canvasHeight));
             setBackground(new Color(20, 20, 30)); // Dark background like a petri dish
         }
 
@@ -160,7 +287,7 @@ public class BioLabSimulatorApp extends JFrame {
         }
 
         private void drawLegend(Graphics2D g2d) {
-            int startX = WINDOW_WIDTH - 200;
+            int startX = windowWidth - 200;
             int startY = 10;
 
             g2d.setColor(Color.WHITE);
@@ -188,7 +315,7 @@ public class BioLabSimulatorApp extends JFrame {
 
         public ControlPanel() {
             setLayout(new BorderLayout());
-            setPreferredSize(new Dimension(WINDOW_WIDTH, 120));
+            setPreferredSize(new Dimension(windowWidth, 120));
             setBackground(new Color(40, 40, 50));
 
             // Sliders panel
