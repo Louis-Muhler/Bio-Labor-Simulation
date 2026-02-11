@@ -20,6 +20,8 @@ public class BioLabSimulatorApp extends JFrame {
     private static final int MENU_BAR_HEIGHT = 30;
     private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + MENU_BAR_HEIGHT;
     private static final int UNLIMITED_FPS = 999;
+    private static final int BASE_FPS = 30;
+    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
 
     private final SettingsManager settingsManager;
     private final SimulationEngine engine;
@@ -34,6 +36,7 @@ public class BioLabSimulatorApp extends JFrame {
     private int windowHeight;
     private int canvasHeight;
     private int targetFps;
+    private int currentSpeedIndex = 0;
 
     // FPS tracking
     private long lastFpsTime = System.nanoTime();
@@ -47,8 +50,7 @@ public class BioLabSimulatorApp extends JFrame {
         settingsManager = new SettingsManager();
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
-        targetFps = settingsManager.getTargetFps();
-        
+        targetFps = BASE_FPS * SPEED_MULTIPLIERS[currentSpeedIndex];
         // Calculate canvas height (leave room for control panel)
         canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
 
@@ -151,6 +153,10 @@ public class BioLabSimulatorApp extends JFrame {
         settingsOverlay.setVisible(true);
         settingsOverlay.requestFocusInWindow();
         
+        // Force repaint to make sure overlay is visible immediately even if loop is paused
+        revalidate();
+        repaint();
+
         LOGGER.info("Settings overlay opened");
     }
     
@@ -172,11 +178,8 @@ public class BioLabSimulatorApp extends JFrame {
             canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
             settingsChanged = true;
         }
-        if (targetFps != settingsManager.getTargetFps()) {
-            targetFps = settingsManager.getTargetFps();
-            settingsChanged = true;
-        }
-        
+        // Removed targetFPS check as it is now handled by speed button
+
         // Apply display mode changes if needed
         if (settingsChanged) {
             applyDisplayMode();
@@ -187,6 +190,8 @@ public class BioLabSimulatorApp extends JFrame {
         // Resume simulation
         paused = false;
         
+        // Force repaint to remove overlay logic visually
+        revalidate();
         repaint();
         LOGGER.info("Settings overlay closed");
     }
@@ -325,67 +330,115 @@ public class BioLabSimulatorApp extends JFrame {
         private final JSlider temperatureSlider;
         private final JSlider toxicitySlider;
         private final JLabel statsLabel;
+        private final JButton speedButton;
 
         public ControlPanel() {
-            setLayout(new BorderLayout());
+            setLayout(new GridBagLayout());
             setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
-            setBackground(new Color(40, 40, 50));
+            setBackground(new Color(30, 30, 40));
+            setBorder(BorderFactory.createMatteBorder(2, 0, 0, 0, new Color(60, 60, 70)));
 
-            // Sliders panel
-            JPanel slidersPanel = new JPanel(new GridLayout(2, 1, 5, 5));
-            slidersPanel.setBackground(new Color(40, 40, 50));
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 15, 5, 15);
+            gbc.fill = GridBagConstraints.BOTH;
+
+            // --- Left Section: Sliders ---
+            JPanel slidersPanel = new JPanel(new GridLayout(2, 1, 0, 10));
+            slidersPanel.setOpaque(false);
 
             // Temperature slider
-            JPanel tempPanel = createSliderPanel("Temperature (Cold ← → Hot)");
-            temperatureSlider = new JSlider(0, 100, 30);
-            temperatureSlider.setMajorTickSpacing(25);
-            temperatureSlider.setPaintTicks(true);
-            temperatureSlider.setPaintLabels(true);
-            temperatureSlider.setBackground(new Color(40, 40, 50));
-            temperatureSlider.setForeground(Color.WHITE);
+            JPanel tempPanel = createSliderPanel("Temperature", new Color(255, 100, 100));
+            temperatureSlider = createStyledSlider();
             temperatureSlider.addChangeListener(e -> {
                 double temp = temperatureSlider.getValue() / 100.0;
                 engine.getEnvironment().setTemperature(temp);
             });
-            tempPanel.add(temperatureSlider);
+            tempPanel.add(temperatureSlider, BorderLayout.CENTER);
             slidersPanel.add(tempPanel);
 
             // Toxicity slider
-            JPanel toxPanel = createSliderPanel("Toxicity (Clean ← → Poisonous)");
-            toxicitySlider = new JSlider(0, 100, 30);
-            toxicitySlider.setMajorTickSpacing(25);
-            toxicitySlider.setPaintTicks(true);
-            toxicitySlider.setPaintLabels(true);
-            toxicitySlider.setBackground(new Color(40, 40, 50));
-            toxicitySlider.setForeground(Color.WHITE);
+            JPanel toxPanel = createSliderPanel("Toxicity", new Color(100, 255, 100));
+            toxicitySlider = createStyledSlider();
             toxicitySlider.addChangeListener(e -> {
                 double tox = toxicitySlider.getValue() / 100.0;
                 engine.getEnvironment().setToxicity(tox);
             });
-            toxPanel.add(toxicitySlider);
+            toxPanel.add(toxicitySlider, BorderLayout.CENTER);
             slidersPanel.add(toxPanel);
 
-            add(slidersPanel, BorderLayout.CENTER);
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 0.4;
+            gbc.weighty = 1.0;
+            add(slidersPanel, gbc);
 
-            // Stats label
-            statsLabel = new JLabel("Population: 0 | FPS: 0", SwingConstants.CENTER);
-            statsLabel.setFont(new Font("Arial", Font.BOLD, 16));
-            statsLabel.setForeground(Color.CYAN);
-            add(statsLabel, BorderLayout.SOUTH);
+            // --- Center Section: Stats ---
+            statsLabel = new JLabel("<html><center>Population<br><font size='6' color='#4dbecf'>0</font></center></html>");
+            statsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            statsLabel.setForeground(Color.LIGHT_GRAY);
+            statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+            gbc.gridx = 1;
+            gbc.weightx = 0.2;
+            add(statsLabel, gbc);
+
+            // --- Right Section: Speed Control ---
+            JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 25));
+            controlsPanel.setOpaque(false);
+
+            speedButton = new JButton("Speed: 1x");
+            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            speedButton.setForeground(Color.WHITE);
+            speedButton.setBackground(new Color(50, 50, 60));
+            speedButton.setFocusPainted(false);
+            speedButton.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(100, 100, 120), 2),
+                BorderFactory.createEmptyBorder(10, 20, 10, 20)
+            ));
+            speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+            speedButton.addActionListener(e -> {
+                currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
+                int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
+                targetFps = BASE_FPS * multiplier;
+                speedButton.setText("Speed: " + multiplier + "x");
+            });
+
+            speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mouseEntered(java.awt.event.MouseEvent evt) {
+                    speedButton.setBackground(new Color(70, 70, 80));
+                }
+                public void mouseExited(java.awt.event.MouseEvent evt) {
+                    speedButton.setBackground(new Color(50, 50, 60));
+                }
+            });
+
+            controlsPanel.add(speedButton);
+
+            gbc.gridx = 2;
+            gbc.weightx = 0.4;
+            add(controlsPanel, gbc);
         }
 
-        private JPanel createSliderPanel(String title) {
-            JPanel panel = new JPanel(new BorderLayout());
-            panel.setBackground(new Color(40, 40, 50));
-            JLabel label = new JLabel(title, SwingConstants.CENTER);
-            label.setForeground(Color.WHITE);
-            label.setFont(new Font("Arial", Font.BOLD, 12));
+        private JSlider createStyledSlider() {
+            JSlider slider = new JSlider(0, 100, 30);
+            slider.setOpaque(false);
+            slider.setForeground(Color.WHITE);
+            return slider;
+        }
+
+        private JPanel createSliderPanel(String title, Color titleColor) {
+            JPanel panel = new JPanel(new BorderLayout(5, 5));
+            panel.setOpaque(false);
+            JLabel label = new JLabel(title);
+            label.setForeground(titleColor);
+            label.setFont(new Font("Segoe UI", Font.BOLD, 12));
             panel.add(label, BorderLayout.NORTH);
             return panel;
         }
 
         public void updateStats(int population, int fps) {
-            statsLabel.setText(String.format("Population: %d | FPS: %d", population, fps));
+            statsLabel.setText(String.format("<html><center>Population<br><font size='6' color='#4dbecf'>%d</font><br><font size='3' color='gray'>TPS: %d</font></center></html>", population, fps));
         }
     }
 

@@ -18,7 +18,6 @@ public class SettingsOverlay extends JPanel {
     
     // UI Components
     private JComboBox<String> resolutionCombo;
-    private JComboBox<String> fpsCombo;
     private JCheckBox fullscreenCheck;
     
     // Resolution options with their dimensions
@@ -46,10 +45,6 @@ public class SettingsOverlay extends JPanel {
         RESOLUTIONS.put("1280x960 (4:3)", new Dimension(1280, 960));
         RESOLUTIONS.put("1600x1200 (4:3)", new Dimension(1600, 1200));
     }
-    
-    // FPS options
-    private static final String[] FPS_OPTIONS = {"30 FPS", "60 FPS", "120 FPS", "144 FPS", "Unlimited"};
-    private static final int[] FPS_VALUES = {30, 60, 120, 144, 999};
     
     public SettingsOverlay(SettingsManager settingsManager, Runnable onClose) {
         this.settingsManager = settingsManager;
@@ -112,15 +107,6 @@ public class SettingsOverlay extends JPanel {
         resolutionCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
         styleComboBox(resolutionCombo);
         settingsPanel.add(resolutionCombo);
-        settingsPanel.add(Box.createVerticalStrut(15));
-        
-        // FPS Section
-        settingsPanel.add(createSectionLabel("Target FPS"));
-        fpsCombo = new JComboBox<>(FPS_OPTIONS);
-        fpsCombo.setMaximumSize(new Dimension(400, 30));
-        fpsCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
-        styleComboBox(fpsCombo);
-        settingsPanel.add(fpsCombo);
         settingsPanel.add(Box.createVerticalStrut(25));
         
         // Buttons panel
@@ -211,13 +197,6 @@ public class SettingsOverlay extends JPanel {
         if (currentResKey != null) {
             resolutionCombo.setSelectedItem(currentResKey);
         }
-        
-        // Load FPS
-        int currentFps = settingsManager.getTargetFps();
-        int fpsIndex = findFpsIndex(currentFps);
-        if (fpsIndex >= 0) {
-            fpsCombo.setSelectedIndex(fpsIndex);
-        }
     }
     
     private String findResolutionKey(int width, int height) {
@@ -228,15 +207,6 @@ public class SettingsOverlay extends JPanel {
             }
         }
         return null;
-    }
-    
-    private int findFpsIndex(int fps) {
-        for (int i = 0; i < FPS_VALUES.length; i++) {
-            if (FPS_VALUES[i] == fps) {
-                return i;
-            }
-        }
-        return 1; // Default to 60 FPS
     }
     
     private void applySettings() {
@@ -251,12 +221,6 @@ public class SettingsOverlay extends JPanel {
                 settingsManager.setWindowWidth(dim.width);
                 settingsManager.setWindowHeight(dim.height);
             }
-        }
-        
-        // Apply FPS
-        int fpsIndex = fpsCombo.getSelectedIndex();
-        if (fpsIndex >= 0 && fpsIndex < FPS_VALUES.length) {
-            settingsManager.setTargetFps(FPS_VALUES[fpsIndex]);
         }
         
         // Save settings
