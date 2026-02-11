@@ -16,6 +16,10 @@ public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
     private static final int INITIAL_POPULATION = 1500;
+    private static final int CONTROL_PANEL_HEIGHT = 120;
+    private static final int MENU_BAR_HEIGHT = 30;
+    private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + MENU_BAR_HEIGHT;
+    private static final int UNLIMITED_FPS = 999;
 
     private final SettingsManager settingsManager;
     private final SimulationEngine engine;
@@ -46,7 +50,7 @@ public class BioLabSimulatorApp extends JFrame {
         targetFps = settingsManager.getTargetFps();
         
         // Calculate canvas height (leave room for control panel)
-        canvasHeight = windowHeight - 150;
+        canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
 
         // Initialize simulation engine
         engine = new SimulationEngine(windowWidth, canvasHeight, INITIAL_POPULATION);
@@ -165,7 +169,7 @@ public class BioLabSimulatorApp extends JFrame {
             windowHeight != settingsManager.getWindowHeight()) {
             windowWidth = settingsManager.getWindowWidth();
             windowHeight = settingsManager.getWindowHeight();
-            canvasHeight = windowHeight - 150;
+            canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
             settingsChanged = true;
         }
         if (targetFps != settingsManager.getTargetFps()) {
@@ -205,7 +209,14 @@ public class BioLabSimulatorApp extends JFrame {
         Thread simulationThread = new Thread(() -> {
             while (running) {
                 long startTime = System.nanoTime();
-                long frameTime = 1_000_000_000 / targetFps; // nanoseconds per frame
+                
+                // Calculate frame time, handling unlimited FPS case
+                long frameTime;
+                if (targetFps >= UNLIMITED_FPS) {
+                    frameTime = 0; // No frame limiting for unlimited FPS
+                } else {
+                    frameTime = 1_000_000_000 / targetFps; // nanoseconds per frame
+                }
 
                 // Only update if not paused
                 if (!paused) {
@@ -220,16 +231,18 @@ public class BioLabSimulatorApp extends JFrame {
                     updateFPS();
                 }
 
-                // Sleep to maintain target FPS
-                long elapsed = System.nanoTime() - startTime;
-                long sleepTime = frameTime - elapsed;
-                if (sleepTime > 0) {
-                    try {
-                        Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
-                    } catch (InterruptedException e) {
-                        LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
-                        Thread.currentThread().interrupt(); // Restore interrupt status
-                        break;
+                // Sleep to maintain target FPS (skip for unlimited FPS)
+                if (frameTime > 0) {
+                    long elapsed = System.nanoTime() - startTime;
+                    long sleepTime = frameTime - elapsed;
+                    if (sleepTime > 0) {
+                        try {
+                            Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
+                        } catch (InterruptedException e) {
+                            LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
+                            Thread.currentThread().interrupt(); // Restore interrupt status
+                            break;
+                        }
                     }
                 }
             }
@@ -315,7 +328,7 @@ public class BioLabSimulatorApp extends JFrame {
 
         public ControlPanel() {
             setLayout(new BorderLayout());
-            setPreferredSize(new Dimension(windowWidth, 120));
+            setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
             setBackground(new Color(40, 40, 50));
 
             // Sliders panel

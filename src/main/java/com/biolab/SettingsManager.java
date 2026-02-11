@@ -23,6 +23,7 @@ public class SettingsManager {
     private static final int DEFAULT_HEIGHT = 1080;
     private static final boolean DEFAULT_FULLSCREEN = false;
     private static final int DEFAULT_FPS = 60;
+    private static final int UNLIMITED_FPS = 999;
     
     // Settings
     private int windowWidth;
@@ -120,8 +121,8 @@ public class SettingsManager {
             windowHeight = DEFAULT_HEIGHT;
         }
         
-        // Clamp FPS to reasonable values
-        if (targetFps < 15 || targetFps > 240) {
+        // Clamp FPS to reasonable values (allow unlimited FPS)
+        if ((targetFps < 15 || targetFps > 240) && targetFps != UNLIMITED_FPS) {
             LOGGER.warning("Invalid FPS " + targetFps + ", resetting to default");
             targetFps = DEFAULT_FPS;
         }
