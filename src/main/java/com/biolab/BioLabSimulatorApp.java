@@ -14,16 +14,18 @@ import java.util.logging.Level;
 public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
-    private static final int WINDOW_WIDTH = 1200;
-    private static final int WINDOW_HEIGHT = 800;
-    private static final int CANVAS_HEIGHT = 650;
+    private int windowWidth = 1920;
+    private int windowHeight = 1080;
+    private int canvasHeight = 900;
     private static final int INITIAL_POPULATION = 1500;
     private static final int TARGET_FPS = 60;
+    private static final int CONTROL_PANEL_HEIGHT = 120;
 
     private final SimulationEngine engine;
-    private final SimulationCanvas canvas;
+    private SimulationCanvas canvas;
     private final ControlPanel controlPanel;
     private volatile boolean running = true;
+    private boolean isFullscreen = true;
 
     // FPS tracking
     private long lastFpsTime = System.nanoTime();
@@ -33,8 +35,15 @@ public class BioLabSimulatorApp extends JFrame {
     public BioLabSimulatorApp() {
         super("Bio-Lab Evolution Simulator");
 
+        // Get screen dimensions for fullscreen
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        DisplayMode dm = gd.getDisplayMode();
+        windowWidth = dm.getWidth();
+        windowHeight = dm.getHeight();
+        canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
+
         // Initialize simulation engine
-        engine = new SimulationEngine(WINDOW_WIDTH, CANVAS_HEIGHT, INITIAL_POPULATION);
+        engine = new SimulationEngine(windowWidth, canvasHeight, INITIAL_POPULATION);
 
         // Setup UI components
         canvas = new SimulationCanvas();
@@ -43,15 +52,21 @@ public class BioLabSimulatorApp extends JFrame {
         setupUI();
         setupShutdownHook();
 
+        // Start in fullscreen mode
+        setFullscreen(true);
+
         // Start simulation loop in a separate thread
         startSimulationLoop();
     }
 
     private void setupUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+        setSize(windowWidth, windowHeight);
         setResizable(false);
         setLayout(new BorderLayout());
+
+        // Add menu bar
+        setJMenuBar(createMenuBar());
 
         // Add canvas (where microbes are rendered)
         add(canvas, BorderLayout.CENTER);
@@ -70,6 +85,118 @@ public class BioLabSimulatorApp extends JFrame {
                 engine.shutdown();
             }
         });
+    }
+
+    /**
+     * Creates the menu bar with settings options.
+     */
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+
+        JMenu settingsMenu = new JMenu("Settings");
+
+        // Display mode menu item
+        JMenu displayModeMenu = new JMenu("Display Mode");
+
+        // Fullscreen option
+        JMenuItem fullscreenItem = new JMenuItem("Fullscreen");
+        fullscreenItem.addActionListener(_ -> setFullscreen(true));
+        displayModeMenu.add(fullscreenItem);
+
+        displayModeMenu.addSeparator();
+
+        // Window size options
+        addWindowSizeOption(displayModeMenu, "1920x1080 (16:9)", 1920, 1080);
+        addWindowSizeOption(displayModeMenu, "1600x900 (16:9)", 1600, 900);
+        addWindowSizeOption(displayModeMenu, "1366x768 (16:9)", 1366, 768);
+        addWindowSizeOption(displayModeMenu, "1280x720 (16:9)", 1280, 720);
+
+        displayModeMenu.addSeparator();
+
+        addWindowSizeOption(displayModeMenu, "2560x1080 (21:9)", 2560, 1080);
+        addWindowSizeOption(displayModeMenu, "1920x800 (21:9)", 1920, 800);
+
+        displayModeMenu.addSeparator();
+
+        addWindowSizeOption(displayModeMenu, "1600x1200 (4:3)", 1600, 1200);
+        addWindowSizeOption(displayModeMenu, "1400x1050 (4:3)", 1400, 1050);
+        addWindowSizeOption(displayModeMenu, "1280x960 (4:3)", 1280, 960);
+        addWindowSizeOption(displayModeMenu, "1024x768 (4:3)", 1024, 768);
+
+        displayModeMenu.addSeparator();
+
+        addWindowSizeOption(displayModeMenu, "1920x1200 (16:10)", 1920, 1200);
+        addWindowSizeOption(displayModeMenu, "1680x1050 (16:10)", 1680, 1050);
+        addWindowSizeOption(displayModeMenu, "1440x900 (16:10)", 1440, 900);
+
+        settingsMenu.add(displayModeMenu);
+        menuBar.add(settingsMenu);
+
+        return menuBar;
+    }
+
+    /**
+     * Adds a window size option to the menu.
+     */
+    private void addWindowSizeOption(JMenu menu, String label, int width, int height) {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(_ -> setWindowedMode(width, height));
+        menu.add(item);
+    }
+
+    /**
+     * Switches to fullscreen mode.
+     */
+    private void setFullscreen(boolean fullscreen) {
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+
+        if (fullscreen) {
+            isFullscreen = true;
+            dispose();
+            setUndecorated(true);
+
+            DisplayMode dm = gd.getDisplayMode();
+            windowWidth = dm.getWidth();
+            windowHeight = dm.getHeight();
+            canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
+
+            setSize(windowWidth, windowHeight);
+            canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
+            controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+
+            gd.setFullScreenWindow(this);
+            setVisible(true);
+
+            LOGGER.info("Switched to fullscreen mode: " + windowWidth + "x" + windowHeight);
+        }
+    }
+
+    /**
+     * Switches to windowed mode with specified dimensions.
+     */
+    private void setWindowedMode(int width, int height) {
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+
+        if (isFullscreen) {
+            gd.setFullScreenWindow(null);
+        }
+
+        isFullscreen = false;
+        dispose();
+        setUndecorated(false);
+
+        windowWidth = width;
+        windowHeight = height;
+        canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
+
+        setSize(windowWidth, windowHeight);
+        canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
+        controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+
+        setLocationRelativeTo(null);
+        setVisible(true);
+
+        LOGGER.info("Switched to windowed mode: " + windowWidth + "x" + windowHeight);
     }
 
     /**
@@ -127,7 +254,7 @@ public class BioLabSimulatorApp extends JFrame {
      */
     private class SimulationCanvas extends JPanel {
         public SimulationCanvas() {
-            setPreferredSize(new Dimension(WINDOW_WIDTH, CANVAS_HEIGHT));
+            setPreferredSize(new Dimension(windowWidth, canvasHeight));
             setBackground(new Color(20, 20, 30)); // Dark background like a petri dish
         }
 
@@ -160,7 +287,7 @@ public class BioLabSimulatorApp extends JFrame {
         }
 
         private void drawLegend(Graphics2D g2d) {
-            int startX = WINDOW_WIDTH - 200;
+            int startX = windowWidth - 200;
             int startY = 10;
 
             g2d.setColor(Color.WHITE);
@@ -188,7 +315,7 @@ public class BioLabSimulatorApp extends JFrame {
 
         public ControlPanel() {
             setLayout(new BorderLayout());
-            setPreferredSize(new Dimension(WINDOW_WIDTH, 120));
+            setPreferredSize(new Dimension(windowWidth, 120));
             setBackground(new Color(40, 40, 50));
 
             // Sliders panel
