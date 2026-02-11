@@ -181,7 +181,7 @@ public class BioLabSimulatorApp extends JFrame {
         if (settingsChanged) {
             applyDisplayMode();
             canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
-            controlPanel.setPreferredSize(new Dimension(windowWidth, 120));
+            controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
         }
         
         // Resume simulation

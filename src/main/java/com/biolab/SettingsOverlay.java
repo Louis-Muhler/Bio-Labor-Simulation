@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Settings overlay panel that appears on top of the simulation with a blur effect.
+ * Settings overlay panel that appears on top of the simulation with a semi-transparent dark overlay.
  * Pauses the simulation while settings are being adjusted.
  */
 public class SettingsOverlay extends JPanel {
@@ -61,7 +61,7 @@ public class SettingsOverlay extends JPanel {
     
     private void setupUI() {
         setLayout(new GridBagLayout());
-        setOpaque(false); // Make transparent for blur effect
+        setOpaque(false); // Make transparent for semi-transparent overlay effect
         
         // Create semi-transparent background with blur effect
         JPanel backgroundPanel = new JPanel() {
