@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -14,18 +15,28 @@ import java.util.logging.Level;
 public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
-    private int windowWidth = 1920;
-    private int windowHeight = 1080;
-    private int canvasHeight = 900;
     private static final int INITIAL_POPULATION = 1500;
-    private static final int TARGET_FPS = 60;
     private static final int CONTROL_PANEL_HEIGHT = 120;
+    private static final int MENU_BAR_HEIGHT = 30;
+    private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + MENU_BAR_HEIGHT;
+    private static final int UNLIMITED_FPS = 999;
+    private static final int BASE_FPS = 30;
+    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
 
+    private final SettingsManager settingsManager;
     private final SimulationEngine engine;
-    private SimulationCanvas canvas;
+    private final SimulationCanvas canvas;
     private final ControlPanel controlPanel;
     private volatile boolean running = true;
-    private boolean isFullscreen = true;
+    private volatile boolean paused = false;
+    private SettingsOverlay settingsOverlay;
+    
+    // Dynamic settings
+    private int windowWidth;
+    private int windowHeight;
+    private int canvasHeight;
+    private int targetFps;
+    private int currentSpeedIndex = 0;
 
     // FPS tracking
     private long lastFpsTime = System.nanoTime();
@@ -35,12 +46,13 @@ public class BioLabSimulatorApp extends JFrame {
     public BioLabSimulatorApp() {
         super("Bio-Lab Evolution Simulator");
 
-        // Get screen dimensions for fullscreen
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-        DisplayMode dm = gd.getDisplayMode();
-        windowWidth = dm.getWidth();
-        windowHeight = dm.getHeight();
-        canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
+        // Initialize settings manager and load settings
+        settingsManager = new SettingsManager();
+        windowWidth = settingsManager.getWindowWidth();
+        windowHeight = settingsManager.getWindowHeight();
+        targetFps = BASE_FPS * SPEED_MULTIPLIERS[currentSpeedIndex];
+        // Calculate canvas height (leave room for control panel)
+        canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
 
         // Initialize simulation engine
         engine = new SimulationEngine(windowWidth, canvasHeight, INITIAL_POPULATION);
@@ -51,9 +63,9 @@ public class BioLabSimulatorApp extends JFrame {
 
         setupUI();
         setupShutdownHook();
-
-        // Start in fullscreen mode
-        setFullscreen(true);
+        
+        // Apply initial display mode
+        applyDisplayMode();
 
         // Start simulation loop in a separate thread
         startSimulationLoop();
@@ -65,16 +77,123 @@ public class BioLabSimulatorApp extends JFrame {
         setResizable(false);
         setLayout(new BorderLayout());
 
-        // Add menu bar
-        setJMenuBar(createMenuBar());
-
         // Add canvas (where microbes are rendered)
         add(canvas, BorderLayout.CENTER);
 
         // Add control panel at bottom
         add(controlPanel, BorderLayout.SOUTH);
 
+        // Add menu bar with settings button
+        setJMenuBar(createMenuBar());
+
         setLocationRelativeTo(null);
+    }
+    
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        
+        JMenu fileMenu = new JMenu("File");
+        
+        JMenuItem settingsItem = new JMenuItem("Settings");
+        settingsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, 
+            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        settingsItem.addActionListener(e -> showSettingsOverlay());
+        fileMenu.add(settingsItem);
+        
+        fileMenu.addSeparator();
+        
+        JMenuItem exitItem = new JMenuItem("Exit");
+        exitItem.addActionListener(e -> {
+            running = false;
+            engine.shutdown();
+            System.exit(0);
+        });
+        fileMenu.add(exitItem);
+        
+        menuBar.add(fileMenu);
+        return menuBar;
+    }
+    
+    private void applyDisplayMode() {
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        
+        if (settingsManager.isFullscreen() && gd.isFullScreenSupported()) {
+            dispose();
+            setUndecorated(true);
+            gd.setFullScreenWindow(this);
+            setVisible(true);
+            LOGGER.info("Switched to fullscreen mode");
+        } else {
+            if (gd.getFullScreenWindow() == this) {
+                gd.setFullScreenWindow(null);
+            }
+            dispose();
+            setUndecorated(false);
+            setSize(windowWidth, windowHeight);
+            setLocationRelativeTo(null);
+            setVisible(true);
+            LOGGER.info("Switched to windowed mode: " + windowWidth + "x" + windowHeight);
+        }
+    }
+    
+    private void showSettingsOverlay() {
+        if (settingsOverlay != null) {
+            return; // Already showing
+        }
+        
+        // Pause simulation
+        paused = true;
+        
+        // Create and show overlay
+        settingsOverlay = new SettingsOverlay(settingsManager, this::closeSettingsOverlay);
+        
+        // Add overlay on top of everything
+        getLayeredPane().add(settingsOverlay, JLayeredPane.POPUP_LAYER);
+        settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
+        settingsOverlay.setVisible(true);
+        settingsOverlay.requestFocusInWindow();
+        
+        // Force repaint to make sure overlay is visible immediately even if loop is paused
+        revalidate();
+        repaint();
+
+        LOGGER.info("Settings overlay opened");
+    }
+    
+    private void closeSettingsOverlay() {
+        if (settingsOverlay == null) {
+            return;
+        }
+        
+        // Remove overlay
+        getLayeredPane().remove(settingsOverlay);
+        settingsOverlay = null;
+        
+        // Check if settings changed and need to apply
+        boolean settingsChanged = false;
+        if (windowWidth != settingsManager.getWindowWidth() || 
+            windowHeight != settingsManager.getWindowHeight()) {
+            windowWidth = settingsManager.getWindowWidth();
+            windowHeight = settingsManager.getWindowHeight();
+            canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
+            settingsChanged = true;
+        }
+        // Removed targetFPS check as it is now handled by speed button
+
+        // Apply display mode changes if needed
+        if (settingsChanged) {
+            applyDisplayMode();
+            canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
+            controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+        }
+        
+        // Resume simulation
+        paused = false;
+        
+        // Force repaint to remove overlay logic visually
+        revalidate();
+        repaint();
+        LOGGER.info("Settings overlay closed");
     }
 
     private void setupShutdownHook() {
@@ -88,148 +207,47 @@ public class BioLabSimulatorApp extends JFrame {
     }
 
     /**
-     * Creates the menu bar with settings options.
-     */
-    private JMenuBar createMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-
-        JMenu settingsMenu = new JMenu("Settings");
-
-        // Display mode menu item
-        JMenu displayModeMenu = new JMenu("Display Mode");
-
-        // Fullscreen option
-        JMenuItem fullscreenItem = new JMenuItem("Fullscreen");
-        fullscreenItem.addActionListener(_ -> setFullscreen(true));
-        displayModeMenu.add(fullscreenItem);
-
-        displayModeMenu.addSeparator();
-
-        // Window size options
-        addWindowSizeOption(displayModeMenu, "1920x1080 (16:9)", 1920, 1080);
-        addWindowSizeOption(displayModeMenu, "1600x900 (16:9)", 1600, 900);
-        addWindowSizeOption(displayModeMenu, "1366x768 (16:9)", 1366, 768);
-        addWindowSizeOption(displayModeMenu, "1280x720 (16:9)", 1280, 720);
-
-        displayModeMenu.addSeparator();
-
-        addWindowSizeOption(displayModeMenu, "2560x1080 (21:9)", 2560, 1080);
-        addWindowSizeOption(displayModeMenu, "1920x800 (21:9)", 1920, 800);
-
-        displayModeMenu.addSeparator();
-
-        addWindowSizeOption(displayModeMenu, "1600x1200 (4:3)", 1600, 1200);
-        addWindowSizeOption(displayModeMenu, "1400x1050 (4:3)", 1400, 1050);
-        addWindowSizeOption(displayModeMenu, "1280x960 (4:3)", 1280, 960);
-        addWindowSizeOption(displayModeMenu, "1024x768 (4:3)", 1024, 768);
-
-        displayModeMenu.addSeparator();
-
-        addWindowSizeOption(displayModeMenu, "1920x1200 (16:10)", 1920, 1200);
-        addWindowSizeOption(displayModeMenu, "1680x1050 (16:10)", 1680, 1050);
-        addWindowSizeOption(displayModeMenu, "1440x900 (16:10)", 1440, 900);
-
-        settingsMenu.add(displayModeMenu);
-        menuBar.add(settingsMenu);
-
-        return menuBar;
-    }
-
-    /**
-     * Adds a window size option to the menu.
-     */
-    private void addWindowSizeOption(JMenu menu, String label, int width, int height) {
-        JMenuItem item = new JMenuItem(label);
-        item.addActionListener(_ -> setWindowedMode(width, height));
-        menu.add(item);
-    }
-
-    /**
-     * Switches to fullscreen mode.
-     */
-    private void setFullscreen(boolean fullscreen) {
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-
-        if (fullscreen) {
-            isFullscreen = true;
-            dispose();
-            setUndecorated(true);
-
-            DisplayMode dm = gd.getDisplayMode();
-            windowWidth = dm.getWidth();
-            windowHeight = dm.getHeight();
-            canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
-
-            setSize(windowWidth, windowHeight);
-            canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
-            controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
-
-            gd.setFullScreenWindow(this);
-            setVisible(true);
-
-            LOGGER.info("Switched to fullscreen mode: " + windowWidth + "x" + windowHeight);
-        }
-    }
-
-    /**
-     * Switches to windowed mode with specified dimensions.
-     */
-    private void setWindowedMode(int width, int height) {
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-
-        if (isFullscreen) {
-            gd.setFullScreenWindow(null);
-        }
-
-        isFullscreen = false;
-        dispose();
-        setUndecorated(false);
-
-        windowWidth = width;
-        windowHeight = height;
-        canvasHeight = windowHeight - CONTROL_PANEL_HEIGHT;
-
-        setSize(windowWidth, windowHeight);
-        canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
-        controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
-
-        setLocationRelativeTo(null);
-        setVisible(true);
-
-        LOGGER.info("Switched to windowed mode: " + windowWidth + "x" + windowHeight);
-    }
-
-    /**
      * Starts the main simulation loop in a dedicated thread.
      * This keeps the UI responsive while simulation runs.
      */
     private void startSimulationLoop() {
         Thread simulationThread = new Thread(() -> {
-            long frameTime = 1_000_000_000 / TARGET_FPS; // nanoseconds per frame
-
             while (running) {
                 long startTime = System.nanoTime();
+                
+                // Calculate frame time, handling unlimited FPS case
+                long frameTime;
+                if (targetFps >= UNLIMITED_FPS) {
+                    frameTime = 0; // No frame limiting for unlimited FPS
+                } else {
+                    frameTime = 1_000_000_000 / targetFps; // nanoseconds per frame
+                }
 
-                // ===== MULTITHREADING: Engine.update() uses ExecutorService =====
-                // This is where thousands of microbes are updated concurrently
-                engine.update();
+                // Only update if not paused
+                if (!paused) {
+                    // ===== MULTITHREADING: Engine.update() uses ExecutorService =====
+                    // This is where thousands of microbes are updated concurrently
+                    engine.update();
 
-                // Repaint canvas
-                canvas.repaint();
+                    // Repaint canvas
+                    canvas.repaint();
 
-                // Update FPS counter
-                updateFPS();
+                    // Update FPS counter
+                    updateFPS();
+                }
 
-                // Sleep to maintain target FPS
-                long elapsed = System.nanoTime() - startTime;
-                long sleepTime = frameTime - elapsed;
-                if (sleepTime > 0) {
-                    try {
-                        Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
-                    } catch (InterruptedException e) {
-                        LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
-                        Thread.currentThread().interrupt(); // Restore interrupt status
-                        break;
+                // Sleep to maintain target FPS (skip for unlimited FPS)
+                if (frameTime > 0) {
+                    long elapsed = System.nanoTime() - startTime;
+                    long sleepTime = frameTime - elapsed;
+                    if (sleepTime > 0) {
+                        try {
+                            Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
+                        } catch (InterruptedException e) {
+                            LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
+                            Thread.currentThread().interrupt(); // Restore interrupt status
+                            break;
+                        }
                     }
                 }
             }
@@ -312,67 +330,115 @@ public class BioLabSimulatorApp extends JFrame {
         private final JSlider temperatureSlider;
         private final JSlider toxicitySlider;
         private final JLabel statsLabel;
+        private final JButton speedButton;
 
         public ControlPanel() {
-            setLayout(new BorderLayout());
-            setPreferredSize(new Dimension(windowWidth, 120));
-            setBackground(new Color(40, 40, 50));
+            setLayout(new GridBagLayout());
+            setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+            setBackground(new Color(30, 30, 40));
+            setBorder(BorderFactory.createMatteBorder(2, 0, 0, 0, new Color(60, 60, 70)));
 
-            // Sliders panel
-            JPanel slidersPanel = new JPanel(new GridLayout(2, 1, 5, 5));
-            slidersPanel.setBackground(new Color(40, 40, 50));
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 15, 5, 15);
+            gbc.fill = GridBagConstraints.BOTH;
+
+            // --- Left Section: Sliders ---
+            JPanel slidersPanel = new JPanel(new GridLayout(2, 1, 0, 10));
+            slidersPanel.setOpaque(false);
 
             // Temperature slider
-            JPanel tempPanel = createSliderPanel("Temperature (Cold ← → Hot)");
-            temperatureSlider = new JSlider(0, 100, 30);
-            temperatureSlider.setMajorTickSpacing(25);
-            temperatureSlider.setPaintTicks(true);
-            temperatureSlider.setPaintLabels(true);
-            temperatureSlider.setBackground(new Color(40, 40, 50));
-            temperatureSlider.setForeground(Color.WHITE);
-            temperatureSlider.addChangeListener(_ -> {
+            JPanel tempPanel = createSliderPanel("Temperature", new Color(255, 100, 100));
+            temperatureSlider = createStyledSlider();
+            temperatureSlider.addChangeListener(e -> {
                 double temp = temperatureSlider.getValue() / 100.0;
                 engine.getEnvironment().setTemperature(temp);
             });
-            tempPanel.add(temperatureSlider);
+            tempPanel.add(temperatureSlider, BorderLayout.CENTER);
             slidersPanel.add(tempPanel);
 
             // Toxicity slider
-            JPanel toxPanel = createSliderPanel("Toxicity (Clean ← → Poisonous)");
-            toxicitySlider = new JSlider(0, 100, 30);
-            toxicitySlider.setMajorTickSpacing(25);
-            toxicitySlider.setPaintTicks(true);
-            toxicitySlider.setPaintLabels(true);
-            toxicitySlider.setBackground(new Color(40, 40, 50));
-            toxicitySlider.setForeground(Color.WHITE);
-            toxicitySlider.addChangeListener(_ -> {
+            JPanel toxPanel = createSliderPanel("Toxicity", new Color(100, 255, 100));
+            toxicitySlider = createStyledSlider();
+            toxicitySlider.addChangeListener(e -> {
                 double tox = toxicitySlider.getValue() / 100.0;
                 engine.getEnvironment().setToxicity(tox);
             });
-            toxPanel.add(toxicitySlider);
+            toxPanel.add(toxicitySlider, BorderLayout.CENTER);
             slidersPanel.add(toxPanel);
 
-            add(slidersPanel, BorderLayout.CENTER);
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 0.4;
+            gbc.weighty = 1.0;
+            add(slidersPanel, gbc);
 
-            // Stats label
-            statsLabel = new JLabel("Population: 0 | FPS: 0", SwingConstants.CENTER);
-            statsLabel.setFont(new Font("Arial", Font.BOLD, 16));
-            statsLabel.setForeground(Color.CYAN);
-            add(statsLabel, BorderLayout.SOUTH);
+            // --- Center Section: Stats ---
+            statsLabel = new JLabel("<html><center>Population<br><font size='6' color='#4dbecf'>0</font></center></html>");
+            statsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            statsLabel.setForeground(Color.LIGHT_GRAY);
+            statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+            gbc.gridx = 1;
+            gbc.weightx = 0.2;
+            add(statsLabel, gbc);
+
+            // --- Right Section: Speed Control ---
+            JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 25));
+            controlsPanel.setOpaque(false);
+
+            speedButton = new JButton("Speed: 1x");
+            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            speedButton.setForeground(Color.WHITE);
+            speedButton.setBackground(new Color(50, 50, 60));
+            speedButton.setFocusPainted(false);
+            speedButton.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(100, 100, 120), 2),
+                BorderFactory.createEmptyBorder(10, 20, 10, 20)
+            ));
+            speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+            speedButton.addActionListener(e -> {
+                currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
+                int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
+                targetFps = BASE_FPS * multiplier;
+                speedButton.setText("Speed: " + multiplier + "x");
+            });
+
+            speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mouseEntered(java.awt.event.MouseEvent evt) {
+                    speedButton.setBackground(new Color(70, 70, 80));
+                }
+                public void mouseExited(java.awt.event.MouseEvent evt) {
+                    speedButton.setBackground(new Color(50, 50, 60));
+                }
+            });
+
+            controlsPanel.add(speedButton);
+
+            gbc.gridx = 2;
+            gbc.weightx = 0.4;
+            add(controlsPanel, gbc);
         }
 
-        private JPanel createSliderPanel(String title) {
-            JPanel panel = new JPanel(new BorderLayout());
-            panel.setBackground(new Color(40, 40, 50));
-            JLabel label = new JLabel(title, SwingConstants.CENTER);
-            label.setForeground(Color.WHITE);
-            label.setFont(new Font("Arial", Font.BOLD, 12));
+        private JSlider createStyledSlider() {
+            JSlider slider = new JSlider(0, 100, 30);
+            slider.setOpaque(false);
+            slider.setForeground(Color.WHITE);
+            return slider;
+        }
+
+        private JPanel createSliderPanel(String title, Color titleColor) {
+            JPanel panel = new JPanel(new BorderLayout(5, 5));
+            panel.setOpaque(false);
+            JLabel label = new JLabel(title);
+            label.setForeground(titleColor);
+            label.setFont(new Font("Segoe UI", Font.BOLD, 12));
             panel.add(label, BorderLayout.NORTH);
             return panel;
         }
 
         public void updateStats(int population, int fps) {
-            statsLabel.setText(String.format("Population: %d | FPS: %d", population, fps));
+            statsLabel.setText(String.format("<html><center>Population<br><font size='6' color='#4dbecf'>%d</font><br><font size='3' color='gray'>TPS: %d</font></center></html>", population, fps));
         }
     }
 
