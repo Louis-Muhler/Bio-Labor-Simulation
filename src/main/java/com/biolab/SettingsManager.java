@@ -104,7 +104,6 @@ public class SettingsManager {
         windowWidth = DEFAULT_WIDTH;
         windowHeight = DEFAULT_HEIGHT;
         fullscreen = DEFAULT_FULLSCREEN;
-        targetFps = DEFAULT_FPS;
     }
     
     /**
@@ -119,12 +118,6 @@ public class SettingsManager {
         if (windowHeight < 600 || windowHeight > 4320) {
             LOGGER.warning("Invalid height " + windowHeight + ", resetting to default");
             windowHeight = DEFAULT_HEIGHT;
-        }
-        
-        // Clamp FPS to reasonable values (allow unlimited FPS)
-        if ((targetFps < 15 || targetFps > 240) && targetFps != UNLIMITED_FPS) {
-            LOGGER.warning("Invalid FPS " + targetFps + ", resetting to default");
-            targetFps = DEFAULT_FPS;
         }
     }
     
@@ -147,11 +140,9 @@ public class SettingsManager {
     public int getWindowWidth() { return windowWidth; }
     public int getWindowHeight() { return windowHeight; }
     public boolean isFullscreen() { return fullscreen; }
-    public int getTargetFps() { return targetFps; }
-    
+
     // Setters
     public void setWindowWidth(int width) { this.windowWidth = width; }
     public void setWindowHeight(int height) { this.windowHeight = height; }
     public void setFullscreen(boolean fullscreen) { this.fullscreen = fullscreen; }
-    public void setTargetFps(int fps) { this.targetFps = fps; }
 }

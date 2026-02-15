@@ -165,12 +165,8 @@ public class Microbe {
     public double getX() { return x; }
     public double getY() { return y; }
     public int getSize() { return SIZE; }
-    @SuppressWarnings("unused")
     public double getHealth() { return health; }
-    @SuppressWarnings("unused")
     public double getHeatResistance() { return heatResistance; }
-    @SuppressWarnings("unused")
     public double getToxinResistance() { return toxinResistance; }
-    @SuppressWarnings("unused")
     public double getSpeed() { return speed; }
 }
