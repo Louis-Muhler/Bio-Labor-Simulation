@@ -237,11 +237,21 @@ public class BioLabSimulatorApp extends JFrame {
                 }
 
                 // Sleep to maintain target FPS (skip for unlimited FPS)
-                if (frameTime > 0) {
+                if (paused) {
+                    // Save CPU cycles when paused
+                    try {
+                        //noinspection BusyWait
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else if (frameTime > 0) {
                     long elapsed = System.nanoTime() - startTime;
                     long sleepTime = frameTime - elapsed;
                     if (sleepTime > 0) {
                         try {
+                            //noinspection BusyWait
                             Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
                         } catch (InterruptedException e) {
                             LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
@@ -281,7 +291,7 @@ public class BioLabSimulatorApp extends JFrame {
             super.paintComponent(g);
             Graphics2D g2d = (Graphics2D) g;
 
-            // Enable anti-aliasing for smoother circles
+            // Enable antialiasing for smoother circles
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
             // Get microbes snapshot (thread-safe)

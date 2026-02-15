@@ -59,6 +59,28 @@ public class SettingsOverlay extends JPanel {
         setOpaque(false); // Make transparent for semi-transparent overlay effect
         
         // Create semi-transparent background with blur effect
+        JPanel backgroundPanel = createBackgroundPanel();
+
+        // Create settings panel
+        JPanel settingsPanel = createSettingsPanel();
+
+        // Add settings panel to background
+        backgroundPanel.add(settingsPanel);
+
+        // Add background panel to overlay
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        add(backgroundPanel, gbc);
+
+        // Add key binding for ESC to close
+        setupKeyBindings();
+    }
+
+    private JPanel createBackgroundPanel() {
         JPanel backgroundPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -72,8 +94,10 @@ public class SettingsOverlay extends JPanel {
         };
         backgroundPanel.setOpaque(false);
         backgroundPanel.setLayout(new GridBagLayout());
-        
-        // Create settings panel
+        return backgroundPanel;
+    }
+
+    private JPanel createSettingsPanel() {
         JPanel settingsPanel = new JPanel();
         settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
         settingsPanel.setBackground(new Color(40, 40, 50));
@@ -123,20 +147,10 @@ public class SettingsOverlay extends JPanel {
         buttonsPanel.add(cancelButton);
         
         settingsPanel.add(buttonsPanel);
-        
-        // Add settings panel to background
-        backgroundPanel.add(settingsPanel);
-        
-        // Add background panel to overlay
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        add(backgroundPanel, gbc);
-        
-        // Add key binding for ESC to close
+        return settingsPanel;
+    }
+
+    private void setupKeyBindings() {
         getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeSettings");
         getActionMap().put("closeSettings", new AbstractAction() {

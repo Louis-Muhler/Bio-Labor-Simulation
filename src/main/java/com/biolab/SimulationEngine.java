@@ -218,7 +218,7 @@ public class SimulationEngine {
             if (!executorService.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 LOGGER.warning("Executor did not terminate in time, forcing shutdown...");
                 executorService.shutdownNow();
-                // Wait a bit for tasks to respond to being cancelled
+                // Wait a bit for tasks to respond to being canceled
                 if (!executorService.awaitTermination(SHUTDOWN_NOW_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     LOGGER.severe("Executor did not terminate after forced shutdown");
                 }
