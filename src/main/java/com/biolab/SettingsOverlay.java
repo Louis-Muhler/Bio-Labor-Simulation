@@ -178,22 +178,24 @@ public class SettingsOverlay extends JPanel {
     private JButton createStyledButton(String text) {
         JButton button = new JButton(text);
         button.setPreferredSize(new Dimension(100, 35));
-        button.setBackground(new Color(60, 65, 75)); // Readable dark button
+        button.setBackground(new Color(45, 50, 58)); // Dunkler Hintergrund
         button.setForeground(Color.WHITE);
         button.setFont(new Font("Arial", Font.BOLD, 14));
         button.setFocusPainted(false);
-        button.setBorderPainted(false);
-        
+        button.setBorderPainted(true);
+        button.setBorder(BorderFactory.createLineBorder(new Color(80, 90, 100), 2));
+        button.setOpaque(true); // Wichtig für Custom-Farben
+
         // Add hover effect
         button.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(80, 85, 95));
+                button.setBackground(new Color(60, 70, 80));
             }
             
             @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(60, 65, 75));
+                button.setBackground(new Color(45, 50, 58));
             }
         });
         

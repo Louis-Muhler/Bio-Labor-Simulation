@@ -23,7 +23,6 @@ public class SettingsManager {
     private static final int DEFAULT_HEIGHT = 1080;
     private static final boolean DEFAULT_FULLSCREEN = false;
     private static final int DEFAULT_FPS = 60;
-    private static final int UNLIMITED_FPS = 999;
     
     // Settings
     private int windowWidth;

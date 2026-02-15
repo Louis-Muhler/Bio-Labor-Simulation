@@ -364,8 +364,6 @@ public class BioLabSimulatorApp extends JFrame {
             });
 
             addMouseWheelListener(e -> {
-                double oldZoom = zoom;
-
                 // Zoom in/out
                 if (e.getWheelRotation() < 0) {
                     zoom *= 1.1; // Zoom in
@@ -375,6 +373,13 @@ public class BioLabSimulatorApp extends JFrame {
 
                 // Clamp zoom
                 zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+
+                // Prevent zooming out beyond world bounds
+                double minZoomForWorld = Math.max(
+                    (double) getWidth() / worldWidth,
+                    (double) getHeight() / worldHeight
+                );
+                zoom = Math.max(minZoomForWorld, zoom);
 
                 clampCamera();
                 repaint();
@@ -522,15 +527,16 @@ public class BioLabSimulatorApp extends JFrame {
             controlsPanel.setOpaque(false);
 
             speedButton = new JButton("Speed: 1x");
-            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
             speedButton.setForeground(Color.WHITE);
-            speedButton.setBackground(new Color(60, 65, 75)); // Lighter than background, readable
+            speedButton.setBackground(new Color(45, 50, 58)); // Dunkler Hintergrund für Kontrast
             speedButton.setFocusPainted(false);
             speedButton.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(100, 110, 130), 1),
-                BorderFactory.createEmptyBorder(8, 15, 8, 15)
+                BorderFactory.createLineBorder(new Color(80, 90, 100), 2),
+                BorderFactory.createEmptyBorder(10, 20, 10, 20)
             ));
             speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            speedButton.setOpaque(true); // Wichtig für Custom-Farben
 
             speedButton.addActionListener(e -> {
                 currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
@@ -542,10 +548,10 @@ public class BioLabSimulatorApp extends JFrame {
             // Hover effect
             speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(80, 85, 95));
+                    speedButton.setBackground(new Color(60, 70, 80));
                 }
                 public void mouseExited(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(60, 65, 75));
+                    speedButton.setBackground(new Color(45, 50, 58));
                 }
             });
 
