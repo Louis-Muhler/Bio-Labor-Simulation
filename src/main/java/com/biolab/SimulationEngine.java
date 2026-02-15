@@ -29,7 +29,7 @@ public class SimulationEngine {
     private final ExecutorService executorService;
     private static final int THREAD_COUNT = Runtime.getRuntime().availableProcessors();
 
-    private static final int MAX_POPULATION = 5000;
+    private static final int MAX_POPULATION = 20000; // Erhöht von 5000 auf 20000
 
     // Maximum number of reproduction attempts (including the initial attempt)
     // used when claiming reproduction slots to prevent thread starvation.
@@ -54,6 +54,8 @@ public class SimulationEngine {
         // ===== MULTITHREADING: Create a FixedThreadPool =====
         // This pool will distribute simulation work across multiple CPU cores
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+        LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads for " +
+                    Runtime.getRuntime().availableProcessors() + " available processors");
 
         // Initialize population
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -197,7 +199,9 @@ public class SimulationEngine {
      * Gets a snapshot of all microbes (thread-safe).
      */
     public List<Microbe> getMicrobes() {
-        return new ArrayList<>(microbes);
+        synchronized (microbes) {
+            return new ArrayList<>(microbes);
+        }
     }
 
     public Environment getEnvironment() {

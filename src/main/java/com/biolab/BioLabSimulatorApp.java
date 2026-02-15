@@ -54,11 +54,13 @@ public class BioLabSimulatorApp extends JFrame {
         // Calculate canvas height (leave room for control panel)
         canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
 
-        // Initialize simulation engine
-        engine = new SimulationEngine(windowWidth, canvasHeight, INITIAL_POPULATION);
+        // Initialize simulation engine with fixed 10k x 10k world
+        int worldWidth = 10000;
+        int worldHeight = 10000;
+        engine = new SimulationEngine(worldWidth, worldHeight, INITIAL_POPULATION);
 
         // Setup UI components
-        canvas = new SimulationCanvas();
+        canvas = new SimulationCanvas(worldWidth, worldHeight);
         controlPanel = new ControlPanel();
 
         setupUI();
@@ -74,7 +76,7 @@ public class BioLabSimulatorApp extends JFrame {
     private void setupUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(windowWidth, windowHeight);
-        setResizable(false);
+        setResizable(true); // Resizing aktivieren
         setLayout(new BorderLayout());
 
         // Add canvas (where microbes are rendered)
@@ -171,20 +173,33 @@ public class BioLabSimulatorApp extends JFrame {
         
         // Check if settings changed and need to apply
         boolean settingsChanged = false;
-        if (windowWidth != settingsManager.getWindowWidth() || 
+        boolean fullscreenChanged = false;
+
+        if (windowWidth != settingsManager.getWindowWidth() ||
             windowHeight != settingsManager.getWindowHeight()) {
             windowWidth = settingsManager.getWindowWidth();
             windowHeight = settingsManager.getWindowHeight();
             canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
             settingsChanged = true;
         }
-        // Removed targetFPS check as it is now handled by speed button
+
+        // Check if fullscreen mode changed
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        boolean currentlyFullscreen = (gd.getFullScreenWindow() == this);
+        boolean wantsFullscreen = settingsManager.isFullscreen();
+        if (currentlyFullscreen != wantsFullscreen) {
+            fullscreenChanged = true;
+            settingsChanged = true;
+        }
 
         // Apply display mode changes if needed
         if (settingsChanged) {
             applyDisplayMode();
-            canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
-            controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+            if (!fullscreenChanged) {
+                // Only update preferred sizes if not switching fullscreen
+                canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
+                controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
+            }
         }
         
         // Resume simulation
@@ -281,9 +296,99 @@ public class BioLabSimulatorApp extends JFrame {
      * Canvas for rendering the simulation.
      */
     private class SimulationCanvas extends JPanel {
-        public SimulationCanvas() {
+        private final int worldWidth;
+        private final int worldHeight;
+
+        // Camera system
+        private double cameraX;
+        private double cameraY;
+        private double zoom = 1.0;
+        private static final double MIN_ZOOM = 0.05;
+        private static final double MAX_ZOOM = 3.0;
+
+        // Mouse drag state
+        private int lastMouseX;
+        private int lastMouseY;
+        private boolean isDragging = false;
+
+        public SimulationCanvas(int worldWidth, int worldHeight) {
+            this.worldWidth = worldWidth;
+            this.worldHeight = worldHeight;
             setPreferredSize(new Dimension(windowWidth, canvasHeight));
             setBackground(new Color(20, 20, 30)); // Dark background like a petri dish
+
+            // Center camera initially
+            cameraX = worldWidth / 2.0;
+            cameraY = worldHeight / 2.0;
+
+            // Setup mouse listeners for camera control
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent e) {
+                    if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+                        lastMouseX = e.getX();
+                        lastMouseY = e.getY();
+                        isDragging = true;
+                        setCursor(new Cursor(Cursor.MOVE_CURSOR));
+                    }
+                }
+
+                @Override
+                public void mouseReleased(java.awt.event.MouseEvent e) {
+                    if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+                        isDragging = false;
+                        setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
+                    }
+                }
+            });
+
+            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                @Override
+                public void mouseDragged(java.awt.event.MouseEvent e) {
+                    if (isDragging) {
+                        int dx = e.getX() - lastMouseX;
+                        int dy = e.getY() - lastMouseY;
+
+                        // Move camera (inverse of drag direction)
+                        cameraX -= dx / zoom;
+                        cameraY -= dy / zoom;
+
+                        // Clamp camera to world bounds
+                        clampCamera();
+
+                        lastMouseX = e.getX();
+                        lastMouseY = e.getY();
+                        repaint();
+                    }
+                }
+            });
+
+            addMouseWheelListener(e -> {
+                double oldZoom = zoom;
+
+                // Zoom in/out
+                if (e.getWheelRotation() < 0) {
+                    zoom *= 1.1; // Zoom in
+                } else {
+                    zoom /= 1.1; // Zoom out
+                }
+
+                // Clamp zoom
+                zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+
+                clampCamera();
+                repaint();
+            });
+        }
+
+        private void clampCamera() {
+            // Calculate visible area
+            double visibleWidth = getWidth() / zoom;
+            double visibleHeight = getHeight() / zoom;
+
+            // Clamp camera so we don't go outside world bounds
+            cameraX = Math.max(visibleWidth / 2, Math.min(worldWidth - visibleWidth / 2, cameraX));
+            cameraY = Math.max(visibleHeight / 2, Math.min(worldHeight - visibleHeight / 2, cameraY));
         }
 
         @Override
@@ -293,6 +398,23 @@ public class BioLabSimulatorApp extends JFrame {
 
             // Enable antialiasing for smoother circles
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Save original transform
+            java.awt.geom.AffineTransform originalTransform = g2d.getTransform();
+
+            // Apply camera transformation
+            // 1. Translate to center of screen
+            g2d.translate(getWidth() / 2.0, getHeight() / 2.0);
+            // 2. Apply zoom
+            g2d.scale(zoom, zoom);
+            // 3. Translate to camera position (negative to move world)
+            g2d.translate(-cameraX, -cameraY);
+
+            // Draw world boundary
+            g2d.setColor(new Color(30, 30, 40));
+            g2d.fillRect(0, 0, worldWidth, worldHeight);
+            g2d.setColor(new Color(60, 60, 70));
+            g2d.drawRect(0, 0, worldWidth, worldHeight);
 
             // Get microbes snapshot (thread-safe)
             List<Microbe> microbes = engine.getMicrobes();
@@ -305,13 +427,16 @@ public class BioLabSimulatorApp extends JFrame {
                 g2d.fillOval(x, y, microbe.getSize(), microbe.getSize());
             }
 
-            // Draw info overlay
-            g2d.setColor(Color.WHITE);
-            g2d.drawString("Microbes: " + microbes.size(), 10, 20);
-            g2d.drawString("FPS: " + currentFps, 10, 40);
+            // Restore transform for UI elements
+            g2d.setTransform(originalTransform);
 
             // Draw color legend
             drawLegend(g2d);
+
+            // Draw camera controls hint
+            g2d.setColor(new Color(255, 255, 255, 150));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 11));
+            g2d.drawString("Left-Click + Drag: Pan | Mouse Wheel: Zoom", 10, getHeight() - 10);
         }
 
         private void drawLegend(Graphics2D g2d) {
@@ -397,13 +522,13 @@ public class BioLabSimulatorApp extends JFrame {
             controlsPanel.setOpaque(false);
 
             speedButton = new JButton("Speed: 1x");
-            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
             speedButton.setForeground(Color.WHITE);
-            speedButton.setBackground(new Color(50, 50, 60));
+            speedButton.setBackground(new Color(60, 65, 75)); // Lighter than background, readable
             speedButton.setFocusPainted(false);
             speedButton.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(100, 100, 120), 2),
-                BorderFactory.createEmptyBorder(10, 20, 10, 20)
+                BorderFactory.createLineBorder(new Color(100, 110, 130), 1),
+                BorderFactory.createEmptyBorder(8, 15, 8, 15)
             ));
             speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
@@ -414,12 +539,13 @@ public class BioLabSimulatorApp extends JFrame {
                 speedButton.setText("Speed: " + multiplier + "x");
             });
 
+            // Hover effect
             speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(70, 70, 80));
+                    speedButton.setBackground(new Color(80, 85, 95));
                 }
                 public void mouseExited(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(50, 50, 60));
+                    speedButton.setBackground(new Color(60, 65, 75));
                 }
             });
 

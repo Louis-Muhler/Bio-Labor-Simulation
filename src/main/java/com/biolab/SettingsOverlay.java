@@ -178,7 +178,7 @@ public class SettingsOverlay extends JPanel {
     private JButton createStyledButton(String text) {
         JButton button = new JButton(text);
         button.setPreferredSize(new Dimension(100, 35));
-        button.setBackground(new Color(70, 130, 180));
+        button.setBackground(new Color(60, 65, 75)); // Readable dark button
         button.setForeground(Color.WHITE);
         button.setFont(new Font("Arial", Font.BOLD, 14));
         button.setFocusPainted(false);
@@ -188,12 +188,12 @@ public class SettingsOverlay extends JPanel {
         button.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(90, 150, 200));
+                button.setBackground(new Color(80, 85, 95));
             }
             
             @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(70, 130, 180));
+                button.setBackground(new Color(60, 65, 75));
             }
         });
         
