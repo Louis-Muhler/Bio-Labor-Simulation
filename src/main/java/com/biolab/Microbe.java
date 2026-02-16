@@ -1,35 +1,47 @@
 package com.biolab;
 
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Represents a single microbe entity in the simulation.
- * Each microbe has genes that determine its survival capabilities.
+ * Each microbe has genes that determine its survival capabilities,
+ * consumes energy through movement, and tracks its ancestry.
  */
 public class Microbe {
 
-    // Position
     private double x;
     private double y;
-
-    // Movement
     private double velocityX;
     private double velocityY;
 
-    // Genes (0.0 to 1.0) - immutable after creation
+    // Genetic traits (immutable, inherited with mutation)
     private final double heatResistance;
     private final double toxinResistance;
     private final double speed;
 
     // Vital stats
     private double health;
-    private int age; // Frames survived
-    private static final double MAX_HEALTH = 100.0;
-    private static final int REPRODUCTION_AGE = 120; // Reproduce after ~2 seconds at 60 FPS
+    private double energy;
+    private int age;
 
-    // Size
-    private static final int SIZE = 4;
+    private static final double MAX_HEALTH = 100.0;
+    private static final double MAX_ENERGY = 100.0;
+    private static final double INITIAL_ENERGY = 80.0;
+    private static final int REPRODUCTION_AGE = 120;
+    private static final double MOVEMENT_ENERGY_COST = 0.05;
+    private static final double REPRODUCTION_ENERGY_COST = 40.0;
+    private static final double MIN_REPRODUCTION_ENERGY = 60.0;
+
+    // Ancestry tracking for evolution visualization
+    private final List<AncestorSnapshot> ancestry;
+    private static final int MAX_ANCESTRY_DEPTH = 5;
+
+    private static final int SIZE = 5;
+    private boolean isSelected = false;
 
     /**
      * Creates a new microbe with random genes.
@@ -42,7 +54,9 @@ public class Microbe {
         this.toxinResistance = random.nextDouble();
         this.speed = random.nextDouble();
         this.health = MAX_HEALTH;
+        this.energy = INITIAL_ENERGY;
         this.age = 0;
+        this.ancestry = new ArrayList<>();
         randomizeVelocity();
     }
 
@@ -59,7 +73,33 @@ public class Microbe {
         this.speed = mutate(parent.speed);
 
         this.health = MAX_HEALTH;
+        this.energy = INITIAL_ENERGY;
         this.age = 0;
+
+        // Build ancestry: copy parent's ancestry and add parent as generation 0
+        this.ancestry = new ArrayList<>();
+
+        // Create snapshot of parent (generation 0 = parent)
+        AncestorSnapshot parentSnapshot = new AncestorSnapshot(
+            parent.heatResistance,
+            parent.toxinResistance,
+            parent.speed,
+            0
+        );
+        ancestry.add(parentSnapshot);
+
+        // Copy parent's ancestors, incrementing their generation numbers
+        for (AncestorSnapshot ancestor : parent.ancestry) {
+            if (ancestry.size() >= MAX_ANCESTRY_DEPTH) break;
+            AncestorSnapshot shifted = new AncestorSnapshot(
+                ancestor.getHeatResistance(),
+                ancestor.getToxinResistance(),
+                ancestor.getSpeed(),
+                ancestor.getGeneration() + 1
+            );
+            ancestry.add(shifted);
+        }
+
         randomizeVelocity();
     }
 
@@ -84,13 +124,16 @@ public class Microbe {
     }
 
     /**
-     * Updates the microbe's position and handles boundary bouncing.
+     * Updates position and velocity. Movement costs energy proportional to speed.
      */
     public void move(int width, int height) {
+        double energyCost = MOVEMENT_ENERGY_COST * (1.0 + speed);
+        energy -= energyCost;
+
         x += velocityX;
         y += velocityY;
 
-        // Bounce off walls
+        // Bounce off world boundaries
         if (x < 0 || x > width) {
             velocityX = -velocityX;
             x = Math.max(0, Math.min(width, x));
@@ -100,69 +143,84 @@ public class Microbe {
             y = Math.max(0, Math.min(height, y));
         }
 
-        // Occasionally change direction
+        // Random direction changes for more organic movement
         if (ThreadLocalRandom.current().nextDouble() < 0.02) {
             randomizeVelocity();
         }
     }
 
     /**
-     * Updates health based on environmental conditions.
-     * This is where natural selection happens!
-     *
-     * @param temperature Environment temperature (0.0 to 1.0)
-     * @param toxicity Environment toxicity (0.0 to 1.0)
+     * Applies environmental damage based on temperature and toxicity.
+     * Microbes with better resistance genes take less damage.
      */
     public void updateHealth(double temperature, double toxicity) {
-        // Calculate damage from heat (higher temp = more damage if low resistance)
         double heatDamage = temperature * (1.0 - heatResistance) * 0.5;
-
-        // Calculate damage from toxins
         double toxinDamage = toxicity * (1.0 - toxinResistance) * 0.5;
 
-        // Apply damage
         health -= (heatDamage + toxinDamage);
 
         age++;
     }
 
-    /**
-     * Checks if the microbe is dead.
-     */
     public boolean isDead() {
-        return health <= 0;
+        return health <= 0 || energy <= 0;
     }
 
-    /**
-     * Checks if the microbe is ready to reproduce.
-     */
     public boolean canReproduce() {
-        return age >= REPRODUCTION_AGE && health > MAX_HEALTH * 0.5;
+        return age >= REPRODUCTION_AGE
+            && health > MAX_HEALTH * 0.5
+            && energy >= MIN_REPRODUCTION_ENERGY;
     }
 
     /**
-     * Resets reproduction cooldown after reproducing.
+     * Resets age and deducts reproduction costs.
      */
     public void resetReproduction() {
         age = 0;
-        health -= MAX_HEALTH * 0.3; // Reproduction costs energy
+        health -= MAX_HEALTH * 0.3;
+        energy -= REPRODUCTION_ENERGY_COST;
     }
 
     /**
-     * Gets the color representation of this microbe based on its genes.
-     * Red = Heat Resistance
-     * Green = Toxin Resistance
-     * Blue = Speed
+     * Returns visual color based on genes: Red = Heat Resistance, Green = Toxin Resistance, Blue = Speed.
      */
     public Color getColor() {
         int red = (int) (heatResistance * 255);
         int green = (int) (toxinResistance * 255);
-        int blue = (int) (speed * 128); // Less influence on color
+        int blue = (int) (speed * 128);
         return new Color(red, green, blue);
     }
 
-    // Getters
+    public void eat(double energyGain) {
+        energy = Math.min(MAX_ENERGY, energy + energyGain);
+    }
+
+    /**
+     * Checks collision with a point for mouse selection.
+     */
+    public boolean contains(double px, double py) {
+        double dx = px - x;
+        double dy = py - y;
+        double distance = Math.sqrt(dx * dx + dy * dy);
+        return distance <= SIZE;
+    }
+
     public double getX() { return x; }
     public double getY() { return y; }
     public int getSize() { return SIZE; }
+    public double getHealth() { return health; }
+    public double getEnergy() { return energy; }
+    public double getHeatResistance() { return heatResistance; }
+    public double getToxinResistance() { return toxinResistance; }
+    public double getSpeed() { return speed; }
+    public int getAge() { return age; }
+    public boolean isSelected() { return isSelected; }
+    public void setSelected(boolean selected) { this.isSelected = selected; }
+
+    public List<AncestorSnapshot> getAncestry() {
+        return Collections.unmodifiableList(ancestry);
+    }
+
+    public static double getMaxHealth() { return MAX_HEALTH; }
+    public static double getMaxEnergy() { return MAX_ENERGY; }
 }

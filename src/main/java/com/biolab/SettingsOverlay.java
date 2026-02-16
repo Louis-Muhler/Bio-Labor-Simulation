@@ -87,8 +87,8 @@ public class SettingsOverlay extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g;
                 
-                // Draw semi-transparent dark overlay
-                g2d.setColor(new Color(0, 0, 0, 180));
+                // Draw semi-transparent dark overlay - darker for sci-fi look
+                g2d.setColor(new Color(0, 0, 0, 220));
                 g2d.fillRect(0, 0, getWidth(), getHeight());
             }
         };
@@ -100,32 +100,32 @@ public class SettingsOverlay extends JPanel {
     private JPanel createSettingsPanel() {
         JPanel settingsPanel = new JPanel();
         settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
-        settingsPanel.setBackground(new Color(40, 40, 50));
+        settingsPanel.setBackground(new Color(18, 18, 18)); // Dark sci-fi #121212
         settingsPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(100, 100, 120), 2),
+            BorderFactory.createLineBorder(new Color(0, 255, 255), 2), // Neon cyan border
             new EmptyBorder(20, 30, 20, 30)
         ));
         
         // Title
-        JLabel titleLabel = new JLabel("Settings");
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
-        titleLabel.setForeground(Color.WHITE);
+        JLabel titleLabel = new JLabel("SYSTEM SETTINGS");
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        titleLabel.setForeground(new Color(0, 255, 255)); // Neon cyan
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         settingsPanel.add(titleLabel);
         settingsPanel.add(Box.createVerticalStrut(20));
         
         // Display Mode Section
-        settingsPanel.add(createSectionLabel("Display Mode"));
+        settingsPanel.add(createSectionLabel("DISPLAY MODE"));
         fullscreenCheck = new JCheckBox("Fullscreen");
-        fullscreenCheck.setBackground(new Color(40, 40, 50));
-        fullscreenCheck.setForeground(Color.WHITE);
-        fullscreenCheck.setFont(new Font("Arial", Font.PLAIN, 14));
+        fullscreenCheck.setBackground(new Color(18, 18, 18));
+        fullscreenCheck.setForeground(new Color(220, 220, 220)); // Light gray text
+        fullscreenCheck.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         fullscreenCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
         settingsPanel.add(fullscreenCheck);
         settingsPanel.add(Box.createVerticalStrut(15));
         
         // Resolution Section
-        settingsPanel.add(createSectionLabel("Resolution"));
+        settingsPanel.add(createSectionLabel("RESOLUTION"));
         resolutionCombo = new JComboBox<>(RESOLUTIONS.keySet().toArray(new String[0]));
         resolutionCombo.setMaximumSize(new Dimension(400, 30));
         resolutionCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -135,14 +135,14 @@ public class SettingsOverlay extends JPanel {
         
         // Buttons panel
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
-        buttonsPanel.setBackground(new Color(40, 40, 50));
+        buttonsPanel.setBackground(new Color(18, 18, 18));
         buttonsPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
-        JButton applyButton = createStyledButton("Apply");
+        JButton applyButton = createStyledButton("APPLY");
         applyButton.addActionListener(e -> applySettings());
         buttonsPanel.add(applyButton);
         
-        JButton cancelButton = createStyledButton("Cancel");
+        JButton cancelButton = createStyledButton("CANCEL");
         cancelButton.addActionListener(e -> closeOverlay());
         buttonsPanel.add(cancelButton);
         
@@ -162,40 +162,85 @@ public class SettingsOverlay extends JPanel {
     }
     
     private JLabel createSectionLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setFont(new Font("Arial", Font.BOLD, 16));
-        label.setForeground(new Color(100, 200, 255));
+        JLabel label = new JLabel("\u25B8 " + text); // Triangle pointer
+        label.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        label.setForeground(new Color(0, 255, 255)); // Neon cyan
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         return label;
     }
     
     private void styleComboBox(JComboBox<?> combo) {
-        combo.setBackground(new Color(60, 60, 70));
-        combo.setForeground(Color.WHITE);
-        combo.setFont(new Font("Arial", Font.PLAIN, 14));
+        combo.setBackground(new Color(30, 30, 35)); // Darker background
+        combo.setForeground(new Color(0, 255, 255)); // Neon cyan text
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        combo.setBorder(BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 1));
     }
     
     private JButton createStyledButton(String text) {
-        JButton button = new JButton(text);
-        button.setPreferredSize(new Dimension(100, 35));
-        button.setBackground(new Color(45, 50, 58)); // Dunkler Hintergrund
-        button.setForeground(Color.WHITE);
-        button.setFont(new Font("Arial", Font.BOLD, 14));
+        JButton button = new JButton(text) {
+            private boolean hovered = false;
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // Draw background
+                if (hovered) {
+                    g2d.setColor(new Color(20, 25, 30));
+                } else {
+                    g2d.setColor(new Color(10, 10, 12));
+                }
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+
+                // Draw border
+                if (hovered) {
+                    g2d.setColor(new Color(0, 255, 255));
+                    g2d.setStroke(new BasicStroke(2));
+                } else {
+                    g2d.setColor(new Color(0, 255, 255, 150));
+                    g2d.setStroke(new BasicStroke(2));
+                }
+                g2d.drawRect(1, 1, getWidth() - 2, getHeight() - 2);
+
+                // Draw text
+                g2d.setColor(new Color(0, 255, 255));
+                g2d.setFont(getFont());
+                FontMetrics fm = g2d.getFontMetrics();
+                int textWidth = fm.stringWidth(getText());
+                int textHeight = fm.getAscent();
+                int x = (getWidth() - textWidth) / 2;
+                int y = (getHeight() + textHeight) / 2 - 2;
+                g2d.drawString(getText(), x, y);
+            }
+        };
+
+        button.setPreferredSize(new Dimension(120, 40));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
         button.setFocusPainted(false);
-        button.setBorderPainted(true);
-        button.setBorder(BorderFactory.createLineBorder(new Color(80, 90, 100), 2));
-        button.setOpaque(true); // Wichtig für Custom-Farben
+        button.setBorderPainted(false);
+        button.setContentAreaFilled(false);
+        button.setOpaque(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         // Add hover effect
         button.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(60, 70, 80));
+                ((JButton) evt.getSource()).putClientProperty("hovered", true);
+                button.repaint();
             }
             
             @Override
             public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(45, 50, 58));
+                ((JButton) evt.getSource()).putClientProperty("hovered", false);
+                button.repaint();
+            }
+        });
+
+        button.addPropertyChangeListener(evt -> {
+            if ("hovered".equals(evt.getPropertyName())) {
+                button.repaint();
             }
         });
         

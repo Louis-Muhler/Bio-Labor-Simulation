@@ -11,14 +11,15 @@ import java.util.logging.Level;
 
 /**
  * Main application window for the Bio-Lab Evolution Simulator.
+ * Features a custom dark UI with multithreading, energy system, and ancestry tracking.
  */
 public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
     private static final int INITIAL_POPULATION = 1500;
+    private static final int CUSTOM_HEADER_HEIGHT = 30;
     private static final int CONTROL_PANEL_HEIGHT = 120;
-    private static final int MENU_BAR_HEIGHT = 30;
-    private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + MENU_BAR_HEIGHT;
+    private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + CUSTOM_HEADER_HEIGHT;
     private static final int UNLIMITED_FPS = 999;
     private static final int BASE_FPS = 30;
     private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
@@ -27,24 +28,25 @@ public class BioLabSimulatorApp extends JFrame {
     private final SimulationEngine engine;
     private final SimulationCanvas canvas;
     private final ControlPanel controlPanel;
+    private final CustomHeaderPanel headerPanel;
+    private final InspectorPanel inspectorPanel;
     private volatile boolean running = true;
     private volatile boolean paused = false;
     private SettingsOverlay settingsOverlay;
-    
-    // Dynamic settings
+    private Microbe selectedMicrobe = null;
+
     private int windowWidth;
     private int windowHeight;
     private int canvasHeight;
     private int targetFps;
     private int currentSpeedIndex = 0;
 
-    // FPS tracking
     private long lastFpsTime = System.nanoTime();
     private int frameCount = 0;
     private int currentFps = 0;
 
     public BioLabSimulatorApp() {
-        super("Bio-Lab Evolution Simulator");
+        super("Bio-Lab Evolution Simulator v2.0");
 
         // Initialize settings manager and load settings
         settingsManager = new SettingsManager();
@@ -62,6 +64,8 @@ public class BioLabSimulatorApp extends JFrame {
         // Setup UI components
         canvas = new SimulationCanvas(worldWidth, worldHeight);
         controlPanel = new ControlPanel();
+        headerPanel = new CustomHeaderPanel();
+        inspectorPanel = new InspectorPanel();
 
         setupUI();
         setupShutdownHook();
@@ -75,9 +79,16 @@ public class BioLabSimulatorApp extends JFrame {
 
     private void setupUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setUndecorated(true); // Remove system window decorations
         setSize(windowWidth, windowHeight);
         setResizable(true); // Resizing aktivieren
         setLayout(new BorderLayout());
+
+        // Set dark background
+        getContentPane().setBackground(new Color(18, 18, 18));
+
+        // Add custom header at top
+        add(headerPanel, BorderLayout.NORTH);
 
         // Add canvas (where microbes are rendered)
         add(canvas, BorderLayout.CENTER);
@@ -85,35 +96,196 @@ public class BioLabSimulatorApp extends JFrame {
         // Add control panel at bottom
         add(controlPanel, BorderLayout.SOUTH);
 
-        // Add menu bar with settings button
-        setJMenuBar(createMenuBar());
+
+        // Add inspector panel as overlay on top of canvas
+        // Do NOT add to layered pane yet - we'll position it after the window is shown
+        inspectorPanel.setVisible(true);
 
         setLocationRelativeTo(null);
+
+        // Add component listener to reposition inspector panel on resize
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent evt) {
+                positionInspectorPanel();
+            }
+
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent evt) {
+                positionInspectorPanel();
+            }
+        });
+    }
+
+    private void positionInspectorPanel() {
+        // Calculate inspector panel position (top-right corner with margin)
+        int panelWidth = 320;
+        int panelHeight = Math.min(windowHeight - TOTAL_UI_HEIGHT - 40, 700);
+        int panelX = getContentPane().getWidth() - panelWidth - 20;
+        int panelY = 20;
+
+        // Remove and re-add to ensure it's on top
+        getLayeredPane().remove(inspectorPanel);
+        getLayeredPane().add(inspectorPanel, JLayeredPane.PALETTE_LAYER);
+        inspectorPanel.setBounds(panelX, panelY, panelWidth, panelHeight);
+        inspectorPanel.revalidate();
+        inspectorPanel.repaint();
     }
     
-    private JMenuBar createMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-        
-        JMenu fileMenu = new JMenu("File");
-        
-        JMenuItem settingsItem = new JMenuItem("Settings");
-        settingsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, 
-            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
-        settingsItem.addActionListener(e -> showSettingsOverlay());
-        fileMenu.add(settingsItem);
-        
-        fileMenu.addSeparator();
-        
-        JMenuItem exitItem = new JMenuItem("Exit");
-        exitItem.addActionListener(e -> {
-            running = false;
-            engine.shutdown();
-            System.exit(0);
-        });
-        fileMenu.add(exitItem);
-        
-        menuBar.add(fileMenu);
-        return menuBar;
+    /**
+     * Custom header panel with window controls and dragging functionality.
+     */
+    private class CustomHeaderPanel extends JPanel {
+        private Point initialClick;
+
+        public CustomHeaderPanel() {
+            setPreferredSize(new Dimension(windowWidth, CUSTOM_HEADER_HEIGHT));
+            setBackground(new Color(30, 30, 30));
+            setLayout(new BorderLayout());
+            setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 255, 255, 80)));
+
+            // Left section: Settings button
+            JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+            leftPanel.setOpaque(false);
+
+            JButton settingsButton = createHeaderButton("\u2699", true); // Gear symbol
+            settingsButton.addActionListener(e -> showSettingsOverlay());
+            leftPanel.add(settingsButton);
+
+            add(leftPanel, BorderLayout.WEST);
+
+            // Center section: Title (draggable area)
+            JLabel titleLabel = new JLabel("BIO-LAB EVOLUTION SIMULATOR V2.0");
+            titleLabel.setForeground(new Color(0, 255, 255));
+            titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            add(titleLabel, BorderLayout.CENTER);
+
+            // Right section: Close button
+            JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+            rightPanel.setOpaque(false);
+
+            JButton closeButton = createHeaderButton("\u2715", false); // X symbol
+            closeButton.addActionListener(e -> {
+                running = false;
+                engine.shutdown();
+                System.exit(0);
+            });
+            rightPanel.add(closeButton);
+
+            add(rightPanel, BorderLayout.EAST);
+
+            // Make the header draggable
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mousePressed(java.awt.event.MouseEvent e) {
+                    initialClick = e.getPoint();
+                }
+            });
+
+            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                public void mouseDragged(java.awt.event.MouseEvent e) {
+                    // Get location of Window
+                    int thisX = BioLabSimulatorApp.this.getLocation().x;
+                    int thisY = BioLabSimulatorApp.this.getLocation().y;
+
+                    // Determine how much the mouse moved since the initial click
+                    int xMoved = e.getX() - initialClick.x;
+                    int yMoved = e.getY() - initialClick.y;
+
+                    // Move window to this position
+                    int X = thisX + xMoved;
+                    int Y = thisY + yMoved;
+                    BioLabSimulatorApp.this.setLocation(X, Y);
+                }
+            });
+
+            // Make title label also draggable
+            titleLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mousePressed(java.awt.event.MouseEvent e) {
+                    initialClick = SwingUtilities.convertPoint(titleLabel, e.getPoint(), CustomHeaderPanel.this);
+                }
+            });
+
+            titleLabel.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                public void mouseDragged(java.awt.event.MouseEvent e) {
+                    Point convertedPoint = SwingUtilities.convertPoint(titleLabel, e.getPoint(), CustomHeaderPanel.this);
+                    int thisX = BioLabSimulatorApp.this.getLocation().x;
+                    int thisY = BioLabSimulatorApp.this.getLocation().y;
+
+                    int xMoved = convertedPoint.x - initialClick.x;
+                    int yMoved = convertedPoint.y - initialClick.y;
+
+                    int X = thisX + xMoved;
+                    int Y = thisY + yMoved;
+                    BioLabSimulatorApp.this.setLocation(X, Y);
+                }
+            });
+        }
+
+        private JButton createHeaderButton(String symbol, boolean isWide) {
+            JButton button = new JButton(symbol) {
+                private boolean hovered = false;
+
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2d = (Graphics2D) g;
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                    // Draw background
+                    if (hovered) {
+                        g2d.setColor(new Color(50, 55, 60));
+                    } else {
+                        g2d.setColor(new Color(40, 40, 45));
+                    }
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+
+                    // Draw border
+                    if (hovered) {
+                        g2d.setColor(new Color(0, 255, 255));
+                    } else {
+                        g2d.setColor(new Color(0, 255, 255, 100));
+                    }
+                    g2d.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+
+                    // Draw symbol
+                    g2d.setColor(new Color(0, 255, 255));
+                    g2d.setFont(getFont());
+                    FontMetrics fm = g2d.getFontMetrics();
+                    int textWidth = fm.stringWidth(getText());
+                    int textHeight = fm.getAscent();
+                    int x = (getWidth() - textWidth) / 2;
+                    int y = (getHeight() + textHeight) / 2 - 2;
+                    g2d.drawString(getText(), x, y);
+                }
+
+                {
+                    addMouseListener(new java.awt.event.MouseAdapter() {
+                        @Override
+                        public void mouseEntered(java.awt.event.MouseEvent evt) {
+                            hovered = true;
+                            repaint();
+                        }
+
+                        @Override
+                        public void mouseExited(java.awt.event.MouseEvent evt) {
+                            hovered = false;
+                            repaint();
+                        }
+                    });
+                }
+            };
+
+            button.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            button.setFocusPainted(false);
+            button.setBorderPainted(false);
+            button.setContentAreaFilled(false);
+            button.setOpaque(false);
+            button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            button.setPreferredSize(new Dimension(isWide ? 80 : 40, 24));
+
+            return button;
+        }
     }
     
     private void applyDisplayMode() {
@@ -244,6 +416,14 @@ public class BioLabSimulatorApp extends JFrame {
                     // This is where thousands of microbes are updated concurrently
                     engine.update();
 
+                    // Check if selected microbe is dead and hide inspector
+                    if (selectedMicrobe != null && selectedMicrobe.isDead()) {
+                        selectedMicrobe.setSelected(false);
+                        selectedMicrobe = null;
+                        inspectorPanel.hidePanel();
+                        getLayeredPane().repaint();
+                    }
+
                     // Repaint canvas
                     canvas.repaint();
 
@@ -315,7 +495,7 @@ public class BioLabSimulatorApp extends JFrame {
             this.worldWidth = worldWidth;
             this.worldHeight = worldHeight;
             setPreferredSize(new Dimension(windowWidth, canvasHeight));
-            setBackground(new Color(20, 20, 30)); // Dark background like a petri dish
+            setBackground(new Color(18, 18, 18)); // Dark background - Sci-Fi style
 
             // Center camera initially
             cameraX = worldWidth / 2.0;
@@ -326,10 +506,34 @@ public class BioLabSimulatorApp extends JFrame {
                 @Override
                 public void mousePressed(java.awt.event.MouseEvent e) {
                     if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
-                        lastMouseX = e.getX();
-                        lastMouseY = e.getY();
-                        isDragging = true;
-                        setCursor(new Cursor(Cursor.MOVE_CURSOR));
+                        // Check if clicking on a microbe for selection
+                        Microbe clicked = findMicrobeAtScreenPos(e.getX(), e.getY());
+                        if (clicked != null) {
+                            // Deselect previous
+                            if (selectedMicrobe != null) {
+                                selectedMicrobe.setSelected(false);
+                            }
+                            // Select new
+                            selectedMicrobe = clicked;
+                            selectedMicrobe.setSelected(true);
+                            inspectorPanel.setSelectedMicrobe(selectedMicrobe);
+                            inspectorPanel.showPanel();
+                        } else {
+                            // Deselect if clicking on empty space
+                            if (selectedMicrobe != null) {
+                                selectedMicrobe.setSelected(false);
+                                selectedMicrobe = null;
+                            }
+                            // Clear inspector and force repaint to remove ghost border
+                            inspectorPanel.hidePanel();
+                            getLayeredPane().repaint();
+
+                            // Start dragging camera
+                            lastMouseX = e.getX();
+                            lastMouseY = e.getY();
+                            isDragging = true;
+                            setCursor(new Cursor(Cursor.MOVE_CURSOR));
+                        }
                     }
                 }
 
@@ -396,6 +600,25 @@ public class BioLabSimulatorApp extends JFrame {
             cameraY = Math.max(visibleHeight / 2, Math.min(worldHeight - visibleHeight / 2, cameraY));
         }
 
+        /**
+         * Finds a microbe at the given screen coordinates.
+         * Converts screen position to world position and checks collision.
+         */
+        private Microbe findMicrobeAtScreenPos(int screenX, int screenY) {
+            // Convert screen to world coordinates
+            double worldX = (screenX - getWidth() / 2.0) / zoom + cameraX;
+            double worldY = (screenY - getHeight() / 2.0) / zoom + cameraY;
+
+            // Find closest microbe within click radius
+            List<Microbe> microbes = engine.getMicrobes();
+            for (Microbe microbe : microbes) {
+                if (microbe.contains(worldX, worldY)) {
+                    return microbe;
+                }
+            }
+            return null;
+        }
+
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
@@ -415,33 +638,132 @@ public class BioLabSimulatorApp extends JFrame {
             // 3. Translate to camera position (negative to move world)
             g2d.translate(-cameraX, -cameraY);
 
-            // Draw world boundary
-            g2d.setColor(new Color(30, 30, 40));
+            // Draw world boundary with sci-fi grid pattern
+            g2d.setColor(new Color(15, 15, 20));
             g2d.fillRect(0, 0, worldWidth, worldHeight);
-            g2d.setColor(new Color(60, 60, 70));
+
+            // Draw grid pattern (only visible portion for performance)
+            g2d.setColor(new Color(25, 25, 35, 100));
+            int gridSize = 100;
+            double visibleX1 = cameraX - (getWidth() / (2 * zoom));
+            double visibleX2 = cameraX + (getWidth() / (2 * zoom));
+            double visibleY1 = cameraY - (getHeight() / (2 * zoom));
+            double visibleY2 = cameraY + (getHeight() / (2 * zoom));
+
+            int startGridX = ((int) visibleX1 / gridSize) * gridSize;
+            int endGridX = ((int) visibleX2 / gridSize + 1) * gridSize;
+            int startGridY = ((int) visibleY1 / gridSize) * gridSize;
+            int endGridY = ((int) visibleY2 / gridSize + 1) * gridSize;
+
+            for (int gx = startGridX; gx <= endGridX; gx += gridSize) {
+                g2d.drawLine(gx, (int) visibleY1, gx, (int) visibleY2);
+            }
+            for (int gy = startGridY; gy <= endGridY; gy += gridSize) {
+                g2d.drawLine((int) visibleX1, gy, (int) visibleX2, gy);
+            }
+
+            // Draw world border
+            g2d.setColor(new Color(0, 255, 255, 150)); // Cyan border
+            g2d.setStroke(new BasicStroke(3));
             g2d.drawRect(0, 0, worldWidth, worldHeight);
+            g2d.setStroke(new BasicStroke(1));
 
-            // Get microbes snapshot (thread-safe)
+            // ===== RENDER FOOD PELLETS =====
+            List<FoodPellet> foodPellets = engine.getFoodPellets();
+            for (FoodPellet food : foodPellets) {
+                if (food.isConsumed()) continue;
+
+                // Multi-layer glow effect for food
+                for (int i = 3; i > 0; i--) {
+                    g2d.setColor(new Color(50, 255, 100, 15 + (i * 10)));
+                    int glowSize = food.getSize() + (i * 3);
+                    g2d.fillOval(
+                        (int) food.getX() - glowSize / 2,
+                        (int) food.getY() - glowSize / 2,
+                        glowSize, glowSize
+                    );
+                }
+
+                // Draw food pellet with bright center
+                g2d.setColor(new Color(150, 255, 150, 200));
+                int x = (int) food.getX() - food.getSize() / 2;
+                int y = (int) food.getY() - food.getSize() / 2;
+                g2d.fillOval(x, y, food.getSize(), food.getSize());
+
+                g2d.setColor(food.getColor());
+                g2d.fillOval(x + 1, y + 1, food.getSize() - 2, food.getSize() - 2);
+
+                // Bright center point
+                g2d.setColor(new Color(200, 255, 200));
+                g2d.fillOval(x + 2, y + 2, food.getSize() - 4, food.getSize() - 4);
+            }
+
+            // ===== RENDER MICROBES WITH GLOW =====
             List<Microbe> microbes = engine.getMicrobes();
-
-            // Render each microbe
             for (Microbe microbe : microbes) {
-                g2d.setColor(microbe.getColor());
-                int x = (int) microbe.getX() - microbe.getSize() / 2;
-                int y = (int) microbe.getY() - microbe.getSize() / 2;
-                g2d.fillOval(x, y, microbe.getSize(), microbe.getSize());
+                Color microbeColor = microbe.getColor();
+                int size = microbe.getSize();
+                int x = (int) microbe.getX() - size / 2;
+                int y = (int) microbe.getY() - size / 2;
+
+                // Draw multi-layer glow effect (outer to inner)
+                for (int i = 3; i > 0; i--) {
+                    int alpha = 20 + (i * 15);
+                    g2d.setColor(new Color(
+                        microbeColor.getRed(),
+                        microbeColor.getGreen(),
+                        microbeColor.getBlue(),
+                        alpha
+                    ));
+                    int glowSize = size + (i * 4);
+                    g2d.fillOval(x - i * 2, y - i * 2, glowSize, glowSize);
+                }
+
+                // Draw main microbe with slight inner glow
+                g2d.setColor(new Color(
+                    Math.min(255, microbeColor.getRed() + 40),
+                    Math.min(255, microbeColor.getGreen() + 40),
+                    Math.min(255, microbeColor.getBlue() + 40),
+                    220
+                ));
+                g2d.fillOval(x, y, size, size);
+
+                g2d.setColor(microbeColor);
+                g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
+
+                // Draw selection indicator with pulsing effect
+                if (microbe.isSelected()) {
+                    g2d.setColor(new Color(0, 255, 255, 100)); // Cyan glow
+                    g2d.setStroke(new BasicStroke(3));
+                    g2d.drawOval(x - 5, y - 5, size + 10, size + 10);
+
+                    g2d.setColor(new Color(0, 255, 255)); // Solid cyan
+                    g2d.setStroke(new BasicStroke(2));
+                    g2d.drawOval(x - 4, y - 4, size + 8, size + 8);
+
+                    g2d.setStroke(new BasicStroke(1));
+                    g2d.drawOval(x - 3, y - 3, size + 6, size + 6);
+                }
             }
 
             // Restore transform for UI elements
             g2d.setTransform(originalTransform);
 
-            // Draw color legend
-            drawLegend(g2d);
+            // Draw HUD-style camera controls hint with background
+            int hudY = getHeight() - 35;
+            g2d.setColor(new Color(0, 0, 0, 150));
+            g2d.fillRoundRect(5, hudY - 5, getWidth() - 10, 30, 10, 10);
 
-            // Draw camera controls hint
-            g2d.setColor(new Color(255, 255, 255, 150));
-            g2d.setFont(new Font("Arial", Font.PLAIN, 11));
-            g2d.drawString("Left-Click + Drag: Pan | Mouse Wheel: Zoom", 10, getHeight() - 10);
+            g2d.setColor(new Color(0, 255, 255, 100));
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawRoundRect(5, hudY - 5, getWidth() - 10, 30, 10, 10);
+
+            g2d.setColor(new Color(0, 255, 255));
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            String controlsText = "CONTROLS: Left-Click: Select | Drag: Pan | Mouse Wheel: Zoom | Zoom: " + String.format("%.1f", zoom) + "x";
+            FontMetrics fm = g2d.getFontMetrics();
+            int textWidth = fm.stringWidth(controlsText);
+            g2d.drawString(controlsText, (getWidth() - textWidth) / 2, hudY + 12);
         }
 
         private void drawLegend(Graphics2D g2d) {
@@ -469,26 +791,30 @@ public class BioLabSimulatorApp extends JFrame {
     private class ControlPanel extends JPanel {
         private final JSlider temperatureSlider;
         private final JSlider toxicitySlider;
+        private final JSlider foodSpawnSlider;
         private final JLabel statsLabel;
         private final JButton speedButton;
 
         public ControlPanel() {
             setLayout(new GridBagLayout());
             setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
-            setBackground(new Color(30, 30, 40));
-            setBorder(BorderFactory.createMatteBorder(2, 0, 0, 0, new Color(60, 60, 70)));
+            setBackground(new Color(20, 20, 28));
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(3, 0, 0, 0, new Color(0, 255, 255, 100)),
+                BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(0, 255, 255))
+            ));
 
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.insets = new Insets(5, 15, 5, 15);
             gbc.fill = GridBagConstraints.BOTH;
 
             // --- Left Section: Sliders ---
-            JPanel slidersPanel = new JPanel(new GridLayout(2, 1, 0, 10));
+            JPanel slidersPanel = new JPanel(new GridLayout(3, 1, 0, 5));
             slidersPanel.setOpaque(false);
 
             // Temperature slider
             JPanel tempPanel = createSliderPanel("Temperature", new Color(255, 100, 100));
-            temperatureSlider = createStyledSlider();
+            temperatureSlider = createStyledSlider(30);
             temperatureSlider.addChangeListener(e -> {
                 double temp = temperatureSlider.getValue() / 100.0;
                 engine.getEnvironment().setTemperature(temp);
@@ -498,13 +824,23 @@ public class BioLabSimulatorApp extends JFrame {
 
             // Toxicity slider
             JPanel toxPanel = createSliderPanel("Toxicity", new Color(100, 255, 100));
-            toxicitySlider = createStyledSlider();
+            toxicitySlider = createStyledSlider(30);
             toxicitySlider.addChangeListener(e -> {
                 double tox = toxicitySlider.getValue() / 100.0;
                 engine.getEnvironment().setToxicity(tox);
             });
             toxPanel.add(toxicitySlider, BorderLayout.CENTER);
             slidersPanel.add(toxPanel);
+
+            // Food Spawn Rate slider (NEW)
+            JPanel foodPanel = createSliderPanel("Food Spawn Rate", new Color(50, 255, 100));
+            foodSpawnSlider = createStyledSlider(30);
+            foodSpawnSlider.addChangeListener(e -> {
+                double rate = foodSpawnSlider.getValue() / 100.0;
+                engine.setFoodSpawnRate(rate);
+            });
+            foodPanel.add(foodSpawnSlider, BorderLayout.CENTER);
+            slidersPanel.add(foodPanel);
 
             gbc.gridx = 0;
             gbc.gridy = 0;
@@ -513,9 +849,9 @@ public class BioLabSimulatorApp extends JFrame {
             add(slidersPanel, gbc);
 
             // --- Center Section: Stats ---
-            statsLabel = new JLabel("<html><center>Population<br><font size='6' color='#4dbecf'>0</font></center></html>");
+            statsLabel = new JLabel("<html><center>POPULATION<br><font size='6' color='#00FFFF'>0</font></center></html>");
             statsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-            statsLabel.setForeground(Color.LIGHT_GRAY);
+            statsLabel.setForeground(new Color(0, 255, 255));
             statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
             gbc.gridx = 1;
@@ -526,32 +862,40 @@ public class BioLabSimulatorApp extends JFrame {
             JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 25));
             controlsPanel.setOpaque(false);
 
-            speedButton = new JButton("Speed: 1x");
+            speedButton = new JButton("\u25B6 SPEED: 1x"); // Play symbol
             speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
-            speedButton.setForeground(Color.WHITE);
-            speedButton.setBackground(new Color(45, 50, 58)); // Dunkler Hintergrund für Kontrast
+            speedButton.setForeground(new Color(0, 255, 255)); // Cyan
+            speedButton.setBackground(new Color(30, 35, 45));
             speedButton.setFocusPainted(false);
             speedButton.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(80, 90, 100), 2),
+                BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 2),
                 BorderFactory.createEmptyBorder(10, 20, 10, 20)
             ));
             speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            speedButton.setOpaque(true); // Wichtig für Custom-Farben
+            speedButton.setOpaque(true);
 
             speedButton.addActionListener(e -> {
                 currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
                 int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
                 targetFps = BASE_FPS * multiplier;
-                speedButton.setText("Speed: " + multiplier + "x");
+                speedButton.setText("\u25B6 SPEED: " + multiplier + "x");
             });
 
-            // Hover effect
+            // Hover effect with neon glow
             speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(60, 70, 80));
+                    speedButton.setBackground(new Color(40, 50, 60));
+                    speedButton.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(0, 255, 255), 2),
+                        BorderFactory.createEmptyBorder(10, 20, 10, 20)
+                    ));
                 }
                 public void mouseExited(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(45, 50, 58));
+                    speedButton.setBackground(new Color(30, 35, 45));
+                    speedButton.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 2),
+                        BorderFactory.createEmptyBorder(10, 20, 10, 20)
+                    ));
                 }
             });
 
@@ -562,8 +906,8 @@ public class BioLabSimulatorApp extends JFrame {
             add(controlsPanel, gbc);
         }
 
-        private JSlider createStyledSlider() {
-            JSlider slider = new JSlider(0, 100, 30);
+        private JSlider createStyledSlider(int initialValue) {
+            JSlider slider = new JSlider(0, 100, initialValue);
             slider.setOpaque(false);
             slider.setForeground(Color.WHITE);
             return slider;
@@ -572,15 +916,19 @@ public class BioLabSimulatorApp extends JFrame {
         private JPanel createSliderPanel(String title, Color titleColor) {
             JPanel panel = new JPanel(new BorderLayout(5, 5));
             panel.setOpaque(false);
-            JLabel label = new JLabel(title);
+            JLabel label = new JLabel("\u25B8 " + title); // Triangle pointer
             label.setForeground(titleColor);
-            label.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            label.setFont(new Font("Segoe UI", Font.BOLD, 13));
+
+            // Add shadow effect for neon look
+            label.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 0));
+
             panel.add(label, BorderLayout.NORTH);
             return panel;
         }
 
         public void updateStats(int population, int fps) {
-            statsLabel.setText(String.format("<html><center>Population<br><font size='6' color='#4dbecf'>%d</font><br><font size='3' color='gray'>TPS: %d</font></center></html>", population, fps));
+            statsLabel.setText(String.format("<html><center>POPULATION<br><font size='6' color='#00FFFF'>%,d</font><br><font size='3' color='#00CCCC'>TPS: %d</font></center></html>", population, fps));
         }
     }
 
