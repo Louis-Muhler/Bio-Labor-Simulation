@@ -17,8 +17,8 @@ public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
     private static final int INITIAL_POPULATION = 1500;
-    private static final int CUSTOM_HEADER_HEIGHT = 30;
-    private static final int CONTROL_PANEL_HEIGHT = 120;
+    private static final int CUSTOM_HEADER_HEIGHT = 55;
+    private static final int CONTROL_PANEL_HEIGHT = 150;
     private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + CUSTOM_HEADER_HEIGHT;
     private static final int UNLIMITED_FPS = 999;
     private static final int BASE_FPS = 30;
@@ -46,7 +46,7 @@ public class BioLabSimulatorApp extends JFrame {
     private int currentFps = 0;
 
     public BioLabSimulatorApp() {
-        super("Bio-Lab Evolution Simulator v2.0");
+        super("Bio-Lab Evolution Simulator");
 
         // Initialize settings manager and load settings
         settingsManager = new SettingsManager();
@@ -120,9 +120,12 @@ public class BioLabSimulatorApp extends JFrame {
     private void positionInspectorPanel() {
         // Calculate inspector panel position (top-right corner with margin)
         int panelWidth = 320;
-        int panelHeight = Math.min(windowHeight - TOTAL_UI_HEIGHT - 40, 700);
-        int panelX = getContentPane().getWidth() - panelWidth - 20;
-        int panelY = 20;
+        int rightMargin = 20; // Margin zur rechten Seite
+        int topMargin = CUSTOM_HEADER_HEIGHT + rightMargin; // Gleicher Abstand wie rechts, aber unter dem Header
+
+        int panelHeight = Math.min(windowHeight - TOTAL_UI_HEIGHT - topMargin - rightMargin, 700);
+        int panelX = getContentPane().getWidth() - panelWidth - rightMargin;
+        int panelY = topMargin;
 
         // Remove and re-add to ensure it's on top
         getLayeredPane().remove(inspectorPanel);
@@ -140,38 +143,52 @@ public class BioLabSimulatorApp extends JFrame {
 
         public CustomHeaderPanel() {
             setPreferredSize(new Dimension(windowWidth, CUSTOM_HEADER_HEIGHT));
-            setBackground(new Color(30, 30, 30));
+            setBackground(new Color(20, 20, 28)); // Wie Control Panel
             setLayout(new BorderLayout());
-            setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(0, 255, 255, 80)));
+            // Border wie Control Panel - mehrschichtig unten
+            setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(0, 255, 255, 100)),
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0, 255, 255))
+            ));
 
             // Left section: Settings button
-            JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+            JPanel leftPanel = new JPanel(new GridBagLayout());
             leftPanel.setOpaque(false);
 
-            JButton settingsButton = createHeaderButton("\u2699", true); // Gear symbol
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.insets = new Insets(0, 10, 0, 0);
+
+            ModernButton settingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
+            settingsButton.setPreferredSize(new Dimension(65, 35));
             settingsButton.addActionListener(e -> showSettingsOverlay());
-            leftPanel.add(settingsButton);
+            leftPanel.add(settingsButton, gbc);
 
             add(leftPanel, BorderLayout.WEST);
 
             // Center section: Title (draggable area)
-            JLabel titleLabel = new JLabel("BIO-LAB EVOLUTION SIMULATOR V2.0");
+            JLabel titleLabel = new JLabel("BIO-LAB EVOLUTION SIMULATOR");
             titleLabel.setForeground(new Color(0, 255, 255));
-            titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14)); // Größere Schrift
             titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
             add(titleLabel, BorderLayout.CENTER);
 
             // Right section: Close button
-            JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+            JPanel rightPanel = new JPanel(new GridBagLayout());
             rightPanel.setOpaque(false);
 
-            JButton closeButton = createHeaderButton("\u2715", false); // X symbol
+            GridBagConstraints gbcRight = new GridBagConstraints();
+            gbcRight.anchor = GridBagConstraints.EAST;
+            gbcRight.insets = new Insets(0, 0, 0, 10);
+
+            ModernButton closeButton = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
+            closeButton.setPreferredSize(new Dimension(50, 35));
             closeButton.addActionListener(e -> {
                 running = false;
                 engine.shutdown();
                 System.exit(0);
             });
-            rightPanel.add(closeButton);
+            rightPanel.add(closeButton, gbcRight);
 
             add(rightPanel, BorderLayout.EAST);
 
@@ -220,71 +237,6 @@ public class BioLabSimulatorApp extends JFrame {
                     BioLabSimulatorApp.this.setLocation(X, Y);
                 }
             });
-        }
-
-        private JButton createHeaderButton(String symbol, boolean isWide) {
-            JButton button = new JButton(symbol) {
-                private boolean hovered = false;
-
-                @Override
-                protected void paintComponent(Graphics g) {
-                    Graphics2D g2d = (Graphics2D) g;
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-                    // Draw background
-                    if (hovered) {
-                        g2d.setColor(new Color(50, 55, 60));
-                    } else {
-                        g2d.setColor(new Color(40, 40, 45));
-                    }
-                    g2d.fillRect(0, 0, getWidth(), getHeight());
-
-                    // Draw border
-                    if (hovered) {
-                        g2d.setColor(new Color(0, 255, 255));
-                    } else {
-                        g2d.setColor(new Color(0, 255, 255, 100));
-                    }
-                    g2d.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
-
-                    // Draw symbol
-                    g2d.setColor(new Color(0, 255, 255));
-                    g2d.setFont(getFont());
-                    FontMetrics fm = g2d.getFontMetrics();
-                    int textWidth = fm.stringWidth(getText());
-                    int textHeight = fm.getAscent();
-                    int x = (getWidth() - textWidth) / 2;
-                    int y = (getHeight() + textHeight) / 2 - 2;
-                    g2d.drawString(getText(), x, y);
-                }
-
-                {
-                    addMouseListener(new java.awt.event.MouseAdapter() {
-                        @Override
-                        public void mouseEntered(java.awt.event.MouseEvent evt) {
-                            hovered = true;
-                            repaint();
-                        }
-
-                        @Override
-                        public void mouseExited(java.awt.event.MouseEvent evt) {
-                            hovered = false;
-                            repaint();
-                        }
-                    });
-                }
-            };
-
-            button.setFont(new Font("Segoe UI", Font.BOLD, 16));
-            button.setFocusPainted(false);
-            button.setBorderPainted(false);
-            button.setContentAreaFilled(false);
-            button.setOpaque(false);
-            button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            button.setPreferredSize(new Dimension(isWide ? 80 : 40, 24));
-
-            return button;
         }
     }
     
@@ -748,22 +700,6 @@ public class BioLabSimulatorApp extends JFrame {
 
             // Restore transform for UI elements
             g2d.setTransform(originalTransform);
-
-            // Draw HUD-style camera controls hint with background
-            int hudY = getHeight() - 35;
-            g2d.setColor(new Color(0, 0, 0, 150));
-            g2d.fillRoundRect(5, hudY - 5, getWidth() - 10, 30, 10, 10);
-
-            g2d.setColor(new Color(0, 255, 255, 100));
-            g2d.setStroke(new BasicStroke(2));
-            g2d.drawRoundRect(5, hudY - 5, getWidth() - 10, 30, 10, 10);
-
-            g2d.setColor(new Color(0, 255, 255));
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            String controlsText = "CONTROLS: Left-Click: Select | Drag: Pan | Mouse Wheel: Zoom | Zoom: " + String.format("%.1f", zoom) + "x";
-            FontMetrics fm = g2d.getFontMetrics();
-            int textWidth = fm.stringWidth(controlsText);
-            g2d.drawString(controlsText, (getWidth() - textWidth) / 2, hudY + 12);
         }
 
         private void drawLegend(Graphics2D g2d) {
@@ -793,7 +729,7 @@ public class BioLabSimulatorApp extends JFrame {
         private final JSlider toxicitySlider;
         private final JSlider foodSpawnSlider;
         private final JLabel statsLabel;
-        private final JButton speedButton;
+        private final ModernButton speedButton;
 
         public ControlPanel() {
             setLayout(new GridBagLayout());
@@ -859,47 +795,23 @@ public class BioLabSimulatorApp extends JFrame {
             add(statsLabel, gbc);
 
             // --- Right Section: Speed Control ---
-            JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 25));
+            JPanel controlsPanel = new JPanel(new GridBagLayout());
             controlsPanel.setOpaque(false);
 
-            speedButton = new JButton("\u25B6 SPEED: 1x"); // Play symbol
-            speedButton.setFont(new Font("Segoe UI", Font.BOLD, 16));
-            speedButton.setForeground(new Color(0, 255, 255)); // Cyan
-            speedButton.setBackground(new Color(30, 35, 45));
-            speedButton.setFocusPainted(false);
-            speedButton.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 2),
-                BorderFactory.createEmptyBorder(10, 20, 10, 20)
-            ));
-            speedButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            speedButton.setOpaque(true);
+            speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
+            speedButton.setPreferredSize(new Dimension(140, 50)); // Schmaler: 140 statt 200
 
             speedButton.addActionListener(e -> {
                 currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
                 int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
                 targetFps = BASE_FPS * multiplier;
-                speedButton.setText("\u25B6 SPEED: " + multiplier + "x");
+                speedButton.setDisplayText(multiplier + "x");
             });
 
-            // Hover effect with neon glow
-            speedButton.addMouseListener(new java.awt.event.MouseAdapter() {
-                public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(40, 50, 60));
-                    speedButton.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(new Color(0, 255, 255), 2),
-                        BorderFactory.createEmptyBorder(10, 20, 10, 20)
-                    ));
-                }
-                public void mouseExited(java.awt.event.MouseEvent evt) {
-                    speedButton.setBackground(new Color(30, 35, 45));
-                    speedButton.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 2),
-                        BorderFactory.createEmptyBorder(10, 20, 10, 20)
-                    ));
-                }
-            });
-
-            controlsPanel.add(speedButton);
+            GridBagConstraints gbcSpeed = new GridBagConstraints();
+            gbcSpeed.anchor = GridBagConstraints.EAST;
+            gbcSpeed.insets = new Insets(0, 0, 0, 20);
+            controlsPanel.add(speedButton, gbcSpeed);
 
             gbc.gridx = 2;
             gbc.weightx = 0.4;
@@ -916,14 +828,32 @@ public class BioLabSimulatorApp extends JFrame {
         private JPanel createSliderPanel(String title, Color titleColor) {
             JPanel panel = new JPanel(new BorderLayout(5, 5));
             panel.setOpaque(false);
-            JLabel label = new JLabel("\u25B8 " + title); // Triangle pointer
+
+            // Create custom label with drawn triangle icon
+            JPanel labelContainer = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    Graphics2D g2d = (Graphics2D) g;
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    // Draw triangle icon
+                    g2d.setColor(titleColor);
+                    int[] xPoints = {5, 13, 5};
+                    int[] yPoints = {3, 10, 17};
+                    g2d.fillPolygon(xPoints, yPoints, 3);
+                }
+            };
+            labelContainer.setLayout(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            labelContainer.setOpaque(false);
+
+            JLabel label = new JLabel("   " + title); // Spacing for triangle
             label.setForeground(titleColor);
             label.setFont(new Font("Segoe UI", Font.BOLD, 13));
-
-            // Add shadow effect for neon look
             label.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 0));
+            labelContainer.add(label);
 
-            panel.add(label, BorderLayout.NORTH);
+            panel.add(labelContainer, BorderLayout.NORTH);
             return panel;
         }
 

@@ -138,11 +138,13 @@ public class SettingsOverlay extends JPanel {
         buttonsPanel.setBackground(new Color(18, 18, 18));
         buttonsPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
-        JButton applyButton = createStyledButton("APPLY");
+        ModernButton applyButton = new ModernButton("APPLY");
+        applyButton.setPreferredSize(new Dimension(120, 40));
         applyButton.addActionListener(e -> applySettings());
         buttonsPanel.add(applyButton);
         
-        JButton cancelButton = createStyledButton("CANCEL");
+        ModernButton cancelButton = new ModernButton("CANCEL");
+        cancelButton.setPreferredSize(new Dimension(120, 40));
         cancelButton.addActionListener(e -> closeOverlay());
         buttonsPanel.add(cancelButton);
         
@@ -162,7 +164,7 @@ public class SettingsOverlay extends JPanel {
     }
     
     private JLabel createSectionLabel(String text) {
-        JLabel label = new JLabel("\u25B8 " + text); // Triangle pointer
+        JLabel label = new JLabel("▸ " + text);
         label.setFont(new Font("Segoe UI", Font.BOLD, 16));
         label.setForeground(new Color(0, 255, 255)); // Neon cyan
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -176,77 +178,7 @@ public class SettingsOverlay extends JPanel {
         combo.setBorder(BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 1));
     }
     
-    private JButton createStyledButton(String text) {
-        JButton button = new JButton(text) {
-            private boolean hovered = false;
 
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                // Draw background
-                if (hovered) {
-                    g2d.setColor(new Color(20, 25, 30));
-                } else {
-                    g2d.setColor(new Color(10, 10, 12));
-                }
-                g2d.fillRect(0, 0, getWidth(), getHeight());
-
-                // Draw border
-                if (hovered) {
-                    g2d.setColor(new Color(0, 255, 255));
-                    g2d.setStroke(new BasicStroke(2));
-                } else {
-                    g2d.setColor(new Color(0, 255, 255, 150));
-                    g2d.setStroke(new BasicStroke(2));
-                }
-                g2d.drawRect(1, 1, getWidth() - 2, getHeight() - 2);
-
-                // Draw text
-                g2d.setColor(new Color(0, 255, 255));
-                g2d.setFont(getFont());
-                FontMetrics fm = g2d.getFontMetrics();
-                int textWidth = fm.stringWidth(getText());
-                int textHeight = fm.getAscent();
-                int x = (getWidth() - textWidth) / 2;
-                int y = (getHeight() + textHeight) / 2 - 2;
-                g2d.drawString(getText(), x, y);
-            }
-        };
-
-        button.setPreferredSize(new Dimension(120, 40));
-        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        button.setFocusPainted(false);
-        button.setBorderPainted(false);
-        button.setContentAreaFilled(false);
-        button.setOpaque(false);
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        // Add hover effect
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                ((JButton) evt.getSource()).putClientProperty("hovered", true);
-                button.repaint();
-            }
-            
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                ((JButton) evt.getSource()).putClientProperty("hovered", false);
-                button.repaint();
-            }
-        });
-
-        button.addPropertyChangeListener(evt -> {
-            if ("hovered".equals(evt.getPropertyName())) {
-                button.repaint();
-            }
-        });
-        
-        return button;
-    }
-    
     private void loadCurrentSettings() {
         // Load fullscreen setting
         fullscreenCheck.setSelected(settingsManager.isFullscreen());

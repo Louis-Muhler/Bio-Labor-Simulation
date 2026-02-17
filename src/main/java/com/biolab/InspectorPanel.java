@@ -12,6 +12,8 @@ import java.util.List;
 public class InspectorPanel extends JPanel {
     private Microbe selectedMicrobe;
     private static final int PANEL_WIDTH = 320;
+    private static final int MARGIN = 20; // Consistent margin for top and right
+    private static final int CONTENT_PADDING = 20; // Internal padding
     private static final Color BG_COLOR = new Color(18, 18, 18, 240); // Semi-transparent dark
     private static final Color ACCENT_COLOR = new Color(0, 255, 255); // Cyan neon
     private static final Color TEXT_COLOR = new Color(220, 220, 220);
@@ -64,19 +66,49 @@ public class InspectorPanel extends JPanel {
             return;
         }
 
-        // Background panel
+        // Calculate dynamic panel height based on content
+        int y = MARGIN + CONTENT_PADDING;
+        int contentHeight = y;
+
+        // Title height
+        contentHeight += 30; // Title
+        contentHeight += 25; // Separator + spacing (reduziert von 30)
+
+        // Vital Signs section
+        contentHeight += 20 + (3 * 20); // Section title + 3 lines
+        contentHeight += 15; // Bottom spacing (reduziert von 20)
+
+        // Genetic Profile section
+        contentHeight += 20 + (3 * 20); // Section title + 3 lines
+        contentHeight += 15; // Bottom spacing (reduziert von 20)
+
+        // Ancestry section if exists
+        List<AncestorSnapshot> ancestry = selectedMicrobe.getAncestry();
+        if (!ancestry.isEmpty()) {
+            contentHeight += 20 + 25 + 120 + 30; // Title + spacing + chart + legend
+            contentHeight += 30; // Extra spacing before color code (reduziert von 40)
+        } else {
+            contentHeight += 20; // Extra spacing when no ancestry (reduziert von 25)
+        }
+
+        // Color indicator
+        contentHeight += 20 + 50; // Label + circle (reduziert von 60)
+        contentHeight += CONTENT_PADDING + MARGIN; // Bottom padding + margin
+
+        // Draw background panel with dynamic height
+        int panelHeight = contentHeight;
         g2d.setColor(BG_COLOR);
-        g2d.fillRoundRect(10, 10, PANEL_WIDTH - 20, getHeight() - 20, 15, 15);
+        g2d.fillRoundRect(MARGIN, MARGIN, PANEL_WIDTH - (2 * MARGIN), panelHeight, 15, 15);
 
         // Border with glow effect
         g2d.setColor(new Color(ACCENT_COLOR.getRed(), ACCENT_COLOR.getGreen(), ACCENT_COLOR.getBlue(), 80));
         g2d.setStroke(new BasicStroke(3));
-        g2d.drawRoundRect(10, 10, PANEL_WIDTH - 20, getHeight() - 20, 15, 15);
+        g2d.drawRoundRect(MARGIN, MARGIN, PANEL_WIDTH - (2 * MARGIN), panelHeight, 15, 15);
         g2d.setColor(ACCENT_COLOR);
         g2d.setStroke(new BasicStroke(1));
-        g2d.drawRoundRect(10, 10, PANEL_WIDTH - 20, getHeight() - 20, 15, 15);
+        g2d.drawRoundRect(MARGIN, MARGIN, PANEL_WIDTH - (2 * MARGIN), panelHeight, 15, 15);
 
-        int y = 40;
+        y = MARGIN + CONTENT_PADDING + 20;
 
         g2d.setColor(ACCENT_COLOR);
         g2d.setFont(TITLE_FONT);
@@ -84,70 +116,90 @@ public class InspectorPanel extends JPanel {
         y += 30;
 
         g2d.setColor(GRID_COLOR);
-        g2d.fillRect(30, y, PANEL_WIDTH - 60, 2);
+        g2d.fillRect(MARGIN + CONTENT_PADDING, y, PANEL_WIDTH - (2 * MARGIN) - (2 * CONTENT_PADDING), 2);
         y += 20;
 
-        drawSection(g2d, y, "VITAL SIGNS", new String[]{
+        y = drawSection(g2d, y, "VITAL SIGNS", new String[]{
             String.format("Health: %.1f%%", (selectedMicrobe.getHealth() / Microbe.getMaxHealth()) * 100),
             String.format("Energy: %.1f%%", (selectedMicrobe.getEnergy() / Microbe.getMaxEnergy()) * 100),
             String.format("Age: %d cycles", selectedMicrobe.getAge())
         });
-        y += 110;
+        y += 20;
 
-        drawSection(g2d, y, "GENETIC PROFILE", new String[]{
+        y = drawSection(g2d, y, "GENETIC PROFILE", new String[]{
             String.format("Heat Resistance: %.2f", selectedMicrobe.getHeatResistance()),
             String.format("Toxin Resistance: %.2f", selectedMicrobe.getToxinResistance()),
             String.format("Speed Factor: %.2f", selectedMicrobe.getSpeed())
         });
-        y += 110;
+        y += 20;
 
-        List<AncestorSnapshot> ancestry = selectedMicrobe.getAncestry();
         if (!ancestry.isEmpty()) {
-            drawAncestrySection(g2d, y, ancestry);
-            y += 200;
+            y = drawAncestrySection(g2d, y, ancestry);
+            y += 40; // Extra Abstand nach Ancestry Chart
+        } else {
+            y += 25; // Extra Abstand wenn kein Ancestry
         }
 
         drawColorIndicator(g2d, y);
     }
 
     private void drawNoSelection(Graphics2D g2d) {
+        int panelHeight = 150;
+
         g2d.setColor(new Color(BG_COLOR.getRed(), BG_COLOR.getGreen(), BG_COLOR.getBlue(), 150));
-        g2d.fillRoundRect(10, 10, PANEL_WIDTH - 20, 150, 15, 15);
+        g2d.fillRoundRect(MARGIN, MARGIN, PANEL_WIDTH - (2 * MARGIN), panelHeight, 15, 15);
 
         g2d.setColor(new Color(GRID_COLOR.getRed(), GRID_COLOR.getGreen(), GRID_COLOR.getBlue(), 200));
         g2d.setStroke(new BasicStroke(2));
-        g2d.drawRoundRect(10, 10, PANEL_WIDTH - 20, 150, 15, 15);
+        g2d.drawRoundRect(MARGIN, MARGIN, PANEL_WIDTH - (2 * MARGIN), panelHeight, 15, 15);
 
         g2d.setColor(new Color(TEXT_COLOR.getRed(), TEXT_COLOR.getGreen(), TEXT_COLOR.getBlue(), 180));
         g2d.setFont(LABEL_FONT);
-        drawCenteredString(g2d, "No specimen selected", PANEL_WIDTH / 2, 70);
+        drawCenteredString(g2d, "No specimen selected", PANEL_WIDTH / 2, MARGIN + 60);
         g2d.setFont(MONO_FONT);
-        drawCenteredString(g2d, "Click on a microbe to inspect", PANEL_WIDTH / 2, 95);
+        drawCenteredString(g2d, "Click on a microbe to inspect", PANEL_WIDTH / 2, MARGIN + 85);
     }
 
-    private void drawSection(Graphics2D g2d, int y, String title, String[] lines) {
+    private int drawSection(Graphics2D g2d, int y, String title, String[] lines) {
         g2d.setColor(ACCENT_COLOR);
         g2d.setFont(LABEL_FONT);
-        g2d.drawString("\u25B8 " + title, 30, y);
+
+        // Draw simple triangle icon instead of Unicode
+        drawTriangleIcon(g2d, MARGIN + CONTENT_PADDING + 5, y - 8);
+        g2d.drawString(title, MARGIN + CONTENT_PADDING + 20, y);
         y += 20;
 
         g2d.setColor(TEXT_COLOR);
         g2d.setFont(MONO_FONT);
         for (String line : lines) {
-            g2d.drawString(line, 45, y);
-            y += 18;
+            g2d.drawString(line, MARGIN + CONTENT_PADDING + 35, y);
+            y += 20;
         }
+
+        return y;
     }
 
-    private void drawAncestrySection(Graphics2D g2d, int y, List<AncestorSnapshot> ancestry) {
+    /**
+     * Draws a simple triangle icon using Graphics2D instead of Unicode.
+     */
+    private void drawTriangleIcon(Graphics2D g2d, int x, int y) {
+        int[] xPoints = {x, x + 8, x};
+        int[] yPoints = {y, y + 4, y + 8};
+        g2d.fillPolygon(xPoints, yPoints, 3);
+    }
+
+    private int drawAncestrySection(Graphics2D g2d, int y, List<AncestorSnapshot> ancestry) {
         g2d.setColor(ACCENT_COLOR);
         g2d.setFont(LABEL_FONT);
-        g2d.drawString("\u25B8 LINEAGE EVOLUTION", 30, y);
+
+        // Draw triangle icon instead of Unicode
+        drawTriangleIcon(g2d, MARGIN + CONTENT_PADDING + 5, y - 8);
+        g2d.drawString("LINEAGE EVOLUTION", MARGIN + CONTENT_PADDING + 20, y);
         y += 25;
 
-        int chartX = 40;
+        int chartX = MARGIN + CONTENT_PADDING + 10;
         int chartY = y;
-        int chartWidth = PANEL_WIDTH - 80;
+        int chartWidth = PANEL_WIDTH - (2 * MARGIN) - (2 * CONTENT_PADDING) - 20;
         int chartHeight = 120;
 
         g2d.setColor(new Color(0, 0, 0, 100));
@@ -187,11 +239,14 @@ public class InspectorPanel extends JPanel {
         drawLineChart(g2d, toxinData, chartX, chartY, chartWidth, chartHeight, new Color(100, 255, 100));
         drawLineChart(g2d, speedData, chartX, chartY, chartWidth, chartHeight, new Color(100, 150, 255));
 
-        y = chartY + chartHeight + 15;
+        y = chartY + chartHeight + 20;
         g2d.setFont(MONO_FONT);
-        drawLegendItem(g2d, 45, y, new Color(255, 100, 100), "Heat Res");
-        drawLegendItem(g2d, 130, y, new Color(100, 255, 100), "Toxin Res");
-        drawLegendItem(g2d, 220, y, new Color(100, 150, 255), "Speed");
+        int legendX = MARGIN + CONTENT_PADDING + 15;
+        drawLegendItem(g2d, legendX, y, new Color(255, 100, 100), "Heat Res");
+        drawLegendItem(g2d, legendX + 85, y, new Color(100, 255, 100), "Toxin Res");
+        drawLegendItem(g2d, legendX + 175, y, new Color(100, 150, 255), "Speed");
+
+        return y + 10;
     }
 
     private void drawLineChart(Graphics2D g2d, List<DataPoint> data, int x, int y, int width, int height, Color color) {
@@ -246,10 +301,11 @@ public class InspectorPanel extends JPanel {
         g2d.setColor(ACCENT_COLOR);
         g2d.setFont(LABEL_FONT);
         drawCenteredString(g2d, "COLOR CODE", centerX, y);
-        y += 20;
+        y += 35; // Increased spacing between label and circle
 
         Color microbeColor = selectedMicrobe.getColor();
 
+        // Draw glow effect
         for (int i = 3; i > 0; i--) {
             g2d.setColor(new Color(
                 microbeColor.getRed(),
@@ -260,6 +316,7 @@ public class InspectorPanel extends JPanel {
             g2d.fillOval(centerX - 15 - i * 2, y - 15 - i * 2, 30 + i * 4, 30 + i * 4);
         }
 
+        // Draw main circle
         g2d.setColor(microbeColor);
         g2d.fillOval(centerX - 15, y - 15, 30, 30);
         g2d.setColor(ACCENT_COLOR);
