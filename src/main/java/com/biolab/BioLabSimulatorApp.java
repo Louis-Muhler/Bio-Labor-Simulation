@@ -4,7 +4,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -17,7 +16,7 @@ public class BioLabSimulatorApp extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
     private static final int INITIAL_POPULATION = 1500;
-    private static final int CUSTOM_HEADER_HEIGHT = 55;
+    private static final int CUSTOM_HEADER_HEIGHT = 65;
     private static final int CONTROL_PANEL_HEIGHT = 150;
     private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + CUSTOM_HEADER_HEIGHT;
     private static final int UNLIMITED_FPS = 999;
@@ -30,6 +29,9 @@ public class BioLabSimulatorApp extends JFrame {
     private final ControlPanel controlPanel;
     private final CustomHeaderPanel headerPanel;
     private final InspectorPanel inspectorPanel;
+    private final EnvironmentPanel environmentPanel;
+    private final JPanel environmentInteractionOverlay;
+    private final ModernButton envToggleButton;
     private volatile boolean running = true;
     private volatile boolean paused = false;
     private SettingsOverlay settingsOverlay;
@@ -67,6 +69,13 @@ public class BioLabSimulatorApp extends JFrame {
         headerPanel = new CustomHeaderPanel();
         inspectorPanel = new InspectorPanel();
 
+        // Initialize environment panel and toggle button
+        environmentPanel = new EnvironmentPanel(engine);
+        environmentInteractionOverlay = environmentPanel.createInteractionOverlay();
+
+        envToggleButton = new ModernButton(">", ModernButton.ButtonIcon.NONE);
+        envToggleButton.addActionListener(e -> toggleEnvironmentPanel());
+
         setupUI();
         setupShutdownHook();
         
@@ -103,16 +112,21 @@ public class BioLabSimulatorApp extends JFrame {
 
         setLocationRelativeTo(null);
 
-        // Add component listener to reposition inspector panel on resize
+        // Add component listener to reposition panels on resize
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent evt) {
                 positionInspectorPanel();
+                positionEnvToggleButton();
+                if (environmentPanel.isVisible()) {
+                    positionEnvironmentPanel();
+                }
             }
 
             @Override
             public void componentShown(java.awt.event.ComponentEvent evt) {
                 positionInspectorPanel();
+                positionEnvToggleButton();
             }
         });
     }
@@ -120,14 +134,13 @@ public class BioLabSimulatorApp extends JFrame {
     private void positionInspectorPanel() {
         // Calculate inspector panel position (top-right corner with margin)
         int panelWidth = 320;
-        int rightMargin = 20; // Margin zur rechten Seite
-        int topMargin = CUSTOM_HEADER_HEIGHT + rightMargin; // Gleicher Abstand wie rechts, aber unter dem Header
+        int rightMargin = 20;
+        int topMargin = CUSTOM_HEADER_HEIGHT + rightMargin;
 
         int panelHeight = Math.min(windowHeight - TOTAL_UI_HEIGHT - topMargin - rightMargin, 700);
         int panelX = getContentPane().getWidth() - panelWidth - rightMargin;
         int panelY = topMargin;
 
-        // Remove and re-add to ensure it's on top
         getLayeredPane().remove(inspectorPanel);
         getLayeredPane().add(inspectorPanel, JLayeredPane.PALETTE_LAYER);
         inspectorPanel.setBounds(panelX, panelY, panelWidth, panelHeight);
@@ -135,6 +148,57 @@ public class BioLabSimulatorApp extends JFrame {
         inspectorPanel.repaint();
     }
     
+    private void positionEnvironmentPanel() {
+        int panelWidth = 350;
+        int leftMargin = 20;
+        int topMargin = CUSTOM_HEADER_HEIGHT + 20;
+        int panelHeight = getContentPane().getHeight() - CUSTOM_HEADER_HEIGHT - CONTROL_PANEL_HEIGHT - 40;
+        int panelX = leftMargin;
+        int panelY = topMargin;
+
+        // Position background panel
+        getLayeredPane().remove(environmentPanel);
+        getLayeredPane().add(environmentPanel, JLayeredPane.PALETTE_LAYER);
+        environmentPanel.setBounds(panelX, panelY, panelWidth, panelHeight);
+        environmentPanel.revalidate();
+        environmentPanel.repaint();
+
+        // Position interaction overlay on top
+        getLayeredPane().remove(environmentInteractionOverlay);
+        getLayeredPane().add(environmentInteractionOverlay, JLayeredPane.MODAL_LAYER);
+        environmentInteractionOverlay.setBounds(panelX, panelY, panelWidth, panelHeight);
+        environmentInteractionOverlay.revalidate();
+        environmentInteractionOverlay.repaint();
+    }
+
+    private void positionEnvToggleButton() {
+        int leftMargin = 20;
+        int topMargin = CUSTOM_HEADER_HEIGHT + 20;
+
+        getLayeredPane().remove(envToggleButton);
+        getLayeredPane().add(envToggleButton, JLayeredPane.PALETTE_LAYER);
+        envToggleButton.setBounds(leftMargin, topMargin, 50, 50);
+        envToggleButton.revalidate();
+        envToggleButton.repaint();
+    }
+
+    private void toggleEnvironmentPanel() {
+        if (environmentPanel.isVisible()) {
+            // Hide panel
+            environmentPanel.setVisible(false);
+            environmentInteractionOverlay.setVisible(false);
+            envToggleButton.setText(">");
+            getLayeredPane().repaint();
+        } else {
+            // Show panel
+            environmentPanel.setVisible(true);
+            environmentInteractionOverlay.setVisible(true);
+            positionEnvironmentPanel();
+            envToggleButton.setText("<");
+            getLayeredPane().repaint();
+        }
+    }
+
     /**
      * Custom header panel with window controls and dragging functionality.
      */
@@ -160,7 +224,7 @@ public class BioLabSimulatorApp extends JFrame {
             gbc.insets = new Insets(0, 10, 0, 0);
 
             ModernButton settingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
-            settingsButton.setPreferredSize(new Dimension(65, 35));
+            settingsButton.setPreferredSize(new Dimension(45, 45));
             settingsButton.addActionListener(e -> showSettingsOverlay());
             leftPanel.add(settingsButton, gbc);
 
@@ -182,7 +246,7 @@ public class BioLabSimulatorApp extends JFrame {
             gbcRight.insets = new Insets(0, 0, 0, 10);
 
             ModernButton closeButton = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
-            closeButton.setPreferredSize(new Dimension(50, 35));
+            closeButton.setPreferredSize(new Dimension(45, 45));
             closeButton.addActionListener(e -> {
                 running = false;
                 engine.shutdown();
@@ -722,17 +786,14 @@ public class BioLabSimulatorApp extends JFrame {
     }
 
     /**
-     * Control panel with user controls (sliders and stats).
+     * Control panel - nur noch Speed und Population frei schwebend
      */
     private class ControlPanel extends JPanel {
-        private final JSlider temperatureSlider;
-        private final JSlider toxicitySlider;
-        private final JSlider foodSpawnSlider;
         private final JLabel statsLabel;
         private final ModernButton speedButton;
 
         public ControlPanel() {
-            setLayout(new GridBagLayout());
+            setLayout(null); // Absolute positioning
             setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
             setBackground(new Color(20, 20, 28));
             setBorder(BorderFactory.createCompoundBorder(
@@ -740,66 +801,17 @@ public class BioLabSimulatorApp extends JFrame {
                 BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(0, 255, 255))
             ));
 
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(5, 15, 5, 15);
-            gbc.fill = GridBagConstraints.BOTH;
-
-            // --- Left Section: Sliders ---
-            JPanel slidersPanel = new JPanel(new GridLayout(3, 1, 0, 5));
-            slidersPanel.setOpaque(false);
-
-            // Temperature slider
-            JPanel tempPanel = createSliderPanel("Temperature", new Color(255, 100, 100));
-            temperatureSlider = createStyledSlider(30);
-            temperatureSlider.addChangeListener(e -> {
-                double temp = temperatureSlider.getValue() / 100.0;
-                engine.getEnvironment().setTemperature(temp);
-            });
-            tempPanel.add(temperatureSlider, BorderLayout.CENTER);
-            slidersPanel.add(tempPanel);
-
-            // Toxicity slider
-            JPanel toxPanel = createSliderPanel("Toxicity", new Color(100, 255, 100));
-            toxicitySlider = createStyledSlider(30);
-            toxicitySlider.addChangeListener(e -> {
-                double tox = toxicitySlider.getValue() / 100.0;
-                engine.getEnvironment().setToxicity(tox);
-            });
-            toxPanel.add(toxicitySlider, BorderLayout.CENTER);
-            slidersPanel.add(toxPanel);
-
-            // Food Spawn Rate slider (NEW)
-            JPanel foodPanel = createSliderPanel("Food Spawn Rate", new Color(50, 255, 100));
-            foodSpawnSlider = createStyledSlider(30);
-            foodSpawnSlider.addChangeListener(e -> {
-                double rate = foodSpawnSlider.getValue() / 100.0;
-                engine.setFoodSpawnRate(rate);
-            });
-            foodPanel.add(foodSpawnSlider, BorderLayout.CENTER);
-            slidersPanel.add(foodPanel);
-
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.weightx = 0.4;
-            gbc.weighty = 1.0;
-            add(slidersPanel, gbc);
-
-            // --- Center Section: Stats ---
-            statsLabel = new JLabel("<html><center>POPULATION<br><font size='6' color='#00FFFF'>0</font></center></html>");
+            // Population Label - links
+            statsLabel = new JLabel("<html><center>POPULATION<br><font size='5' color='#00FFFF'>0</font></center></html>");
             statsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
             statsLabel.setForeground(new Color(0, 255, 255));
             statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            statsLabel.setBounds(30, 15, 200, 50);
+            add(statsLabel);
 
-            gbc.gridx = 1;
-            gbc.weightx = 0.2;
-            add(statsLabel, gbc);
-
-            // --- Right Section: Speed Control ---
-            JPanel controlsPanel = new JPanel(new GridBagLayout());
-            controlsPanel.setOpaque(false);
-
+            // Speed Button - rechts
             speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
-            speedButton.setPreferredSize(new Dimension(140, 50)); // Schmaler: 140 statt 200
+            speedButton.setBounds(windowWidth - 160, 15, 140, 50);
 
             speedButton.addActionListener(e -> {
                 currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
@@ -808,57 +820,19 @@ public class BioLabSimulatorApp extends JFrame {
                 speedButton.setDisplayText(multiplier + "x");
             });
 
-            GridBagConstraints gbcSpeed = new GridBagConstraints();
-            gbcSpeed.anchor = GridBagConstraints.EAST;
-            gbcSpeed.insets = new Insets(0, 0, 0, 20);
-            controlsPanel.add(speedButton, gbcSpeed);
+            add(speedButton);
 
-            gbc.gridx = 2;
-            gbc.weightx = 0.4;
-            add(controlsPanel, gbc);
-        }
-
-        private JSlider createStyledSlider(int initialValue) {
-            JSlider slider = new JSlider(0, 100, initialValue);
-            slider.setOpaque(false);
-            slider.setForeground(Color.WHITE);
-            return slider;
-        }
-
-        private JPanel createSliderPanel(String title, Color titleColor) {
-            JPanel panel = new JPanel(new BorderLayout(5, 5));
-            panel.setOpaque(false);
-
-            // Create custom label with drawn triangle icon
-            JPanel labelContainer = new JPanel() {
+            // ComponentListener für Resize
+            addComponentListener(new java.awt.event.ComponentAdapter() {
                 @Override
-                protected void paintComponent(Graphics g) {
-                    super.paintComponent(g);
-                    Graphics2D g2d = (Graphics2D) g;
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                    // Draw triangle icon
-                    g2d.setColor(titleColor);
-                    int[] xPoints = {5, 13, 5};
-                    int[] yPoints = {3, 10, 17};
-                    g2d.fillPolygon(xPoints, yPoints, 3);
+                public void componentResized(java.awt.event.ComponentEvent evt) {
+                    speedButton.setBounds(getWidth() - 160, 15, 140, 50);
                 }
-            };
-            labelContainer.setLayout(new FlowLayout(FlowLayout.LEFT, 0, 0));
-            labelContainer.setOpaque(false);
-
-            JLabel label = new JLabel("   " + title); // Spacing for triangle
-            label.setForeground(titleColor);
-            label.setFont(new Font("Segoe UI", Font.BOLD, 13));
-            label.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 0));
-            labelContainer.add(label);
-
-            panel.add(labelContainer, BorderLayout.NORTH);
-            return panel;
+            });
         }
 
         public void updateStats(int population, int fps) {
-            statsLabel.setText(String.format("<html><center>POPULATION<br><font size='6' color='#00FFFF'>%,d</font><br><font size='3' color='#00CCCC'>TPS: %d</font></center></html>", population, fps));
+            statsLabel.setText(String.format("<html><center>POPULATION<br><font size='5' color='#00FFFF'>%,d</font><br><font size='2' color='#00CCCC'>TPS: %d</font></center></html>", population, fps));
         }
     }
 
