@@ -17,8 +17,7 @@ public class BioLabSimulatorApp extends JFrame {
 
     private static final int INITIAL_POPULATION = 1500;
     private static final int CUSTOM_HEADER_HEIGHT = 65;
-    private static final int CONTROL_PANEL_HEIGHT = 150;
-    private static final int TOTAL_UI_HEIGHT = CONTROL_PANEL_HEIGHT + CUSTOM_HEADER_HEIGHT;
+    private static final int OVERLAY_EDGE_MARGIN = 15; // Consistent margin from window edges for all floating overlays
     private static final int UNLIMITED_FPS = 999;
     private static final int BASE_FPS = 30;
     private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
@@ -26,12 +25,13 @@ public class BioLabSimulatorApp extends JFrame {
     private final SettingsManager settingsManager;
     private final SimulationEngine engine;
     private final SimulationCanvas canvas;
-    private final ControlPanel controlPanel;
     private final CustomHeaderPanel headerPanel;
     private final InspectorPanel inspectorPanel;
     private final EnvironmentPanel environmentPanel;
-    private final JPanel environmentInteractionOverlay;
     private final ModernButton envToggleButton;
+    private final ModernButton speedButton;
+    private final JPanel populationOverlay;
+    private final JLabel populationLabel;
     private volatile boolean running = true;
     private volatile boolean paused = false;
     private SettingsOverlay settingsOverlay;
@@ -55,8 +55,8 @@ public class BioLabSimulatorApp extends JFrame {
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
         targetFps = BASE_FPS * SPEED_MULTIPLIERS[currentSpeedIndex];
-        // Calculate canvas height (leave room for control panel)
-        canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
+        // Calculate canvas height (leave room for header)
+        canvasHeight = windowHeight - CUSTOM_HEADER_HEIGHT;
 
         // Initialize simulation engine with fixed 10k x 10k world
         int worldWidth = 10000;
@@ -65,16 +65,40 @@ public class BioLabSimulatorApp extends JFrame {
 
         // Setup UI components
         canvas = new SimulationCanvas(worldWidth, worldHeight);
-        controlPanel = new ControlPanel();
         headerPanel = new CustomHeaderPanel();
         inspectorPanel = new InspectorPanel();
 
         // Initialize environment panel and toggle button
         environmentPanel = new EnvironmentPanel(engine);
-        environmentInteractionOverlay = environmentPanel.createInteractionOverlay();
 
-        envToggleButton = new ModernButton(">", ModernButton.ButtonIcon.NONE);
+        envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
         envToggleButton.addActionListener(e -> toggleEnvironmentPanel());
+
+        // Floating speed button (bottom right)
+        speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
+        speedButton.addActionListener(e -> {
+            currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
+            int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
+            targetFps = BASE_FPS * multiplier;
+            speedButton.setDisplayText(multiplier + "x");
+        });
+
+        // Floating population overlay (bottom left)
+        populationOverlay = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                // Transparent background - no box
+            }
+        };
+        populationOverlay.setOpaque(false);
+        populationOverlay.setBorder(null);
+        populationOverlay.setLayout(new BorderLayout());
+        populationLabel = new JLabel("<html><center><span style='font-size:20px;color:#00CCCC;letter-spacing:3px;'>POPULATION</span><br><span style='font-size:30px;color:#00FFFF;font-weight:bold;'>0</span></center></html>");
+        populationLabel.setFont(new Font("Segoe UI", Font.BOLD, 30));
+        populationLabel.setForeground(new Color(0, 255, 255));
+        populationLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        populationLabel.setBorder(null);
+        populationOverlay.add(populationLabel, BorderLayout.CENTER);
 
         setupUI();
         setupShutdownHook();
@@ -102,13 +126,11 @@ public class BioLabSimulatorApp extends JFrame {
         // Add canvas (where microbes are rendered)
         add(canvas, BorderLayout.CENTER);
 
-        // Add control panel at bottom
-        add(controlPanel, BorderLayout.SOUTH);
+        // Inspector panel starts hidden - only shown when a microbe is selected
+        inspectorPanel.setVisible(false);
 
-
-        // Add inspector panel as overlay on top of canvas
-        // Do NOT add to layered pane yet - we'll position it after the window is shown
-        inspectorPanel.setVisible(true);
+        // Environment panel starts hidden
+        environmentPanel.setVisible(false);
 
         setLocationRelativeTo(null);
 
@@ -118,6 +140,7 @@ public class BioLabSimulatorApp extends JFrame {
             public void componentResized(java.awt.event.ComponentEvent evt) {
                 positionInspectorPanel();
                 positionEnvToggleButton();
+                positionFloatingControls();
                 if (environmentPanel.isVisible()) {
                     positionEnvironmentPanel();
                 }
@@ -127,57 +150,51 @@ public class BioLabSimulatorApp extends JFrame {
             public void componentShown(java.awt.event.ComponentEvent evt) {
                 positionInspectorPanel();
                 positionEnvToggleButton();
+                positionFloatingControls();
             }
         });
     }
 
     private void positionInspectorPanel() {
-        // Calculate inspector panel position (top-right corner with margin)
-        int panelWidth = 320;
-        int rightMargin = 20;
-        int topMargin = CUSTOM_HEADER_HEIGHT + rightMargin;
+        int lpW = getLayeredPane().getWidth();
+        int lpH = getLayeredPane().getHeight();
+        if (lpW <= 0 || lpH <= 0) return; // Not yet laid out
 
-        int panelHeight = Math.min(windowHeight - TOTAL_UI_HEIGHT - topMargin - rightMargin, 700);
-        int panelX = getContentPane().getWidth() - panelWidth - rightMargin;
-        int panelY = topMargin;
+        int panelWidth = 320;
+        int topY = CUSTOM_HEADER_HEIGHT + OVERLAY_EDGE_MARGIN;
+        int panelHeight = Math.min(lpH - topY - OVERLAY_EDGE_MARGIN, 700);
+        int panelX = lpW - panelWidth - OVERLAY_EDGE_MARGIN;
 
         getLayeredPane().remove(inspectorPanel);
         getLayeredPane().add(inspectorPanel, JLayeredPane.PALETTE_LAYER);
-        inspectorPanel.setBounds(panelX, panelY, panelWidth, panelHeight);
+        inspectorPanel.setBounds(panelX, topY, panelWidth, panelHeight);
         inspectorPanel.revalidate();
         inspectorPanel.repaint();
     }
     
     private void positionEnvironmentPanel() {
-        int panelWidth = 350;
-        int leftMargin = 20;
-        int topMargin = CUSTOM_HEADER_HEIGHT + 20;
-        int panelHeight = getContentPane().getHeight() - CUSTOM_HEADER_HEIGHT - CONTROL_PANEL_HEIGHT - 40;
-        int panelX = leftMargin;
-        int panelY = topMargin;
+        int toggleBtnSize = 45;
+        int topY = CUSTOM_HEADER_HEIGHT + OVERLAY_EDGE_MARGIN;
+        int gap = 4;
 
-        // Position background panel
+        int panelWidth = 300;
+        int panelHeight = 310;
+        int panelX = OVERLAY_EDGE_MARGIN + toggleBtnSize + gap;
+
         getLayeredPane().remove(environmentPanel);
         getLayeredPane().add(environmentPanel, JLayeredPane.PALETTE_LAYER);
-        environmentPanel.setBounds(panelX, panelY, panelWidth, panelHeight);
+        environmentPanel.setBounds(panelX, topY, panelWidth, panelHeight);
         environmentPanel.revalidate();
         environmentPanel.repaint();
-
-        // Position interaction overlay on top
-        getLayeredPane().remove(environmentInteractionOverlay);
-        getLayeredPane().add(environmentInteractionOverlay, JLayeredPane.MODAL_LAYER);
-        environmentInteractionOverlay.setBounds(panelX, panelY, panelWidth, panelHeight);
-        environmentInteractionOverlay.revalidate();
-        environmentInteractionOverlay.repaint();
     }
 
     private void positionEnvToggleButton() {
-        int leftMargin = 20;
-        int topMargin = CUSTOM_HEADER_HEIGHT + 20;
+        int topY = CUSTOM_HEADER_HEIGHT + OVERLAY_EDGE_MARGIN;
+        int btnSize = 45;
 
         getLayeredPane().remove(envToggleButton);
         getLayeredPane().add(envToggleButton, JLayeredPane.PALETTE_LAYER);
-        envToggleButton.setBounds(leftMargin, topMargin, 50, 50);
+        envToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, btnSize, btnSize);
         envToggleButton.revalidate();
         envToggleButton.repaint();
     }
@@ -186,17 +203,47 @@ public class BioLabSimulatorApp extends JFrame {
         if (environmentPanel.isVisible()) {
             // Hide panel
             environmentPanel.setVisible(false);
-            environmentInteractionOverlay.setVisible(false);
-            envToggleButton.setText(">");
+            envToggleButton.setDimmed(false);
             getLayeredPane().repaint();
         } else {
             // Show panel
             environmentPanel.setVisible(true);
-            environmentInteractionOverlay.setVisible(true);
             positionEnvironmentPanel();
-            envToggleButton.setText("<");
+            envToggleButton.setDimmed(true);
             getLayeredPane().repaint();
         }
+    }
+
+    private void positionFloatingControls() {
+        int lpW = getLayeredPane().getWidth();
+        int lpH = getLayeredPane().getHeight();
+        if (lpW <= 0 || lpH <= 0) return; // Not yet laid out
+
+        // Speed button - bottom right corner, compact width
+        int speedBtnWidth = 100;
+        int speedBtnHeight = 45;
+        int speedX = lpW - speedBtnWidth - OVERLAY_EDGE_MARGIN;
+        int speedY = lpH - speedBtnHeight - OVERLAY_EDGE_MARGIN;
+
+        getLayeredPane().remove(speedButton);
+        getLayeredPane().add(speedButton, JLayeredPane.PALETTE_LAYER);
+        speedButton.setBounds(speedX, speedY, speedBtnWidth, speedBtnHeight);
+        speedButton.setVisible(true);
+        speedButton.revalidate();
+        speedButton.repaint();
+
+        // Population overlay - top center, just below header
+        int popWidth = 280;
+        int popHeight = 100;
+        int popX = (lpW - popWidth) / 2;
+        int popY = CUSTOM_HEADER_HEIGHT + OVERLAY_EDGE_MARGIN + 5; // Extra 5px below header border
+
+        getLayeredPane().remove(populationOverlay);
+        getLayeredPane().add(populationOverlay, JLayeredPane.PALETTE_LAYER);
+        populationOverlay.setBounds(popX, popY, popWidth, popHeight);
+        populationOverlay.setVisible(true);
+        populationOverlay.revalidate();
+        populationOverlay.repaint();
     }
 
     /**
@@ -207,13 +254,8 @@ public class BioLabSimulatorApp extends JFrame {
 
         public CustomHeaderPanel() {
             setPreferredSize(new Dimension(windowWidth, CUSTOM_HEADER_HEIGHT));
-            setBackground(new Color(20, 20, 28)); // Wie Control Panel
+            setBackground(new Color(20, 20, 28));
             setLayout(new BorderLayout());
-            // Border wie Control Panel - mehrschichtig unten
-            setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(0, 255, 255, 100)),
-                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0, 255, 255))
-            ));
 
             // Left section: Settings button
             JPanel leftPanel = new JPanel(new GridBagLayout());
@@ -281,8 +323,7 @@ public class BioLabSimulatorApp extends JFrame {
             });
 
             // Make title label also draggable
-            titleLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-                public void mousePressed(java.awt.event.MouseEvent e) {
+            titleLabel.addMouseListener(new java.awt.event.MouseAdapter() {                public void mousePressed(java.awt.event.MouseEvent e) {
                     initialClick = SwingUtilities.convertPoint(titleLabel, e.getPoint(), CustomHeaderPanel.this);
                 }
             });
@@ -301,6 +342,21 @@ public class BioLabSimulatorApp extends JFrame {
                     BioLabSimulatorApp.this.setLocation(X, Y);
                 }
             });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            // Thick glow line
+            g2d.setColor(new Color(0, 255, 255, 60));
+            g2d.setStroke(new BasicStroke(3));
+            g2d.drawLine(0, getHeight() - 2, getWidth(), getHeight() - 2);
+            // Thin solid line
+            g2d.setColor(new Color(0, 255, 255));
+            g2d.setStroke(new BasicStroke(1.5f));
+            g2d.drawLine(0, getHeight() - 1, getWidth(), getHeight() - 1);
         }
     }
     
@@ -323,6 +379,22 @@ public class BioLabSimulatorApp extends JFrame {
             setLocationRelativeTo(null);
             setVisible(true);
             LOGGER.info("Switched to windowed mode: " + windowWidth + "x" + windowHeight);
+        }
+
+        // Re-position all overlays after dispose/setVisible cycle
+        SwingUtilities.invokeLater(this::repositionAllOverlays);
+    }
+
+    /**
+     * Re-adds and repositions all floating overlay components on the layered pane.
+     * Must be called after dispose()/setVisible() since those remove layered pane children.
+     */
+    private void repositionAllOverlays() {
+        positionInspectorPanel();
+        positionEnvToggleButton();
+        positionFloatingControls();
+        if (environmentPanel.isVisible()) {
+            positionEnvironmentPanel();
         }
     }
     
@@ -367,7 +439,7 @@ public class BioLabSimulatorApp extends JFrame {
             windowHeight != settingsManager.getWindowHeight()) {
             windowWidth = settingsManager.getWindowWidth();
             windowHeight = settingsManager.getWindowHeight();
-            canvasHeight = windowHeight - TOTAL_UI_HEIGHT;
+            canvasHeight = windowHeight - CUSTOM_HEADER_HEIGHT;
             settingsChanged = true;
         }
 
@@ -386,7 +458,6 @@ public class BioLabSimulatorApp extends JFrame {
             if (!fullscreenChanged) {
                 // Only update preferred sizes if not switching fullscreen
                 canvas.setPreferredSize(new Dimension(windowWidth, canvasHeight));
-                controlPanel.setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
             }
         }
         
@@ -484,7 +555,11 @@ public class BioLabSimulatorApp extends JFrame {
             currentFps = frameCount;
             frameCount = 0;
             lastFpsTime = currentTime;
-            controlPanel.updateStats(engine.getPopulationCount(), currentFps);
+            int population = engine.getPopulationCount();
+            populationLabel.setText(String.format(
+                "<html><center><span style='font-size:20px;color:#00CCCC;letter-spacing:3px;'>POPULATION</span><br>" +
+                "<span style='font-size:30px;color:#00FFFF;font-weight:bold;'>%,d</span></center></html>",
+                population));
         }
     }
 
@@ -785,56 +860,6 @@ public class BioLabSimulatorApp extends JFrame {
         }
     }
 
-    /**
-     * Control panel - nur noch Speed und Population frei schwebend
-     */
-    private class ControlPanel extends JPanel {
-        private final JLabel statsLabel;
-        private final ModernButton speedButton;
-
-        public ControlPanel() {
-            setLayout(null); // Absolute positioning
-            setPreferredSize(new Dimension(windowWidth, CONTROL_PANEL_HEIGHT));
-            setBackground(new Color(20, 20, 28));
-            setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(3, 0, 0, 0, new Color(0, 255, 255, 100)),
-                BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(0, 255, 255))
-            ));
-
-            // Population Label - links
-            statsLabel = new JLabel("<html><center>POPULATION<br><font size='5' color='#00FFFF'>0</font></center></html>");
-            statsLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-            statsLabel.setForeground(new Color(0, 255, 255));
-            statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            statsLabel.setBounds(30, 15, 200, 50);
-            add(statsLabel);
-
-            // Speed Button - rechts
-            speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
-            speedButton.setBounds(windowWidth - 160, 15, 140, 50);
-
-            speedButton.addActionListener(e -> {
-                currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
-                int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
-                targetFps = BASE_FPS * multiplier;
-                speedButton.setDisplayText(multiplier + "x");
-            });
-
-            add(speedButton);
-
-            // ComponentListener für Resize
-            addComponentListener(new java.awt.event.ComponentAdapter() {
-                @Override
-                public void componentResized(java.awt.event.ComponentEvent evt) {
-                    speedButton.setBounds(getWidth() - 160, 15, 140, 50);
-                }
-            });
-        }
-
-        public void updateStats(int population, int fps) {
-            statsLabel.setText(String.format("<html><center>POPULATION<br><font size='5' color='#00FFFF'>%,d</font><br><font size='2' color='#00CCCC'>TPS: %d</font></center></html>", population, fps));
-        }
-    }
 
     public static void main(String[] args) {
         // Set system look and feel

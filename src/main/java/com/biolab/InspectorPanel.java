@@ -316,11 +316,9 @@ public class InspectorPanel extends JPanel {
             g2d.fillOval(centerX - 15 - i * 2, y - 15 - i * 2, 30 + i * 4, 30 + i * 4);
         }
 
-        // Draw main circle
+        // Draw main circle - no border ring
         g2d.setColor(microbeColor);
         g2d.fillOval(centerX - 15, y - 15, 30, 30);
-        g2d.setColor(ACCENT_COLOR);
-        g2d.drawOval(centerX - 15, y - 15, 30, 30);
     }
 
     private void drawCenteredString(Graphics2D g2d, String text, int x, int y) {

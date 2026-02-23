@@ -23,6 +23,7 @@ public class ModernButton extends JButton {
     private static final Color TEXT_COLOR = new Color(0, 255, 255);
 
     private boolean isHovered = false;
+    private boolean isDimmed = false;
     private String displayText = "";
     private BiConsumer<Graphics2D, Point> iconDrawer = null;
 
@@ -36,7 +37,8 @@ public class ModernButton extends JButton {
         CLOSE,
         PLAY,
         PAUSE,
-        STOP
+        STOP,
+        ENVIRONMENT
     }
 
     // Konstruktor 1: Nur Text
@@ -83,6 +85,15 @@ public class ModernButton extends JButton {
         repaint();
     }
 
+    public void setDimmed(boolean dimmed) {
+        this.isDimmed = dimmed;
+        repaint();
+    }
+
+    public boolean isDimmed() {
+        return isDimmed;
+    }
+
     @Override
     public void setText(String text) {
         super.setText(text);
@@ -96,6 +107,11 @@ public class ModernButton extends JButton {
 
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        // Apply dimmed effect if active
+        if (isDimmed) {
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
+        }
 
         int cornerRadius = 6;
 
@@ -168,6 +184,8 @@ public class ModernButton extends JButton {
                 return ModernButton::drawPauseIcon;
             case STOP:
                 return ModernButton::drawStopIcon;
+            case ENVIRONMENT:
+                return ModernButton::drawEnvironmentIcon;
             default:
                 return null;
         }
@@ -242,6 +260,29 @@ public class ModernButton extends JButton {
         int x = pos.x;
         int y = pos.y;
         g2d.fillRect(x - size, y - size, size * 2, size * 2);
+    }
+
+    private static void drawEnvironmentIcon(Graphics2D g2d, Point pos) {
+        int x = pos.x;
+        int y = pos.y;
+        g2d.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+        // Draw a stylized tree/leaf
+        // Trunk
+        g2d.drawLine(x, y + 8, x, y - 2);
+
+        // Leaf/crown - three layered triangles (like a pine tree)
+        int[] xTop = {x, x - 5, x + 5};
+        int[] yTop = {y - 10, y - 3, y - 3};
+        g2d.fillPolygon(xTop, yTop, 3);
+
+        int[] xMid = {x, x - 7, x + 7};
+        int[] yMid = {y - 6, y + 1, y + 1};
+        g2d.fillPolygon(xMid, yMid, 3);
+
+        int[] xBot = {x, x - 9, x + 9};
+        int[] yBot = {y - 2, y + 5, y + 5};
+        g2d.fillPolygon(xBot, yBot, 3);
     }
 }
 
