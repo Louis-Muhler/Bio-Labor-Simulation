@@ -21,6 +21,23 @@
             <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
+        <!-- JNA: Java Native Access – used to call Windows DWM API for native window chrome -->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.14.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna-platform</artifactId>
+            <version>5.14.0</version>
+        </dependency>
+        <!-- FlatLaf: modern Look&Feel with native custom title bar support (used by IntelliJ) -->
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.5.4</version>
+        </dependency>
     </dependencies>
 
     <build>
