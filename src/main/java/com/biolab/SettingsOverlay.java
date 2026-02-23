@@ -15,12 +15,24 @@ import java.util.Map;
 public class SettingsOverlay extends JPanel {
     private final SettingsManager settingsManager;
     private final Runnable onClose;
-    
+
+    // Pre-allocated rendering constants
+    private static final Color OVERLAY_BG_COLOR = new Color(0, 0, 0, 220);
+    // Pre-allocated colors and fonts
+    private static final Color PANEL_BG_COLOR = new Color(18, 18, 18);
+    private static final Color ACCENT_COLOR = new Color(0, 255, 255);
+    private static final Color TEXT_COLOR = new Color(220, 220, 220);
+    private static final Color COMBO_BG_COLOR = new Color(30, 30, 35);
+    private static final Color COMBO_BORDER_COLOR = new Color(0, 255, 255, 100);
+    private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 24);
+    private static final Font SECTION_FONT = new Font("Segoe UI", Font.BOLD, 16);
+    private static final Font BODY_FONT = new Font("Segoe UI", Font.PLAIN, 14);
+
     // UI Components
     private JComboBox<String> resolutionCombo;
     private JCheckBox fullscreenCheck;
-    
-    // Resolution options with their dimensions
+
+    // Resolution options – LinkedHashMap preserves insertion order for consistent ComboBox display
     private static final Map<String, Dimension> RESOLUTIONS = new LinkedHashMap<>();
     static {
         // 16:9 resolutions
@@ -85,11 +97,14 @@ public class SettingsOverlay extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                Graphics2D g2d = (Graphics2D) g;
-                
-                // Draw semi-transparent dark overlay - darker for sci-fi look
-                g2d.setColor(new Color(0, 0, 0, 220));
-                g2d.fillRect(0, 0, getWidth(), getHeight());
+                Graphics2D g2d = (Graphics2D) g.create();
+                try {
+                    // Draw semi-transparent dark overlay - darker for sci-fi look
+                    g2d.setColor(OVERLAY_BG_COLOR);
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+                } finally {
+                    g2d.dispose();
+                }
             }
         };
         backgroundPanel.setOpaque(false);
@@ -100,16 +115,16 @@ public class SettingsOverlay extends JPanel {
     private JPanel createSettingsPanel() {
         JPanel settingsPanel = new JPanel();
         settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
-        settingsPanel.setBackground(new Color(18, 18, 18)); // Dark sci-fi #121212
+        settingsPanel.setBackground(PANEL_BG_COLOR);
         settingsPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(0, 255, 255), 2), // Neon cyan border
+                BorderFactory.createLineBorder(ACCENT_COLOR, 2),
             new EmptyBorder(20, 30, 20, 30)
         ));
         
         // Title
         JLabel titleLabel = new JLabel("SYSTEM SETTINGS");
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        titleLabel.setForeground(new Color(0, 255, 255)); // Neon cyan
+        titleLabel.setFont(TITLE_FONT);
+        titleLabel.setForeground(ACCENT_COLOR);
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         settingsPanel.add(titleLabel);
         settingsPanel.add(Box.createVerticalStrut(20));
@@ -117,9 +132,9 @@ public class SettingsOverlay extends JPanel {
         // Display Mode Section
         settingsPanel.add(createSectionLabel("DISPLAY MODE"));
         fullscreenCheck = new JCheckBox("Fullscreen");
-        fullscreenCheck.setBackground(new Color(18, 18, 18));
-        fullscreenCheck.setForeground(new Color(220, 220, 220)); // Light gray text
-        fullscreenCheck.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        fullscreenCheck.setBackground(PANEL_BG_COLOR);
+        fullscreenCheck.setForeground(TEXT_COLOR);
+        fullscreenCheck.setFont(BODY_FONT);
         fullscreenCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
         settingsPanel.add(fullscreenCheck);
         settingsPanel.add(Box.createVerticalStrut(15));
@@ -135,7 +150,7 @@ public class SettingsOverlay extends JPanel {
         
         // Buttons panel
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
-        buttonsPanel.setBackground(new Color(18, 18, 18));
+        buttonsPanel.setBackground(PANEL_BG_COLOR);
         buttonsPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
         ModernButton applyButton = new ModernButton("APPLY");
@@ -165,17 +180,17 @@ public class SettingsOverlay extends JPanel {
     
     private JLabel createSectionLabel(String text) {
         JLabel label = new JLabel("▸ " + text);
-        label.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        label.setForeground(new Color(0, 255, 255)); // Neon cyan
+        label.setFont(SECTION_FONT);
+        label.setForeground(ACCENT_COLOR);
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
         return label;
     }
     
     private void styleComboBox(JComboBox<?> combo) {
-        combo.setBackground(new Color(30, 30, 35)); // Darker background
-        combo.setForeground(new Color(0, 255, 255)); // Neon cyan text
-        combo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        combo.setBorder(BorderFactory.createLineBorder(new Color(0, 255, 255, 100), 1));
+        combo.setBackground(COMBO_BG_COLOR);
+        combo.setForeground(ACCENT_COLOR);
+        combo.setFont(BODY_FONT);
+        combo.setBorder(BorderFactory.createLineBorder(COMBO_BORDER_COLOR, 1));
     }
     
 

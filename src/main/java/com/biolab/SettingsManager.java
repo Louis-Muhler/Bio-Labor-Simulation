@@ -1,12 +1,13 @@
 package com.biolab;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Properties;
-import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Manages application settings with persistent storage.
@@ -14,22 +15,23 @@ import java.util.logging.Level;
  */
 public class SettingsManager {
     private static final Logger LOGGER = Logger.getLogger(SettingsManager.class.getName());
-    
-    private static final String CONFIG_DIR = System.getProperty("user.home") + File.separator + ".biolabsim";
-    private static final String CONFIG_FILE = CONFIG_DIR + File.separator + "settings.properties";
-    
+
+    private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".biolabsim");
+    private static final Path CONFIG_FILE = CONFIG_DIR.resolve("settings.properties");
+
     // Default values
     private static final int DEFAULT_WIDTH = 1920;
     private static final int DEFAULT_HEIGHT = 1080;
     private static final boolean DEFAULT_FULLSCREEN = false;
-    private static final int DEFAULT_FPS = 60;
-    
+
     // Settings
     private int windowWidth;
     private int windowHeight;
     private boolean fullscreen;
-    private int targetFps;
-    
+
+    /**
+     * Creates a SettingsManager and immediately loads persisted settings (or defaults).
+     */
     public SettingsManager() {
         // Load settings or use defaults
         loadSettings();
@@ -39,20 +41,18 @@ public class SettingsManager {
      * Loads settings from the configuration file.
      * If the file doesn't exist or is corrupted, uses default values.
      */
-    public void loadSettings() {
+    public synchronized void loadSettings() {
         Properties props = new Properties();
-        Path configPath = Paths.get(CONFIG_FILE);
-        
-        if (Files.exists(configPath)) {
-            try (InputStream input = Files.newInputStream(configPath)) {
+
+        if (Files.exists(CONFIG_FILE)) {
+            try (InputStream input = Files.newInputStream(CONFIG_FILE)) {
                 props.load(input);
                 
                 // Parse settings with fallback to defaults
                 windowWidth = parseIntOrDefault(props.getProperty("window.width"), DEFAULT_WIDTH);
                 windowHeight = parseIntOrDefault(props.getProperty("window.height"), DEFAULT_HEIGHT);
                 fullscreen = Boolean.parseBoolean(props.getProperty("window.fullscreen", String.valueOf(DEFAULT_FULLSCREEN)));
-                targetFps = parseIntOrDefault(props.getProperty("simulation.fps"), DEFAULT_FPS);
-                
+
                 // Validate settings
                 validateSettings();
                 
@@ -76,17 +76,15 @@ public class SettingsManager {
         props.setProperty("window.width", String.valueOf(windowWidth));
         props.setProperty("window.height", String.valueOf(windowHeight));
         props.setProperty("window.fullscreen", String.valueOf(fullscreen));
-        props.setProperty("simulation.fps", String.valueOf(targetFps));
-        
+
         try {
             // Create config directory if it doesn't exist
-            Path configDir = Paths.get(CONFIG_DIR);
-            if (!Files.exists(configDir)) {
-                Files.createDirectories(configDir);
+            if (!Files.exists(CONFIG_DIR)) {
+                Files.createDirectories(CONFIG_DIR);
             }
             
             // Save properties to file
-            try (OutputStream output = Files.newOutputStream(Paths.get(CONFIG_FILE))) {
+            try (OutputStream output = Files.newOutputStream(CONFIG_FILE)) {
                 props.store(output, "Bio-Lab Simulator Settings");
             }
             
@@ -99,7 +97,7 @@ public class SettingsManager {
     /**
      * Resets all settings to default values.
      */
-    public void setDefaults() {
+    public synchronized void setDefaults() {
         windowWidth = DEFAULT_WIDTH;
         windowHeight = DEFAULT_HEIGHT;
         fullscreen = DEFAULT_FULLSCREEN;
@@ -134,14 +132,50 @@ public class SettingsManager {
             return defaultValue;
         }
     }
-    
-    // Getters
-    public int getWindowWidth() { return windowWidth; }
-    public int getWindowHeight() { return windowHeight; }
-    public boolean isFullscreen() { return fullscreen; }
 
-    // Setters
-    public void setWindowWidth(int width) { this.windowWidth = width; }
-    public void setWindowHeight(int height) { this.windowHeight = height; }
-    public void setFullscreen(boolean fullscreen) { this.fullscreen = fullscreen; }
+    // ===== Getters =====
+
+    /**
+     * Returns the configured window width in pixels.
+     */
+    public synchronized int getWindowWidth() {
+        return windowWidth;
+    }
+
+    /**
+     * Sets the window width. Does not persist until {@link #saveSettings()} is called.
+     */
+    public synchronized void setWindowWidth(int width) {
+        this.windowWidth = width;
+    }
+
+    /**
+     * Returns the configured window height in pixels.
+     */
+    public synchronized int getWindowHeight() {
+        return windowHeight;
+    }
+
+    // ===== Setters =====
+
+    /**
+     * Sets the window height. Does not persist until {@link #saveSettings()} is called.
+     */
+    public synchronized void setWindowHeight(int height) {
+        this.windowHeight = height;
+    }
+
+    /**
+     * Returns {@code true} if fullscreen mode is enabled.
+     */
+    public synchronized boolean isFullscreen() {
+        return fullscreen;
+    }
+
+    /**
+     * Sets the fullscreen flag. Does not persist until {@link #saveSettings()} is called.
+     */
+    public synchronized void setFullscreen(boolean fullscreen) {
+        this.fullscreen = fullscreen;
+    }
 }

@@ -1,43 +1,14 @@
 package com.biolab;
 
 /**
- * Represents a snapshot of an ancestor's stats for lineage tracking.
- * Used to visualize evolution over generations.
+ * Immutable snapshot of an ancestor's genetic traits for lineage tracking.
+ *
+ * @param heatResistance the ancestor's heat resistance gene value
+ * @param toxinResistance the ancestor's toxin resistance gene value
+ * @param speed the ancestor's speed gene value
+ * @param generation 0 = parent, 1 = grandparent, 2 = great-grandparent, etc.
  */
-public class AncestorSnapshot {
-    private final double heatResistance;
-    private final double toxinResistance;
-    private final double speed;
-    private final int generation; // 0 = current, 1 = parent, 2 = grandparent, etc.
-    private final long birthTime; // For debugging/display
-
-    public AncestorSnapshot(double heatResistance, double toxinResistance, double speed, int generation) {
-        this.heatResistance = heatResistance;
-        this.toxinResistance = toxinResistance;
-        this.speed = speed;
-        this.generation = generation;
-        this.birthTime = System.currentTimeMillis();
-    }
-
-    public double getHeatResistance() {
-        return heatResistance;
-    }
-
-    public double getToxinResistance() {
-        return toxinResistance;
-    }
-
-    public double getSpeed() {
-        return speed;
-    }
-
-    public int getGeneration() {
-        return generation;
-    }
-
-    public long getBirthTime() {
-        return birthTime;
-    }
+public record AncestorSnapshot(double heatResistance, double toxinResistance, double speed, int generation) {
 
     @Override
     public String toString() {
@@ -45,4 +16,3 @@ public class AncestorSnapshot {
             generation, heatResistance, toxinResistance, speed);
     }
 }
-
