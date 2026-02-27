@@ -12,12 +12,12 @@ import java.util.logging.Logger;
 /**
  * Main application window for the Bio-Lab Evolution Simulator.
  *
- * <p>Uses FlatLaf with {@code setDefaultLookAndFeelDecorated(true)} so that
- * Windows provides native resize handles, Aero Snap, drop shadow and rounded
- * corners – without the OS title bar. {@code FlatLaf.fullWindowContent=true}
- * extends the content pane under the native title-bar area and
- * {@code JComponent.titleBarCaption=true} on the {@link CustomHeaderPanel}
- * enables native dragging and Aero Snap.</p>
+ * <p>Uses FlatLaf's native window decoration with {@code fullWindowContent} mode.
+ * FlatLaf provides the native OS frame (resize handles, Aero Snap, drop shadow,
+ * rounded corners on Windows 11) while hiding its own title/icon/buttons.
+ * Our {@link CustomHeaderPanel} is placed inside the title bar area using
+ * {@code FlatLaf.fullWindowContent} and {@code FlatLaf.titleBarCaption}
+ * client properties – the same approach IntelliJ IDEA uses.</p>
  *
  * <p>Delegates overlay management to {@link OverlayManager} and simulation
  * loop control to {@link SimulationLoopController}.</p>
@@ -92,20 +92,16 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
      * Application entry point – bootstraps the Swing UI on the EDT.
      */
     public static void main(String[] args) {
-        // FlatLaf native window decorations via its bundled Windows DLL.
-        // This removes the OS title bar while keeping WS_THICKFRAME so the OS
-        // provides: resize handles, Aero Snap, drop shadow, window animations.
-        // This is the same mechanism used by IntelliJ IDEA.
-        FlatDarkLaf.setup();
-        UIManager.put("TitlePane.useWindowDecorations", true);
-
-        // setDefaultLookAndFeelDecorated must be called BEFORE creating any JFrame
+        // Enable FlatLaf's native window decorations (provides OS frame, resize,
+        // Aero Snap, shadow, rounded corners). This replaces setUndecorated(true).
         JFrame.setDefaultLookAndFeelDecorated(true);
         JDialog.setDefaultLookAndFeelDecorated(true);
+        FlatDarkLaf.setup();
 
         SwingUtilities.invokeLater(() -> {
             try {
-                new BioLabSimulatorApp().setVisible(true);
+                BioLabSimulatorApp app = new BioLabSimulatorApp();
+                app.setVisible(true);
                 LOGGER.info("Bio-Lab Simulator started successfully");
             } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Failed to start Bio-Lab Simulator", e);
@@ -127,28 +123,16 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         setSize(windowWidth, windowHeight);
         setResizable(true);
 
-        // --- FlatLaf native title bar: hide all built-in elements ---
-        // FlatLaf renders the OS-native window frame (rounded corners, Aero
-        // Snap, drop-shadow, resize handles) while we replace the title bar
-        // content completely with our own CustomHeaderPanel placed in the
-        // content pane.
-        getRootPane().putClientProperty("JRootPane.titleBarShowIcon", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowTitle", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowIconify", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowMaximize", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowClose", false);
-        getRootPane().putClientProperty("JRootPane.titleBarBackground", new Color(20, 20, 28));
-
-        // fullWindowContent=true: FlatLaf extends the content area to cover
-        // the entire frame including the native title-bar height, so our
-        // CustomHeaderPanel appears where the OS title bar would be.
-        // JComponent.titleBarCaption=true on the header panel tells FlatLaf's
-        // native hit-test that blank areas of the header are HTCAPTION –
-        // this enables window dragging and all Aero Snap gestures natively.
-        // AbstractButton descendants inside the header are automatically
-        // treated as HTCLIENT so button clicks reach the action listeners.
+        // FlatLaf fullWindowContent: our content extends into the title bar area.
+        // FlatLaf still provides the native OS frame (resize, snap, shadow).
         getRootPane().putClientProperty("FlatLaf.fullWindowContent", true);
-        headerPanel.putClientProperty("JComponent.titleBarCaption", true);
+
+        // Hide FlatLaf's own title bar buttons (we have our own in CustomHeaderPanel)
+        getRootPane().putClientProperty("JRootPane.titleBarShowClose", false);
+        getRootPane().putClientProperty("JRootPane.titleBarShowMaximize", false);
+        getRootPane().putClientProperty("JRootPane.titleBarShowMinimize", false);
+        getRootPane().putClientProperty("JRootPane.titleBarShowTitle", false);
+        getRootPane().putClientProperty("JRootPane.titleBarShowIcon", false);
 
         JPanel content = new JPanel(new BorderLayout());
         content.setBackground(new Color(18, 18, 18));
@@ -181,22 +165,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     /**
      * Switches between fullscreen exclusive mode and normal windowed mode.
-     * In windowed mode, FlatLaf provides the native Windows 11 frame
-     * (rounded corners, resize handles, Aero Snap, drop shadow) via
-     * {@code setDefaultLookAndFeelDecorated(true)} – no JNA needed.
+     * FlatLaf handles native frame decorations in both modes.
      */
     private void applyDisplayMode() {
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
 
         if (settingsManager.isFullscreen() && gd.isFullScreenSupported()) {
             dispose();
-            setUndecorated(true);
             gd.setFullScreenWindow(this);
             setVisible(true);
         } else {
             if (gd.getFullScreenWindow() == this) gd.setFullScreenWindow(null);
             dispose();
-            setUndecorated(false);
             setSize(windowWidth, windowHeight);
             setLocationRelativeTo(null);
             setVisible(true);
@@ -321,6 +301,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         getLayeredPane().repaint();
     }
 
+    /** Checks if the currently selected microbe has died and clears the selection if so. */
     private void checkDeadSelectedMicrobe() {
         Microbe current = selectedMicrobe;
         if (current != null && current.isDead()) {

@@ -7,18 +7,17 @@ import java.util.function.BooleanSupplier;
 /**
  * Custom header panel that visually replaces the OS title bar.
  *
- * <p>Placed in {@code BorderLayout.NORTH} of the content pane. The parent
- * window uses {@code FlatLaf.fullWindowContent = true} so that the content
- * pane extends under the native title-bar area, and
- * {@code JComponent.titleBarCaption = true} on this panel tells FlatLaf's
- * native hit-test to treat blank areas here as {@code HTCAPTION}. This
- * enables window dragging and all Aero Snap gestures natively without any
- * Java-level drag handler. {@link javax.swing.AbstractButton} descendants
- * are automatically treated as {@code HTCLIENT} so button clicks reach the
- * action listeners.</p>
+ * <p>Works with FlatLaf's {@code fullWindowContent} mode. The panel is marked
+ * with the client property {@code FlatLaf.titleBarCaption = true} so that
+ * FlatLaf treats it as a native drag area. Buttons inside the panel are
+ * excluded from the caption zone via {@code FlatLaf.titleBarCaption = false}
+ * so they still receive normal Swing click events.</p>
+ *
+ * <p>This gives us native OS behaviour: drag-to-move, Aero Snap, double-click
+ * maximise, drop shadow, and resize handles – all without any JNA hooks.</p>
  */
 public class CustomHeaderPanel extends JPanel {
-    // Pre-allocated rendering constants
+
     private static final Color HEADER_GLOW_COLOR = new Color(0, 255, 255, 60);
     private static final Color HEADER_LINE_COLOR = new Color(0, 255, 255);
     private static final BasicStroke HEADER_STROKE_3 = new BasicStroke(3);
@@ -29,11 +28,11 @@ public class CustomHeaderPanel extends JPanel {
      *
      * @param headerWidth  preferred width
      * @param headerHeight preferred height
-     * @param onSettings   callback for settings button click
-     * @param onMinimize   callback for minimize button click
-     * @param onMaximize   callback for maximize/restore button click
-     * @param onClose      callback for close button click
-     * @param isMaximized  supplier that returns true when the window is currently maximized
+     * @param onSettings   callback for the settings (gear) button
+     * @param onMinimize   callback for the minimise button
+     * @param onMaximize   callback for the maximise/restore button
+     * @param onClose      callback for the close button
+     * @param isMaximized  supplier that returns {@code true} while the window is maximised
      */
     public CustomHeaderPanel(int headerWidth, int headerHeight,
                              Runnable onSettings, Runnable onMinimize,
@@ -44,7 +43,11 @@ public class CustomHeaderPanel extends JPanel {
         setOpaque(false);
         setLayout(new BorderLayout());
 
-        // Left section: Settings button (10 px left inset)
+        // Mark this entire panel as a FlatLaf title bar caption area.
+        // FlatLaf will treat it as a native drag zone (Aero Snap, double-click maximize etc.)
+        putClientProperty("FlatLaf.titleBarCaption", true);
+
+        // --- Left: settings (gear) button ---
         JPanel leftPanel = new JPanel(new GridBagLayout());
         leftPanel.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
@@ -53,19 +56,21 @@ public class CustomHeaderPanel extends JPanel {
         ModernButton settingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
         settingsButton.setPreferredSize(new Dimension(45, 45));
         settingsButton.addActionListener(e -> onSettings.run());
+        markAsNonCaption(settingsButton);
         leftPanel.add(settingsButton, gbc);
         add(leftPanel, BorderLayout.WEST);
 
-        // Center section: title label (also a drag target – FlatLaf handles the drag natively)
+        // --- Centre: title label (part of the drag zone) ---
         JLabel titleLabel = new JLabel("BIO-LAB EVOLUTION SIMULATOR");
         titleLabel.setForeground(new Color(0, 255, 255));
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
         add(titleLabel, BorderLayout.CENTER);
 
-        // Right section: Minimize / Maximize / Close (10 px right inset on close button)
+        // --- Right: minimise / maximise / close ---
         JPanel rightPanel = new JPanel(new GridBagLayout());
         rightPanel.setOpaque(false);
+
         GridBagConstraints gbcR = new GridBagConstraints();
         gbcR.anchor = GridBagConstraints.EAST;
         gbcR.insets = new Insets(0, 4, 0, 0);
@@ -73,6 +78,7 @@ public class CustomHeaderPanel extends JPanel {
         ModernButton minimizeButton = new ModernButton("", ModernButton.ButtonIcon.MINIMIZE);
         minimizeButton.setPreferredSize(new Dimension(45, 45));
         minimizeButton.addActionListener(e -> onMinimize.run());
+        markAsNonCaption(minimizeButton);
         rightPanel.add(minimizeButton, gbcR);
 
         ModernButton maximizeButton = new ModernButton("",
@@ -82,6 +88,7 @@ public class CustomHeaderPanel extends JPanel {
             onMaximize.run();
             maximizeButton.repaint();
         });
+        markAsNonCaption(maximizeButton);
         rightPanel.add(maximizeButton, gbcR);
 
         GridBagConstraints gbcClose = new GridBagConstraints();
@@ -90,18 +97,22 @@ public class CustomHeaderPanel extends JPanel {
         ModernButton closeButton = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
         closeButton.setPreferredSize(new Dimension(45, 45));
         closeButton.addActionListener(e -> onClose.run());
+        markAsNonCaption(closeButton);
         rightPanel.add(closeButton, gbcClose);
-
         add(rightPanel, BorderLayout.EAST);
-
-        // Window dragging and Aero Snap are handled natively by FlatLaf
-        // (JComponent.titleBarCaption = true, set in BioLabSimulatorApp).
     }
 
     /**
-     * Draws the maximize/restore icon dynamically.
-     * Shows a single rectangle in windowed mode and two stacked rectangles (restore icon)
-     * when maximized.
+     * Marks a component so FlatLaf does NOT treat it as part of the title bar
+     * caption drag zone. Without this, clicks on buttons would start a window drag.
+     */
+    private static void markAsNonCaption(JComponent comp) {
+        comp.putClientProperty("FlatLaf.titleBarCaption", false);
+    }
+
+    /**
+     * Draws the maximise/restore icon.
+     * Single square = windowed; two overlapping squares = restore (maximised).
      */
     private static void drawDynamicMaximizeIcon(Graphics2D g2d, Point pos, boolean isMaximized) {
         int x = pos.x;
@@ -109,9 +120,7 @@ public class CustomHeaderPanel extends JPanel {
         g2d.setStroke(new BasicStroke(2f));
         if (isMaximized) {
             int s = 6;
-            // Back rectangle (top-right offset)
             g2d.drawRect(x - s + 3, y - s - 3, s * 2 - 1, s * 2 - 1);
-            // Front rectangle – fill with header bg colour to erase the overlapping corner
             g2d.setColor(new Color(20, 20, 28));
             g2d.fillRect(x - s - 1, y - s + 2, s * 2 - 1, s * 2 - 1);
             g2d.setColor(new Color(0, 255, 255));
@@ -129,7 +138,7 @@ public class CustomHeaderPanel extends JPanel {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setColor(getBackground());
             g2d.fillRect(0, 0, getWidth(), getHeight());
-            // Bottom separator line with glow effect
+            // Neon-cyan separator line with glow effect at the bottom edge
             g2d.setColor(HEADER_GLOW_COLOR);
             g2d.setStroke(HEADER_STROKE_3);
             g2d.drawLine(0, getHeight() - 2, getWidth(), getHeight() - 2);
