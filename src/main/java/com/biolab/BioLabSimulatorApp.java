@@ -74,6 +74,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
         setupUI();
         setupShutdownHook();
+        setVisible(true);
         applyDisplayMode();
         loopController.start();
     }
@@ -86,12 +87,17 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         // Aero Snap, shadow, rounded corners). This replaces setUndecorated(true).
         JFrame.setDefaultLookAndFeelDecorated(true);
         JDialog.setDefaultLookAndFeelDecorated(true);
-        FlatDarkLaf.setup();
 
-        // Match the title bar background to the app background (#121212 = rgb(18,18,18))
+        // Set title bar colors BEFORE setup() so FlatLaf uses them as defaults.
+        // #121212 = rgb(18,18,18) matches the app background.
+        UIManager.put("RootPane.background", new Color(18, 18, 18));
         UIManager.put("TitlePane.background", new Color(18, 18, 18));
         UIManager.put("TitlePane.inactiveBackground", new Color(18, 18, 18));
+        UIManager.put("TitlePane.foreground", new Color(200, 200, 200));
+        UIManager.put("TitlePane.inactiveForeground", new Color(130, 130, 130));
         UIManager.put("TitlePane.unifiedBackground", true);
+
+        FlatDarkLaf.setup();
 
         SwingUtilities.invokeLater(() -> {
             try {
@@ -148,24 +154,34 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     /**
      * Switches between fullscreen exclusive mode and normal windowed mode.
-     * FlatLaf handles native frame decorations in both modes.
+     *
+     * <p>Avoids {@code dispose()} which destroys the native peer and causes
+     * visual glitches (gray bars, shifted overlays, white line artifacts).
+     * Instead, uses {@code GraphicsDevice.setFullScreenWindow()} directly
+     * and re-validates the layout afterwards.</p>
      */
     private void applyDisplayMode() {
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        boolean wantFullscreen = settingsManager.isFullscreen() && gd.isFullScreenSupported();
+        boolean isFullscreen = gd.getFullScreenWindow() == this;
 
-        if (settingsManager.isFullscreen() && gd.isFullScreenSupported()) {
-            dispose();
+        if (wantFullscreen && !isFullscreen) {
+            // Switch to fullscreen – setFullScreenWindow handles undecorated internally
             gd.setFullScreenWindow(this);
-            setVisible(true);
-        } else {
-            if (gd.getFullScreenWindow() == this) gd.setFullScreenWindow(null);
-            dispose();
+        } else if (!wantFullscreen && isFullscreen) {
+            // Leave fullscreen
+            gd.setFullScreenWindow(null);
             setSize(windowWidth, windowHeight);
             setLocationRelativeTo(null);
-            setVisible(true);
+        } else if (!wantFullscreen) {
+            // Just resize in windowed mode
+            setSize(windowWidth, windowHeight);
+            setLocationRelativeTo(null);
         }
 
-
+        // Force layout and overlay recalculation after mode change
+        revalidate();
+        repaint();
         SwingUtilities.invokeLater(overlayManager::repositionAllOverlays);
     }
 
