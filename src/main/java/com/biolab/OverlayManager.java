@@ -14,14 +14,19 @@ public class OverlayManager {
     private static final int SPEED_BUTTON_HEIGHT = 45;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;
+    private static final int BTN_SIZE = 45;
+    /** Vertical gap between settings button and environment button to visually separate them. */
+    private static final int SETTINGS_ENV_GAP = 12;
+    /** Height of the environment panel. */
+    private static final int ENV_PANEL_HEIGHT = 310;
 
-    private final int headerHeight;
     // Supplier to always get the current layered pane (may change after dispose/setVisible)
     private final Supplier<JLayeredPane> layeredPaneSupplier;
 
     private final InspectorPanel inspectorPanel;
     private final EnvironmentPanel environmentPanel;
     private final ModernButton envToggleButton;
+    private final ModernButton settingsButton;
     private final ModernButton speedButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
@@ -29,21 +34,22 @@ public class OverlayManager {
     /**
      * Creates the overlay manager and initialises the population label overlay.
      *
-     * @param headerHeight        height of the custom header, used as top inset for overlay placement
      * @param layeredPaneSupplier supplies the JLayeredPane of the parent window
      * @param inspectorPanel      the microbe inspector panel
      * @param environmentPanel    the environment controls panel
      * @param envToggleButton     button that shows/hides the environment panel
+     * @param settingsButton      button that opens the settings overlay
      * @param speedButton         the simulation speed toggle button
      */
-    public OverlayManager(int headerHeight, Supplier<JLayeredPane> layeredPaneSupplier,
+    public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
                           InspectorPanel inspectorPanel, EnvironmentPanel environmentPanel,
-                          ModernButton envToggleButton, ModernButton speedButton) {
-        this.headerHeight = headerHeight;
+                          ModernButton envToggleButton, ModernButton settingsButton,
+                          ModernButton speedButton) {
         this.layeredPaneSupplier = layeredPaneSupplier;
         this.inspectorPanel = inspectorPanel;
         this.environmentPanel = environmentPanel;
         this.envToggleButton = envToggleButton;
+        this.settingsButton = settingsButton;
         this.speedButton = speedButton;
 
         // Create population overlay
@@ -78,28 +84,19 @@ public class OverlayManager {
     }
 
     /**
-     * Returns the safe insets to use when positioning overlays.
-     *
-     * <p>In windowed mode, the ContentPane has a transparent shadow border (SHADOW_SIZE via
-     * EmptyBorder). The JLayeredPane sits outside this border and doesn't see it automatically.
-     * Without accounting for these insets, overlays would be positioned too close to the
-     * window edge or overlap with the shadow area. This method makes positioning inset-aware.</p>
+     * Returns the Y coordinate on the JLayeredPane where the content area begins
+     * (i.e. just below the title bar). Overlays positioned at this Y will appear
+     * directly below the title bar, not behind it.
      */
-    private Insets getSafeInsets(JLayeredPane lp) {
-        if (lp == null) return new Insets(0, 0, 0, 0);
-
-        // Check ContentPane border for shadow insets
+    private int getContentTopY(JLayeredPane lp) {
         JRootPane root = SwingUtilities.getRootPane(lp);
         if (root != null) {
             Container content = root.getContentPane();
-            if (content instanceof JComponent jc) {
-                Insets in = jc.getInsets();
-                if (in != null) return in;
-            }
+            // content.getY() gives the Y position of the content pane within the root pane,
+            // which accounts for the title bar height.
+            return content.getY();
         }
-
-        Insets in = lp.getInsets();
-        return (in != null) ? in : new Insets(0, 0, 0, 0);
+        return 0;
     }
 
     /**
@@ -111,12 +108,13 @@ public class OverlayManager {
         int lpH = lp.getHeight();
         if (lpW <= 0 || lpH <= 0) return;
 
-        Insets safe = getSafeInsets(lp);
+        int contentTop = getContentTopY(lp);
 
         int panelWidth = 320;
-        int topY = safe.top + headerHeight + OVERLAY_EDGE_MARGIN;
-        int panelHeight = Math.min(lpH - safe.bottom - topY - OVERLAY_EDGE_MARGIN, 700);
-        int panelX = lpW - safe.right - panelWidth - OVERLAY_EDGE_MARGIN;
+        int topY = contentTop + OVERLAY_EDGE_MARGIN;
+        // Fill available vertical space so the panel content is never clipped
+        int panelHeight = lpH - topY - OVERLAY_EDGE_MARGIN;
+        int panelX = lpW - panelWidth - OVERLAY_EDGE_MARGIN;
 
         if (inspectorPanel.getParent() != lp) {
             lp.add(inspectorPanel, JLayeredPane.PALETTE_LAYER);
@@ -131,40 +129,56 @@ public class OverlayManager {
      */
     public void positionEnvironmentPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
-        int toggleBtnSize = 45;
 
-        Insets safe = getSafeInsets(lp);
+        int contentTop = getContentTopY(lp);
 
-        int topY = safe.top + headerHeight + OVERLAY_EDGE_MARGIN;
+        // Same top Y as inspector panel for visual consistency
+        int topY = contentTop + OVERLAY_EDGE_MARGIN;
         int gap = 4;
 
         int panelWidth = 300;
-        int panelHeight = 310;
-        int panelX = safe.left + OVERLAY_EDGE_MARGIN + toggleBtnSize + gap;
+        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + gap;
 
         if (environmentPanel.getParent() != lp) {
             lp.add(environmentPanel, JLayeredPane.PALETTE_LAYER);
         }
-        environmentPanel.setBounds(panelX, topY, panelWidth, panelHeight);
+        environmentPanel.setBounds(panelX, topY, panelWidth, ENV_PANEL_HEIGHT);
         environmentPanel.revalidate();
         environmentPanel.repaint();
     }
 
     /**
-     * Positions (and re-adds if needed) the environment toggle button on the top-left edge.
+     * Positions (and re-adds if needed) the settings button on the top-left corner.
+     */
+    public void positionSettingsButton() {
+        JLayeredPane lp = layeredPaneSupplier.get();
+
+        int contentTop = getContentTopY(lp);
+        int topY = contentTop + OVERLAY_EDGE_MARGIN;
+
+        if (settingsButton.getParent() != lp) {
+            lp.add(settingsButton, JLayeredPane.PALETTE_LAYER);
+        }
+        settingsButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
+        settingsButton.revalidate();
+        settingsButton.repaint();
+    }
+
+    /**
+     * Positions (and re-adds if needed) the environment toggle button below the settings button.
      */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
 
-        Insets safe = getSafeInsets(lp);
+        int contentTop = getContentTopY(lp);
 
-        int topY = safe.top + headerHeight + OVERLAY_EDGE_MARGIN;
-        int btnSize = 45;
+        // Below the settings button with a gap
+        int topY = contentTop + OVERLAY_EDGE_MARGIN + BTN_SIZE + SETTINGS_ENV_GAP;
 
         if (envToggleButton.getParent() != lp) {
             lp.add(envToggleButton, JLayeredPane.PALETTE_LAYER);
         }
-        envToggleButton.setBounds(safe.left + OVERLAY_EDGE_MARGIN, topY, btnSize, btnSize);
+        envToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
         envToggleButton.revalidate();
         envToggleButton.repaint();
     }
@@ -178,11 +192,11 @@ public class OverlayManager {
         int lpH = lp.getHeight();
         if (lpW <= 0 || lpH <= 0) return;
 
-        Insets safe = getSafeInsets(lp);
+        int contentTop = getContentTopY(lp);
 
         // Speed button - bottom right
-        int speedX = lpW - safe.right - SPEED_BUTTON_WIDTH - OVERLAY_EDGE_MARGIN;
-        int speedY = lpH - safe.bottom - SPEED_BUTTON_HEIGHT - OVERLAY_EDGE_MARGIN;
+        int speedX = lpW - SPEED_BUTTON_WIDTH - OVERLAY_EDGE_MARGIN;
+        int speedY = lpH - SPEED_BUTTON_HEIGHT - OVERLAY_EDGE_MARGIN;
 
         if (speedButton.getParent() != lp) {
             lp.add(speedButton, JLayeredPane.PALETTE_LAYER);
@@ -193,8 +207,8 @@ public class OverlayManager {
         speedButton.repaint();
 
         // Population overlay - top center
-        int popX = safe.left + (lpW - safe.left - safe.right - POP_OVERLAY_WIDTH) / 2;
-        int popY = safe.top + headerHeight + OVERLAY_EDGE_MARGIN + 5;
+        int popX = (lpW - POP_OVERLAY_WIDTH) / 2;
+        int popY = contentTop + OVERLAY_EDGE_MARGIN + 5;
 
         if (populationOverlay.getParent() != lp) {
             lp.add(populationOverlay, JLayeredPane.PALETTE_LAYER);
@@ -213,6 +227,7 @@ public class OverlayManager {
      */
     public void repositionAllOverlays() {
         positionInspectorPanel();
+        positionSettingsButton();
         positionEnvToggleButton();
         positionFloatingControls();
         if (environmentPanel.isVisible()) {

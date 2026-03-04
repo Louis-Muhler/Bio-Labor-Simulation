@@ -92,8 +92,6 @@ public class ModernButton extends JButton {
             case PAUSE -> ModernButton::drawPauseIcon;
             case STOP -> ModernButton::drawStopIcon;
             case ENVIRONMENT -> ModernButton::drawEnvironmentIcon;
-            case MINIMIZE -> ModernButton::drawMinimizeIcon;
-            case MAXIMIZE -> ModernButton::drawMaximizeIcon;
             case NONE -> null;
         };
     }
@@ -203,13 +201,6 @@ public class ModernButton extends JButton {
         g2d.fillPolygon(xPoints, yPoints, 3);
     }
 
-    private static void drawMinimizeIcon(Graphics2D g2d, Point pos) {
-        int x = pos.x;
-        int y = pos.y;
-        g2d.setStroke(ICON_STROKE_2_5_ROUND);
-        // Simple horizontal line (minimize)
-        g2d.drawLine(x - 7, y, x + 7, y);
-    }
 
     private static void drawStopIcon(Graphics2D g2d, Point pos) {
         int size = 6;
@@ -218,14 +209,6 @@ public class ModernButton extends JButton {
         g2d.fillRect(x - size, y - size, size * 2, size * 2);
     }
 
-    private static void drawMaximizeIcon(Graphics2D g2d, Point pos) {
-        int x = pos.x;
-        int y = pos.y;
-        int size = 7;
-        g2d.setStroke(ICON_STROKE_2_5_ROUND);
-        // Rectangle outline (maximize)
-        g2d.drawRect(x - size, y - size, size * 2, size * 2);
-    }
 
     @Override
     protected void paintComponent(Graphics g) {
@@ -304,8 +287,6 @@ public class ModernButton extends JButton {
         PLAY,
         PAUSE,
         STOP,
-        ENVIRONMENT,
-        MINIMIZE,
-        MAXIMIZE
+        ENVIRONMENT
     }
 }

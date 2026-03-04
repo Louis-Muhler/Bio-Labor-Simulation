@@ -12,12 +12,9 @@ import java.util.logging.Logger;
 /**
  * Main application window for the Bio-Lab Evolution Simulator.
  *
- * <p>Uses FlatLaf's native window decoration with {@code fullWindowContent} mode.
- * FlatLaf provides the native OS frame (resize handles, Aero Snap, drop shadow,
- * rounded corners on Windows 11) while hiding its own title/icon/buttons.
- * Our {@link CustomHeaderPanel} is placed inside the title bar area using
- * {@code FlatLaf.fullWindowContent} and {@code FlatLaf.titleBarCaption}
- * client properties – the same approach IntelliJ IDEA uses.</p>
+ * <p>Uses FlatLaf's default dark theme with the standard Windows title bar.
+ * All in-game overlays (inspector, environment, settings, speed) are managed
+ * by {@link OverlayManager} on the JLayeredPane.</p>
  *
  * <p>Delegates overlay management to {@link OverlayManager} and simulation
  * loop control to {@link SimulationLoopController}.</p>
@@ -26,13 +23,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private static final Logger LOGGER = Logger.getLogger(BioLabSimulatorApp.class.getName());
 
     private static final int INITIAL_POPULATION = 1500;
-    private static final int CUSTOM_HEADER_HEIGHT = 65;
     private static final int WORLD_SIZE = 10_000;
 
     private final SettingsManager settingsManager;
     private final SimulationEngine engine;
     private final SimulationCanvas canvas;
-    private final CustomHeaderPanel headerPanel;
     private final OverlayManager overlayManager;
     private final SimulationLoopController loopController;
 
@@ -44,7 +39,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     /**
      * Constructs and fully initialises the application window:
-     * engine, canvas, header, overlays, loop controller, and display mode.
+     * engine, canvas, overlays, loop controller, and display mode.
      */
     public BioLabSimulatorApp() {
         super("Bio-Lab Evolution Simulator");
@@ -56,27 +51,22 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         engine = new SimulationEngine(WORLD_SIZE, WORLD_SIZE, INITIAL_POPULATION);
 
         canvas = new SimulationCanvas(WORLD_SIZE, WORLD_SIZE, windowWidth,
-                windowHeight - CUSTOM_HEADER_HEIGHT, engine, this);
-
-        headerPanel = new CustomHeaderPanel(windowWidth, CUSTOM_HEADER_HEIGHT,
-                this::showSettingsOverlay,
-                this::minimizeWindow,
-                this::toggleMaximize,
-                this::closeApplication,
-                () -> (getExtendedState() & Frame.MAXIMIZED_BOTH) != 0);
+                windowHeight, engine, this);
 
         InspectorPanel inspectorPanel = new InspectorPanel();
         EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
         ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
+        ModernButton settingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
 
-        overlayManager = new OverlayManager(CUSTOM_HEADER_HEIGHT, this::getLayeredPane,
-                inspectorPanel, environmentPanel, envToggleButton, speedButton);
+        overlayManager = new OverlayManager(this::getLayeredPane,
+                inspectorPanel, environmentPanel, envToggleButton, settingsButton, speedButton);
 
         loopController = new SimulationLoopController(engine, canvas, overlayManager,
                 this::checkDeadSelectedMicrobe);
 
         envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
+        settingsButton.addActionListener(e -> showSettingsOverlay());
         speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
 
         inspectorPanel.setVisible(false);
@@ -98,10 +88,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         JDialog.setDefaultLookAndFeelDecorated(true);
         FlatDarkLaf.setup();
 
+        // Match the title bar background to the app background (#121212 = rgb(18,18,18))
+        UIManager.put("TitlePane.background", new Color(18, 18, 18));
+        UIManager.put("TitlePane.inactiveBackground", new Color(18, 18, 18));
+        UIManager.put("TitlePane.unifiedBackground", true);
+
         SwingUtilities.invokeLater(() -> {
             try {
-                BioLabSimulatorApp app = new BioLabSimulatorApp();
-                app.setVisible(true);
+                new BioLabSimulatorApp();
                 LOGGER.info("Bio-Lab Simulator started successfully");
             } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Failed to start Bio-Lab Simulator", e);
@@ -123,20 +117,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         setSize(windowWidth, windowHeight);
         setResizable(true);
 
-        // FlatLaf fullWindowContent: our content extends into the title bar area.
-        // FlatLaf still provides the native OS frame (resize, snap, shadow).
-        getRootPane().putClientProperty("FlatLaf.fullWindowContent", true);
-
-        // Hide FlatLaf's own title bar buttons (we have our own in CustomHeaderPanel)
-        getRootPane().putClientProperty("JRootPane.titleBarShowClose", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowMaximize", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowMinimize", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowTitle", false);
-        getRootPane().putClientProperty("JRootPane.titleBarShowIcon", false);
-
         JPanel content = new JPanel(new BorderLayout());
         content.setBackground(new Color(18, 18, 18));
-        content.add(headerPanel, BorderLayout.NORTH);
         content.add(canvas, BorderLayout.CENTER);
         setContentPane(content);
 
@@ -158,6 +140,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             }
         });
     }
+
 
     // -------------------------------------------------------------------------
     // Display mode
@@ -182,36 +165,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             setVisible(true);
         }
 
+
         SwingUtilities.invokeLater(overlayManager::repositionAllOverlays);
     }
 
-    // -------------------------------------------------------------------------
-    // Window controls
-    // -------------------------------------------------------------------------
-
-    private void closeApplication() {
-        loopController.stop();
-        if (engine.isRunning()) engine.shutdown();
-        dispose();
-    }
-
-    private void minimizeWindow() {
-        setState(Frame.ICONIFIED);
-    }
-
-    private void toggleMaximize() {
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        if ((getExtendedState() & Frame.MAXIMIZED_BOTH) != 0) {
-            setExtendedState(Frame.NORMAL);
-            setSize(windowWidth, windowHeight);
-            setLocationRelativeTo(null);
-        } else {
-            setMaximizedBounds(ge.getMaximumWindowBounds());
-            setExtendedState(Frame.MAXIMIZED_BOTH);
-        }
-        repaint();
-        SwingUtilities.invokeLater(overlayManager::repositionAllOverlays);
-    }
 
     // -------------------------------------------------------------------------
     // Settings overlay
@@ -245,7 +202,6 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         settingsOverlay = null;
 
         boolean settingsChanged = false;
-        boolean fullscreenChanged = false;
 
         if (windowWidth != settingsManager.getWindowWidth()
                 || windowHeight != settingsManager.getWindowHeight()) {
@@ -256,16 +212,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
         if ((gd.getFullScreenWindow() == this) != settingsManager.isFullscreen()) {
-            fullscreenChanged = true;
             settingsChanged = true;
         }
 
         if (settingsChanged) {
             applyDisplayMode();
-            if (!fullscreenChanged) {
-                canvas.setPreferredSize(
-                        new Dimension(windowWidth, windowHeight - CUSTOM_HEADER_HEIGHT));
-            }
         }
 
         loopController.resume();
