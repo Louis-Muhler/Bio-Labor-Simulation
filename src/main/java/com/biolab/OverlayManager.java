@@ -5,22 +5,40 @@ import java.awt.*;
 import java.util.function.Supplier;
 
 /**
- * Manages all floating overlay panels on the JLayeredPane.
- * Handles positioning, visibility, and re-adding of overlays after display mode changes.
+ * Manages all floating overlay components on the application's {@link JLayeredPane}.
+ *
+ * <p>All overlays are placed on {@link JLayeredPane#PALETTE_LAYER} so they always
+ * appear above the simulation canvas. The population overlay is placed on
+ * {@link JLayeredPane#DEFAULT_LAYER} so it renders behind the other panels.</p>
+ *
+ * <p>A {@link Supplier} is used for the layered pane instead of storing a direct
+ * reference because FlatLaf may recreate the root pane when switching between
+ * windowed and full-screen mode.</p>
  */
 public class OverlayManager {
+
+    // ── Positioning constants ─────────────────────────────────────────────
+    /**
+     * Uniform margin between the window edge and any overlay panel or button.
+     */
     private static final int OVERLAY_EDGE_MARGIN = 15;
     private static final int SPEED_BUTTON_WIDTH = 100;
     private static final int SPEED_BUTTON_HEIGHT = 45;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;
+    /**
+     * Pixel size of the square settings and environment toggle buttons.
+     */
     private static final int BTN_SIZE = 45;
-    /** Vertical gap between settings button and environment button to visually separate them. */
+    /**
+     * Vertical gap between the settings button and the environment toggle button.
+     */
     private static final int SETTINGS_ENV_GAP = 12;
-    /** Height of the environment panel. */
+    /**
+     * Fixed height of the environment panel (content does not change).
+     */
     private static final int ENV_PANEL_HEIGHT = 310;
 
-    // Supplier to always get the current layered pane (may change after dispose/setVisible)
     private final Supplier<JLayeredPane> layeredPaneSupplier;
 
     private final InspectorPanel inspectorPanel;
@@ -31,15 +49,17 @@ public class OverlayManager {
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
 
+    // ────────────────────────────────────────────────────────────────────
+    // Construction
+    // ────────────────────────────────────────────────────────────────────
+
     /**
-     * Creates the overlay manager and initialises the population label overlay.
-     *
-     * @param layeredPaneSupplier supplies the JLayeredPane of the parent window
-     * @param inspectorPanel      the microbe inspector panel
-     * @param environmentPanel    the environment controls panel
-     * @param envToggleButton     button that shows/hides the environment panel
+     * @param layeredPaneSupplier supplies the current {@link JLayeredPane}; evaluated lazily
+     * @param inspectorPanel      right-side microbe detail panel
+     * @param environmentPanel    left-side environment slider panel
+     * @param envToggleButton     button that shows / hides the environment panel
      * @param settingsButton      button that opens the settings overlay
-     * @param speedButton         the simulation speed toggle button
+     * @param speedButton         simulation speed toggle in the bottom-right corner
      */
     public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
                           InspectorPanel inspectorPanel, EnvironmentPanel environmentPanel,
@@ -52,12 +72,10 @@ public class OverlayManager {
         this.settingsButton = settingsButton;
         this.speedButton = speedButton;
 
-        // Create population overlay
+        // Transparent panel – no background box, only the label itself is visible
         this.populationOverlay = new JPanel() {
             @Override
-            protected void paintComponent(Graphics g) {
-                // Transparent background - no box
-            }
+            protected void paintComponent(Graphics g) { /* fully transparent */ }
         };
         populationOverlay.setOpaque(false);
         populationOverlay.setBorder(null);
@@ -71,36 +89,43 @@ public class OverlayManager {
         populationOverlay.add(populationLabel, BorderLayout.CENTER);
     }
 
-    // ===== Positioning Methods =====
+    // ────────────────────────────────────────────────────────────────────
+    // Utility
+    // ────────────────────────────────────────────────────────────────────
 
     /**
-     * Centralized HTML generation for population label.
+     * Builds the HTML string used by the population label.
+     * Extracted as a static method so it can be tested without a UI.
      */
     static String formatPopulationHtml(int population) {
         return String.format(
-                "<html><center><span style='font-size:20px;color:#00CCCC;letter-spacing:3px;'>POPULATION</span><br>" +
-                        "<span style='font-size:30px;color:#00FFFF;font-weight:bold;'>%,d</span></center></html>",
+                "<html><center>" +
+                        "<span style='font-size:20px;color:#00CCCC;letter-spacing:3px;'>POPULATION</span><br>" +
+                        "<span style='font-size:30px;color:#00FFFF;font-weight:bold;'>%,d</span>" +
+                        "</center></html>",
                 population);
     }
 
     /**
-     * Returns the Y coordinate on the JLayeredPane where the content area begins
-     * (i.e. just below the title bar). Overlays positioned at this Y will appear
-     * directly below the title bar, not behind it.
+     * Returns the Y coordinate at the top of the content area (below the title bar).
+     * Overlays positioned at this Y will appear directly below the FlatLaf title bar.
      */
     private int getContentTopY(JLayeredPane lp) {
         JRootPane root = SwingUtilities.getRootPane(lp);
         if (root != null) {
-            Container content = root.getContentPane();
-            // content.getY() gives the Y position of the content pane within the root pane,
-            // which accounts for the title bar height.
-            return content.getY();
+            return root.getContentPane().getY();
         }
         return 0;
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // Positioning
+    // ────────────────────────────────────────────────────────────────────
+
     /**
-     * Positions (and re-adds if needed) the inspector panel on the right edge of the window.
+     * Places the inspector panel on the right edge of the window.
+     * The panel is given the full vertical space between the top margin and
+     * the speed button; the panel's internal scroll pane handles overflow.
      */
     public void positionInspectorPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -109,52 +134,41 @@ public class OverlayManager {
         if (lpW <= 0 || lpH <= 0) return;
 
         int contentTop = getContentTopY(lp);
-
-        int panelWidth = 320;
         int topY = contentTop + OVERLAY_EDGE_MARGIN;
-        // Fill available vertical space so the panel content is never clipped
-        int panelHeight = lpH - topY - OVERLAY_EDGE_MARGIN;
-        int panelX = lpW - panelWidth - OVERLAY_EDGE_MARGIN;
+        int bottomMargin = SPEED_BUTTON_HEIGHT + 2 * OVERLAY_EDGE_MARGIN;
+        int panelHeight = lpH - topY - bottomMargin;
+        int panelX = lpW - InspectorPanel.PANEL_WIDTH - OVERLAY_EDGE_MARGIN;
 
         if (inspectorPanel.getParent() != lp) {
             lp.add(inspectorPanel, JLayeredPane.PALETTE_LAYER);
         }
-        inspectorPanel.setBounds(panelX, topY, panelWidth, panelHeight);
+        inspectorPanel.setBounds(panelX, topY, InspectorPanel.PANEL_WIDTH, panelHeight);
         inspectorPanel.revalidate();
         inspectorPanel.repaint();
     }
 
     /**
-     * Positions (and re-adds if needed) the environment panel to the right of the toggle button.
+     * Places the environment panel immediately to the right of the toggle button.
      */
     public void positionEnvironmentPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
-
-        int contentTop = getContentTopY(lp);
-
-        // Same top Y as inspector panel for visual consistency
-        int topY = contentTop + OVERLAY_EDGE_MARGIN;
-        int gap = 4;
-
-        int panelWidth = 300;
-        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + gap;
+        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
+        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + 4;
 
         if (environmentPanel.getParent() != lp) {
             lp.add(environmentPanel, JLayeredPane.PALETTE_LAYER);
         }
-        environmentPanel.setBounds(panelX, topY, panelWidth, ENV_PANEL_HEIGHT);
+        environmentPanel.setBounds(panelX, topY, 300, ENV_PANEL_HEIGHT);
         environmentPanel.revalidate();
         environmentPanel.repaint();
     }
 
     /**
-     * Positions (and re-adds if needed) the settings button on the top-left corner.
+     * Places the settings (gear) button in the top-left corner.
      */
     public void positionSettingsButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
-
-        int contentTop = getContentTopY(lp);
-        int topY = contentTop + OVERLAY_EDGE_MARGIN;
+        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
 
         if (settingsButton.getParent() != lp) {
             lp.add(settingsButton, JLayeredPane.PALETTE_LAYER);
@@ -164,16 +178,10 @@ public class OverlayManager {
         settingsButton.repaint();
     }
 
-    /**
-     * Positions (and re-adds if needed) the environment toggle button below the settings button.
-     */
+    /** Places the environment toggle button directly below the settings button. */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
-
-        int contentTop = getContentTopY(lp);
-
-        // Below the settings button with a gap
-        int topY = contentTop + OVERLAY_EDGE_MARGIN + BTN_SIZE + SETTINGS_ENV_GAP;
+        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN + BTN_SIZE + SETTINGS_ENV_GAP;
 
         if (envToggleButton.getParent() != lp) {
             lp.add(envToggleButton, JLayeredPane.PALETTE_LAYER);
@@ -184,7 +192,8 @@ public class OverlayManager {
     }
 
     /**
-     * Positions (and re-adds if needed) the speed button and population overlay.
+     * Places the speed button in the bottom-right corner and the population
+     * counter at the top-center of the window.
      */
     public void positionFloatingControls() {
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -194,7 +203,6 @@ public class OverlayManager {
 
         int contentTop = getContentTopY(lp);
 
-        // Speed button - bottom right
         int speedX = lpW - SPEED_BUTTON_WIDTH - OVERLAY_EDGE_MARGIN;
         int speedY = lpH - SPEED_BUTTON_HEIGHT - OVERLAY_EDGE_MARGIN;
 
@@ -206,12 +214,12 @@ public class OverlayManager {
         speedButton.revalidate();
         speedButton.repaint();
 
-        // Population overlay - top center
         int popX = (lpW - POP_OVERLAY_WIDTH) / 2;
         int popY = contentTop + OVERLAY_EDGE_MARGIN + 5;
 
         if (populationOverlay.getParent() != lp) {
-            lp.add(populationOverlay, JLayeredPane.PALETTE_LAYER);
+            // DEFAULT_LAYER renders below PALETTE_LAYER panels
+            lp.add(populationOverlay, JLayeredPane.DEFAULT_LAYER);
         }
         populationOverlay.setBounds(popX, popY, POP_OVERLAY_WIDTH, POP_OVERLAY_HEIGHT);
         populationOverlay.setVisible(true);
@@ -219,11 +227,14 @@ public class OverlayManager {
         populationOverlay.repaint();
     }
 
-    // ===== Toggle =====
+    // ────────────────────────────────────────────────────────────────────
+    // Coordinated actions
+    // ────────────────────────────────────────────────────────────────────
 
     /**
-     * Re-adds and repositions all floating overlay components.
-     * Must be called after dispose()/setVisible() since those remove layered pane children.
+     * Re-adds and repositions all overlays. Must be called after window resize
+     * or after switching display modes, because those operations remove children
+     * from the layered pane.
      */
     public void repositionAllOverlays() {
         positionInspectorPanel();
@@ -235,39 +246,38 @@ public class OverlayManager {
         }
     }
 
-    // ===== Population Display =====
-
     /**
-     * Shows or hides the environment panel and updates the toggle button's dimmed state.
+     * Toggles the environment panel visibility and updates the toggle button's
+     * dimmed state to indicate whether the panel is open.
      */
     public void toggleEnvironmentPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
         if (environmentPanel.isVisible()) {
             environmentPanel.setVisible(false);
             envToggleButton.setDimmed(false);
-            lp.repaint();
         } else {
             environmentPanel.setVisible(true);
             positionEnvironmentPanel();
             envToggleButton.setDimmed(true);
-            lp.repaint();
         }
+        lp.repaint();
     }
 
-    /**
-     * Updates the population label text. Must be called on the EDT.
-     */
+    // ────────────────────────────────────────────────────────────────────
+    // Population display
+    // ────────────────────────────────────────────────────────────────────
+
+    /** Updates the population counter. Must be called on the EDT. */
     public void updatePopulationLabel(int population) {
         populationLabel.setText(formatPopulationHtml(population));
     }
 
-    // ===== Accessors =====
+    // ────────────────────────────────────────────────────────────────────
+    // Accessors
+    // ────────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns the inspector panel managed by this overlay manager.
-     */
+    /** Returns the {@link InspectorPanel} managed by this instance. */
     public InspectorPanel getInspectorPanel() {
         return inspectorPanel;
     }
 }
-

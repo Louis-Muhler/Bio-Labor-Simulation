@@ -203,7 +203,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private void showSettingsOverlay() {
         if (settingsOverlay != null) return;
         loopController.pause();
-        settingsOverlay = new SettingsOverlay(settingsManager, this::closeSettingsOverlay);
+        settingsOverlay = new SettingsOverlay(settingsManager,
+                this::applySettingsAndClose,   // APPLY button
+                this::cancelSettingsAndClose);  // CANCEL / ESC
         getLayeredPane().add(settingsOverlay, JLayeredPane.POPUP_LAYER);
         settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
         settingsOverlay.setVisible(true);
@@ -212,32 +214,33 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         repaint();
     }
 
-    private void closeSettingsOverlay() {
-        if (settingsOverlay == null) return;
-        getLayeredPane().remove(settingsOverlay);
-        settingsOverlay = null;
-
-        boolean settingsChanged = false;
-
-        if (windowWidth != settingsManager.getWindowWidth()
-                || windowHeight != settingsManager.getWindowHeight()) {
-            windowWidth = settingsManager.getWindowWidth();
-            windowHeight = settingsManager.getWindowHeight();
-            settingsChanged = true;
-        }
-
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-        if ((gd.getFullScreenWindow() == this) != settingsManager.isFullscreen()) {
-            settingsChanged = true;
-        }
-
-        if (settingsChanged) {
-            applyDisplayMode();
-        }
-
+    /**
+     * Called when the user clicks APPLY – always re-applies display mode.
+     */
+    private void applySettingsAndClose() {
+        removeSettingsOverlay();
+        windowWidth = settingsManager.getWindowWidth();
+        windowHeight = settingsManager.getWindowHeight();
+        applyDisplayMode();           // always – even if nothing changed
         loopController.resume();
         revalidate();
         repaint();
+    }
+
+    /**
+     * Called when the user clicks CANCEL or presses ESC – no display change.
+     */
+    private void cancelSettingsAndClose() {
+        removeSettingsOverlay();
+        loopController.resume();
+        revalidate();
+        repaint();
+    }
+
+    private void removeSettingsOverlay() {
+        if (settingsOverlay == null) return;
+        getLayeredPane().remove(settingsOverlay);
+        settingsOverlay = null;
     }
 
     // -------------------------------------------------------------------------

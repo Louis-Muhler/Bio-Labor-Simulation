@@ -12,59 +12,82 @@ import java.util.*;
 import java.util.List;
 
 /**
- * Settings overlay panel (v2.2) that appears on top of the simulation
- * with a semi-transparent dark overlay. Pauses the simulation while
- * settings are being adjusted.
+ * Full-screen settings overlay that appears above the simulation canvas.
  *
- * <p>All controls are custom-painted to match the dark / neon-cyan theme
- * used throughout the application ({@link ModernButton}).</p>
+ * <p>The overlay dims the screen with a semi-transparent backdrop and centers
+ * a rounded settings card. While open, the simulation loop is paused by the
+ * caller via the {@code onApply}/{@code onCancel} callbacks.</p>
+ *
+ * <p>Two distinct close paths exist so the caller can react accordingly:</p>
+ * <ul>
+ *   <li>{@code onApply} – settings were saved; caller must re-apply display mode.</li>
+ *   <li>{@code onCancel} – user dismissed without saving; no display change needed.</li>
+ * </ul>
  */
 public class SettingsOverlay extends JPanel {
     private final SettingsManager settingsManager;
-    private final Runnable onClose;
-
-    // ── Shared colour / font constants ──────────────────────────────────
-    private static final Color OVERLAY_BG = new Color(0, 0, 0, 220);
+    // ── Theme constants ──────────────────────────────────────────────────
+    private static final Color OVERLAY_BG = new Color(0, 0, 0, 160);
+    /**
+     * Matches the dark panel background used by InspectorPanel and EnvironmentPanel.
+     */
+    private static final Color CARD_BG = new Color(18, 18, 18, 240);
+    /**
+     * Available window resolutions. Insertion order does not matter because
+     * the combo box sorts them at construction time (width desc, height desc).
+     */
+    private static final Map<String, Dimension> RESOLUTIONS = new LinkedHashMap<>();
     private static final Color PANEL_BG = new Color(18, 18, 18);
     private static final Color ACCENT = new Color(0, 255, 255);
     private static final Color CONTROL_BG = new Color(12, 12, 14);
     private static final Color CONTROL_HOVER = new Color(25, 28, 32);
     private static final Color BORDER_COLOR = new Color(0, 255, 255, 80);
-
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 24);
     private static final Font SECTION_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font BODY_FONT = new Font("Segoe UI", Font.PLAIN, 14);
-    // Resolution options – LinkedHashMap preserves insertion order
-    private static final Map<String, Dimension> RESOLUTIONS = new LinkedHashMap<>();
-    private JCheckBox fullscreenCheck;
 
     static {
-        RESOLUTIONS.put("1280x720 (HD)", new Dimension(1280, 720));
-        RESOLUTIONS.put("1366x768 (WXGA)", new Dimension(1366, 768));
-        RESOLUTIONS.put("1600x900 (HD+)", new Dimension(1600, 900));
-        RESOLUTIONS.put("1920x1080 (FHD)", new Dimension(1920, 1080));
-        RESOLUTIONS.put("2560x1440 (QHD)", new Dimension(2560, 1440));
-        RESOLUTIONS.put("3840x2160 (UHD)", new Dimension(3840, 2160));
-        RESOLUTIONS.put("2560x1080 (WFHD)", new Dimension(2560, 1080));
-        RESOLUTIONS.put("3440x1440 (WQHD)", new Dimension(3440, 1440));
-        RESOLUTIONS.put("1440x900 (WXGA+)", new Dimension(1440, 900));
-        RESOLUTIONS.put("1680x1050 (WSXGA+)", new Dimension(1680, 1050));
-        RESOLUTIONS.put("1920x1200 (WUXGA)", new Dimension(1920, 1200));
         RESOLUTIONS.put("1024x768 (XGA)", new Dimension(1024, 768));
+        RESOLUTIONS.put("1280x720 (HD)", new Dimension(1280, 720));
         RESOLUTIONS.put("1280x960 (SXGA-)", new Dimension(1280, 960));
+        RESOLUTIONS.put("1366x768 (WXGA)", new Dimension(1366, 768));
+        RESOLUTIONS.put("1440x900 (WXGA+)", new Dimension(1440, 900));
+        RESOLUTIONS.put("1600x900 (HD+)", new Dimension(1600, 900));
         RESOLUTIONS.put("1600x1200 (UXGA)", new Dimension(1600, 1200));
+        RESOLUTIONS.put("1680x1050 (WSXGA+)", new Dimension(1680, 1050));
+        RESOLUTIONS.put("1920x1080 (FHD)", new Dimension(1920, 1080));
+        RESOLUTIONS.put("1920x1200 (WUXGA)", new Dimension(1920, 1200));
+        RESOLUTIONS.put("2560x1080 (WFHD)", new Dimension(2560, 1080));
+        RESOLUTIONS.put("2560x1440 (QHD)", new Dimension(2560, 1440));
+        RESOLUTIONS.put("3440x1440 (WQHD)", new Dimension(3440, 1440));
+        RESOLUTIONS.put("3840x2160 (UHD)", new Dimension(3840, 2160));
     }
 
-    // ── UI components ───────────────────────────────────────────────────
+    /**
+     * Invoked after the user clicks APPLY and settings have been persisted.
+     */
+    private final Runnable onApply;
+    /**
+     * Invoked when the user clicks CANCEL or presses ESC without saving.
+     */
+    private final Runnable onCancel;
+    // ── Stateful UI controls ─────────────────────────────────────────────
+    private JCheckBox fullscreenCheck;
     private JComboBox<String> resolutionCombo;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
     // ────────────────────────────────────────────────────────────────────
 
-    public SettingsOverlay(SettingsManager settingsManager, Runnable onClose) {
+    /**
+     * @param settingsManager the settings model to read from and write to
+     * @param onApply         callback invoked after saving – caller re-applies display mode
+     * @param onCancel        callback invoked on dismiss without saving
+     */
+    public SettingsOverlay(SettingsManager settingsManager, Runnable onApply, Runnable onCancel) {
         this.settingsManager = settingsManager;
-        this.onClose = onClose;
+        this.onApply = onApply;
+        this.onCancel = onCancel;
         setupUI();
         loadCurrentSettings();
     }
@@ -74,16 +97,8 @@ public class SettingsOverlay extends JPanel {
     // ────────────────────────────────────────────────────────────────────
 
     /**
-     * Parses the pixel width from a resolution label like "1920x1080 (Full HD)".
+     * Creates a cyan section-heading label (e.g. "DISPLAY MODE").
      */
-    private static int parseWidth(String label) {
-        try {
-            return Integer.parseInt(label.split("x")[0].trim());
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
     private static JLabel createSectionLabel(String text) {
         JLabel lbl = new JLabel(text);
         lbl.setFont(SECTION_FONT);
@@ -91,6 +106,11 @@ public class SettingsOverlay extends JPanel {
         return lbl;
     }
 
+    /**
+     * Creates a styled checkbox with a custom-painted cyan icon.
+     *
+     * @param text label shown next to the checkbox
+     */
     private static JCheckBox createStyledCheckBox(String text) {
         JCheckBox cb = new JCheckBox(text);
         cb.setFont(BODY_FONT);
@@ -103,40 +123,58 @@ public class SettingsOverlay extends JPanel {
         return cb;
     }
 
+    /**
+     * Creates a fully themed combo box using {@link DarkComboBoxUI} for custom
+     * painting and {@link DarkComboListRenderer} for the dropdown items.
+     */
     private static JComboBox<String> createStyledComboBox(String[] items) {
         JComboBox<String> combo = new JComboBox<>(items);
         combo.setFont(BODY_FONT);
         combo.setForeground(ACCENT);
         combo.setBackground(CONTROL_BG);
         combo.setMaximumRowCount(8);
-
-        // Install custom UI (arrow button + popup styling)
         combo.setUI(new DarkComboBoxUI());
-
-        // Custom cell renderer for popup list items
         combo.setRenderer(new DarkComboListRenderer());
-
-        // Border is painted by DarkComboBoxUI as a rounded rect – remove the default one
         combo.setBorder(null);
         combo.setOpaque(false);
-
         return combo;
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Section label (plain text, no Unicode symbols)
+    // Factory helpers for themed controls
     // ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Extracts the pixel width from a label such as {@code "1920x1080 (FHD)"}.
+     * Returns 0 on parse failure so malformed entries sort last.
+     */
+    private static int parseWidth(String label) {
+        try {
+            return Integer.parseInt(label.split("x")[0].trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Extracts the pixel height from a label such as {@code "1920x1080 (FHD)"}.
+     * Returns 0 on parse failure so malformed entries sort last.
+     */
+    private static int parseHeight(String label) {
+        try {
+            String after = label.split("x")[1].trim();
+            return Integer.parseInt(after.split("[\\s(]")[0]);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
 
     private void setupUI() {
         setLayout(new GridBagLayout());
         setOpaque(false);
 
-        // Semi-transparent backdrop
         JPanel backdrop = createBackdrop();
-
-        // Inner settings card
-        JPanel card = createSettingsCard();
-        backdrop.add(card);
+        backdrop.add(createSettingsCard());
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.BOTH;
@@ -148,11 +186,12 @@ public class SettingsOverlay extends JPanel {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Custom CheckBox
+    // Resolution label parsing
     // ────────────────────────────────────────────────────────────────────
 
     /**
-     * Dark semi-transparent fullscreen backdrop.
+     * Creates the semi-transparent backdrop that dims the simulation canvas.
+     * The fill starts below the FlatLaf title bar so the header stays fully visible.
      */
     private JPanel createBackdrop() {
         JPanel panel = new JPanel(new GridBagLayout()) {
@@ -161,7 +200,12 @@ public class SettingsOverlay extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setColor(OVERLAY_BG);
-                g2.fillRect(0, 0, getWidth(), getHeight());
+                int topY = 0;
+                JRootPane root = SwingUtilities.getRootPane(this);
+                if (root != null) {
+                    topY = root.getContentPane().getY();
+                }
+                g2.fillRect(0, topY, getWidth(), getHeight() - topY);
                 g2.dispose();
             }
         };
@@ -170,15 +214,34 @@ public class SettingsOverlay extends JPanel {
     }
 
     /**
-     * Builds the bordered settings card with GridBagLayout for left-aligned rows.
+     * Builds the floating settings card with a rounded cyan border, matching the
+     * visual style of {@link InspectorPanel} and {@link EnvironmentPanel}.
      */
     private JPanel createSettingsCard() {
-        JPanel card = new JPanel(new GridBagLayout());
-        card.setBackground(PANEL_BG);
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(ACCENT, 2),
-                new EmptyBorder(24, 36, 24, 36)
-        ));
+        JPanel card = new JPanel(new GridBagLayout()) {
+            private static final int R = 15;
+            private static final BasicStroke S1 = new BasicStroke(1f);
+            private static final BasicStroke S3 = new BasicStroke(3f);
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth() - 1;
+                int h = getHeight() - 1;
+                g2.setColor(CARD_BG);
+                g2.fillRoundRect(0, 0, w, h, R, R);
+                g2.setColor(new Color(0, 255, 255, 80));
+                g2.setStroke(S3);
+                g2.drawRoundRect(0, 0, w, h, R, R);
+                g2.setColor(new Color(0, 255, 255));
+                g2.setStroke(S1);
+                g2.drawRoundRect(0, 0, w, h, R, R);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setBorder(new EmptyBorder(24, 36, 24, 36));
 
         GridBagConstraints c = new GridBagConstraints();
         c.gridx = 0;
@@ -187,42 +250,38 @@ public class SettingsOverlay extends JPanel {
         c.anchor = GridBagConstraints.CENTER;
         c.insets = new Insets(0, 0, 20, 0);
 
-        // ── Title ───────────────────────────────────────────────────────
         JLabel title = new JLabel("SYSTEM SETTINGS");
         title.setFont(TITLE_FONT);
         title.setForeground(ACCENT);
         card.add(title, c);
 
-        // ── DISPLAY MODE label ──────────────────────────────────────────
         c.gridy++;
-        c.gridwidth = 2;
         c.anchor = GridBagConstraints.WEST;
         c.fill = GridBagConstraints.NONE;
         c.insets = new Insets(0, 0, 6, 0);
         card.add(createSectionLabel("DISPLAY MODE"), c);
 
-        // ── Fullscreen checkbox ─────────────────────────────────────────
         c.gridy++;
         c.insets = new Insets(0, 0, 18, 0);
         fullscreenCheck = createStyledCheckBox("Fullscreen");
         card.add(fullscreenCheck, c);
 
-        // ── RESOLUTION label ────────────────────────────────────────────
         c.gridy++;
         c.insets = new Insets(0, 0, 6, 0);
         card.add(createSectionLabel("RESOLUTION"), c);
 
-        // ── Resolution combo ────────────────────────────────────────────
         c.gridy++;
         c.fill = GridBagConstraints.HORIZONTAL;
         c.insets = new Insets(0, 0, 24, 0);
-        // Sort resolution labels numerically by width (number before the 'x')
+        // Sort by width descending; use height descending as tie-breaker
         List<String> sortedKeys = new ArrayList<>(RESOLUTIONS.keySet());
-        sortedKeys.sort(Comparator.comparingInt(SettingsOverlay::parseWidth).reversed());
+        sortedKeys.sort(
+                Comparator.comparingInt(SettingsOverlay::parseWidth).reversed()
+                        .thenComparing(
+                                Comparator.comparingInt(SettingsOverlay::parseHeight).reversed()));
         resolutionCombo = createStyledComboBox(sortedKeys.toArray(new String[0]));
         card.add(resolutionCombo, c);
 
-        // ── Button row ──────────────────────────────────────────────────
         c.gridy++;
         c.fill = GridBagConstraints.NONE;
         c.anchor = GridBagConstraints.CENTER;
@@ -230,15 +289,12 @@ public class SettingsOverlay extends JPanel {
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         buttons.setOpaque(false);
-
         ModernButton apply = new ModernButton("APPLY");
         apply.setPreferredSize(new Dimension(120, 40));
         apply.addActionListener(e -> applySettings());
-
         ModernButton cancel = new ModernButton("CANCEL");
         cancel.setPreferredSize(new Dimension(120, 40));
         cancel.addActionListener(e -> closeOverlay());
-
         buttons.add(apply);
         buttons.add(cancel);
         card.add(buttons, c);
@@ -247,9 +303,57 @@ public class SettingsOverlay extends JPanel {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Custom ComboBox
+    // Settings persistence
     // ────────────────────────────────────────────────────────────────────
 
+    /**
+     * Populates the controls from the current {@link SettingsManager} state.
+     * Called once at construction time.
+     */
+    private void loadCurrentSettings() {
+        fullscreenCheck.setSelected(settingsManager.isFullscreen());
+        String key = findResolutionKey(settingsManager.getWindowWidth(),
+                settingsManager.getWindowHeight());
+        if (key != null) resolutionCombo.setSelectedItem(key);
+    }
+
+    /**
+     * Finds the display label for a given pixel dimension.
+     * Returns {@code null} if no matching preset exists.
+     */
+    private String findResolutionKey(int width, int height) {
+        for (Map.Entry<String, Dimension> entry : RESOLUTIONS.entrySet()) {
+            Dimension d = entry.getValue();
+            if (d.width == width && d.height == height) return entry.getKey();
+        }
+        return null;
+    }
+
+    /**
+     * Persists the current control values to {@link SettingsManager} and
+     * invokes {@link #onApply} so the caller can re-apply the display mode.
+     */
+    private void applySettings() {
+        settingsManager.setFullscreen(fullscreenCheck.isSelected());
+        String sel = (String) resolutionCombo.getSelectedItem();
+        if (sel != null) {
+            Dimension dim = RESOLUTIONS.get(sel);
+            if (dim != null) {
+                settingsManager.setWindowWidth(dim.width);
+                settingsManager.setWindowHeight(dim.height);
+            }
+        }
+        settingsManager.saveSettings();
+        if (onApply != null) onApply.run();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Key bindings
+    // ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Binds the ESC key to {@link #closeOverlay()} for keyboard dismissal.
+     */
     private void setupKeyBindings() {
         getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeSettings");
@@ -261,139 +365,87 @@ public class SettingsOverlay extends JPanel {
         });
     }
 
-    // ── Custom ComboBox UI ──────────────────────────────────────────────
-
-    private void loadCurrentSettings() {
-        fullscreenCheck.setSelected(settingsManager.isFullscreen());
-
-        int w = settingsManager.getWindowWidth();
-        int h = settingsManager.getWindowHeight();
-        String key = findResolutionKey(w, h);
-        if (key != null) {
-            resolutionCombo.setSelectedItem(key);
-        }
-    }
-
-    // ── Custom List Cell Renderer ───────────────────────────────────────
-
-    private String findResolutionKey(int width, int height) {
-        for (Map.Entry<String, Dimension> entry : RESOLUTIONS.entrySet()) {
-            Dimension d = entry.getValue();
-            if (d.width == width && d.height == height) {
-                return entry.getKey();
-            }
-        }
-        return null;
-    }
-
-    // ── Custom Scrollbar UI ─────────────────────────────────────────────
-
-    private void applySettings() {
-        settingsManager.setFullscreen(fullscreenCheck.isSelected());
-
-        String sel = (String) resolutionCombo.getSelectedItem();
-        if (sel != null) {
-            Dimension dim = RESOLUTIONS.get(sel);
-            if (dim != null) {
-                settingsManager.setWindowWidth(dim.width);
-                settingsManager.setWindowHeight(dim.height);
-            }
-        }
-        settingsManager.saveSettings();
-        closeOverlay();
+    /**
+     * Dismisses the overlay without saving, invoking {@link #onCancel}.
+     */
+    private void closeOverlay() {
+        if (onCancel != null) onCancel.run();
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // Key bindings
+    // Inner classes – themed controls
     // ────────────────────────────────────────────────────────────────────
 
     /**
-         * Custom painted checkbox icon – hollow cyan box or filled cyan square.
-         */
-        private record CheckBoxIcon(boolean checked) implements Icon {
-            private static final int SIZE = 18;
+     * Custom checkbox icon: a rounded dark square with a cyan border,
+     * filled with a cyan "×" cross when checked.
+     */
+    private record CheckBoxIcon(boolean checked) implements Icon {
+        private static final int SIZE = 18;
 
         @Override
-            public void paintIcon(Component c, Graphics g, int x, int y) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON);
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                // Dark fill
-                g2.setColor(CONTROL_BG);
-                g2.fillRoundRect(x, y, SIZE, SIZE, 4, 4);
+            g2.setColor(CONTROL_BG);
+            g2.fillRoundRect(x, y, SIZE, SIZE, 4, 4);
+            g2.setColor(ACCENT);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(x, y, SIZE - 1, SIZE - 1, 4, 4);
 
-                // Cyan border
-                g2.setColor(ACCENT);
-                g2.setStroke(new BasicStroke(1.5f));
-                g2.drawRoundRect(x, y, SIZE - 1, SIZE - 1, 4, 4);
-
-                if (checked) {
-                    // Neon cyan "X" drawn as two thick diagonal lines
-                    int pad = 4;
-                    g2.setColor(ACCENT);
-                    g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g2.drawLine(x + pad, y + pad, x + SIZE - pad, y + SIZE - pad);
-                    g2.drawLine(x + SIZE - pad, y + pad, x + pad, y + SIZE - pad);
-                }
-
-                g2.dispose();
+            if (checked) {
+                int pad = 4;
+                g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(x + pad, y + pad, x + SIZE - pad, y + SIZE - pad);
+                g2.drawLine(x + SIZE - pad, y + pad, x + pad, y + SIZE - pad);
             }
 
-            @Override
-            public int getIconWidth() {
-                return SIZE;
-            }
-
-            @Override
-            public int getIconHeight() {
-                return SIZE;
-            }
+            g2.dispose();
         }
 
-    // ────────────────────────────────────────────────────────────────────
-    // Settings persistence
-    // ────────────────────────────────────────────────────────────────────
+        @Override
+        public int getIconWidth() {
+            return SIZE;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return SIZE;
+        }
+    }
 
     /**
-     * Overrides the default BasicComboBoxUI to provide a dark arrow button
-     * and a dark-themed popup.
+     * Replaces the default Swing combo box UI with a dark-themed variant:
+     * rounded rectangle background, cyan border, custom arrow button, and
+     * a dark dropdown popup with a themed scrollbar.
      */
     private static class DarkComboBoxUI extends BasicComboBoxUI {
 
-        private static final int ARC = 8; // corner radius matching ModernButton
+        /**
+         * Corner arc radius, matching the rounded style used across all overlays.
+         */
+        private static final int ARC = 8;
 
         @Override
         public void installUI(JComponent c) {
             super.installUI(c);
-            // Make the combo itself non-opaque so our rounded paint shows
             c.setOpaque(false);
-            // Make the editor component transparent (text-field inside editable combos)
-            if (editor instanceof JComponent jc) {
-                jc.setOpaque(false);
-            }
+            if (editor instanceof JComponent jc) jc.setOpaque(false);
         }
 
         @Override
         public void paint(Graphics g, JComponent c) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
             int w = c.getWidth();
             int h = c.getHeight();
-
-            // Rounded dark fill
             g2.setColor(CONTROL_BG);
             g2.fillRoundRect(0, 0, w - 1, h - 1, ARC, ARC);
-
-            // Rounded cyan border
             g2.setColor(BORDER_COLOR);
             g2.setStroke(new BasicStroke(1.5f));
             g2.drawRoundRect(0, 0, w - 1, h - 1, ARC, ARC);
-
             g2.dispose();
-
-            // Let BasicComboBoxUI paint the current value text and arrow button on top
             super.paint(g, c);
         }
 
@@ -403,21 +455,14 @@ public class SettingsOverlay extends JPanel {
                 @Override
                 protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                            RenderingHints.VALUE_ANTIALIAS_ON);
-
-                    // Transparent – the parent combo paints the rounded background.
-                    // Just draw the cyan chevron arrow.
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    // Draw a cyan chevron; the rounded background is painted by the parent combo.
                     g2.setColor(ACCENT);
-                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND,
-                            BasicStroke.JOIN_ROUND));
-                    int cx = getWidth() / 2;
-                    int cy = getHeight() / 2;
-                    int aw = 5;
-                    int ah = 3;
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int cx = getWidth() / 2, cy = getHeight() / 2;
+                    int aw = 5, ah = 3;
                     g2.drawLine(cx - aw, cy - ah, cx, cy + ah);
                     g2.drawLine(cx, cy + ah, cx + aw, cy - ah);
-
                     g2.dispose();
                 }
             };
@@ -436,8 +481,6 @@ public class SettingsOverlay extends JPanel {
                     JScrollPane sp = super.createScroller();
                     sp.setBorder(BorderFactory.createLineBorder(ACCENT, 1));
                     sp.getViewport().setBackground(CONTROL_BG);
-
-                    // Style the scroll bar
                     JScrollBar vb = sp.getVerticalScrollBar();
                     vb.setBackground(PANEL_BG);
                     vb.setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
@@ -450,20 +493,17 @@ public class SettingsOverlay extends JPanel {
         }
 
         @Override
-        public void paintCurrentValueBackground(Graphics g, Rectangle bounds,
-                                                boolean hasFocus) {
-            // No-op: the rounded background is already painted in paint()
+        public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
+            // Background is already painted in paint(); nothing to do here.
         }
 
         @Override
-        public void paintCurrentValue(Graphics g, Rectangle bounds,
-                                      boolean hasFocus) {
+        public void paintCurrentValue(Graphics g, Rectangle bounds, boolean hasFocus) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                     RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g2.setFont(comboBox.getFont());
             g2.setColor(ACCENT);
-
             String text = String.valueOf(comboBox.getSelectedItem());
             FontMetrics fm = g2.getFontMetrics();
             int textY = bounds.y + (bounds.height + fm.getAscent() - fm.getDescent()) / 2;
@@ -473,10 +513,10 @@ public class SettingsOverlay extends JPanel {
     }
 
     /**
-     * Renders each dropdown item with the dark/neon theme.
+     * Renders each resolution entry in the dropdown with the dark/neon theme:
+     * cyan text on a dark background, highlighted row on hover/selection.
      */
-    private static class DarkComboListRenderer extends JLabel
-            implements ListCellRenderer<String> {
+    private static class DarkComboListRenderer extends JLabel implements ListCellRenderer<String> {
 
         DarkComboListRenderer() {
             setOpaque(true);
@@ -485,33 +525,25 @@ public class SettingsOverlay extends JPanel {
         }
 
         @Override
-        public Component getListCellRendererComponent(JList<? extends String> list,
-                                                      String value, int index,
-                                                      boolean isSelected,
-                                                      boolean cellHasFocus) {
+        public Component getListCellRendererComponent(JList<? extends String> list, String value,
+                                                      int index, boolean isSelected, boolean cellHasFocus) {
             setText(value);
             setForeground(ACCENT);
-
-            if (isSelected) {
-                setBackground(CONTROL_HOVER);
-            } else {
-                setBackground(CONTROL_BG);
-            }
+            setBackground(isSelected ? CONTROL_HOVER : CONTROL_BG);
             return this;
         }
     }
 
     /**
-     * Minimal, modern scrollbar: no arrow buttons, rounded thumb,
-     * plain dark track. Thumb brightens while dragging / hovering.
+     * Minimal scrollbar UI for the resolution dropdown: no arrow buttons,
+     * rounded pill-shaped thumb that brightens on hover or drag.
      */
     private static class RoundedScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI {
 
-        // Idle thumb: dim cyan; active thumb: bright cyan
-        private static final Color THUMB_IDLE = new Color(0, 255, 255, 70);
+        private static final Color THUMB_IDLE = new Color(0, 255, 255,  70);
         private static final Color THUMB_ACTIVE = new Color(0, 255, 255, 180);
 
-        // ── Hide arrow buttons completely ──────────────────────────────
+        /** Returns an invisible zero-size button to eliminate the arrow buttons. */
         private static JButton zeroButton() {
             JButton b = new JButton();
             Dimension zero = new Dimension(0, 0);
@@ -529,52 +561,35 @@ public class SettingsOverlay extends JPanel {
         }
 
         @Override
-        protected JButton createDecreaseButton(int orientation) {
+        protected JButton createDecreaseButton(int o) {
             return zeroButton();
         }
 
         @Override
-        protected JButton createIncreaseButton(int orientation) {
+        protected JButton createIncreaseButton(int o) {
             return zeroButton();
         }
 
-        // ── Track: just a flat dark fill, no border ────────────────────
         @Override
         protected void paintTrack(Graphics g, JComponent c, Rectangle trackBounds) {
             g.setColor(PANEL_BG);
-            g.fillRect(trackBounds.x, trackBounds.y,
-                    trackBounds.width, trackBounds.height);
+            g.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
         }
 
-        // ── Thumb: rounded pill, brightens on hover / drag ────────────
         @Override
         protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
             if (thumbBounds.isEmpty()) return;
-
-            boolean active = isDragging || isThumbRollover();
-            Color thumbCol = active ? THUMB_ACTIVE : THUMB_IDLE;
-
+            Color thumbCol = (isDragging || isThumbRollover()) ? THUMB_ACTIVE : THUMB_IDLE;
             Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                    RenderingHints.VALUE_ANTIALIAS_ON);
-
-            // Slight horizontal inset so the pill floats in the track
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int inset = 2;
             int x = thumbBounds.x + inset;
             int y = thumbBounds.y + 2;
-            int w = thumbBounds.width - inset * 2;
+            int w = thumbBounds.width  - inset * 2;
             int h = thumbBounds.height - 4;
-            int arc = w; // fully rounded ends (pill shape)
-
             g2.setColor(thumbCol);
-            g2.fillRoundRect(x, y, w, h, arc, arc);
+            g2.fillRoundRect(x, y, w, h, w, w);
             g2.dispose();
-        }
-    }
-
-    private void closeOverlay() {
-        if (onClose != null) {
-            onClose.run();
         }
     }
 }

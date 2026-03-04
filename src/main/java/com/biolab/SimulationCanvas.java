@@ -15,8 +15,7 @@ public class SimulationCanvas extends JPanel {
     // Pre-allocated rendering constants
     private static final Color WORLD_BG_COLOR = new Color(15, 15, 20);
     private static final Color GRID_LINE_COLOR = new Color(25, 25, 35, 100);
-    private static final Color WORLD_BORDER_COLOR = new Color(0, 255, 255, 150);
-    private static final Color FOOD_OUTER_COLOR = new Color(150, 255, 150, 200);
+    private static final Color FOOD_OUTER_COLOR = new Color(100, 220, 100);
     private static final Color FOOD_CENTER_COLOR = new Color(200, 255, 200);
     private static final Color SELECTION_GLOW_COLOR = new Color(0, 255, 255, 100);
     private static final Color SELECTION_SOLID_COLOR = new Color(0, 255, 255);
@@ -199,11 +198,6 @@ public class SimulationCanvas extends JPanel {
                 g2d.drawLine((int) visibleX1, gy, (int) visibleX2, gy);
             }
 
-            // Draw world border
-            g2d.setColor(WORLD_BORDER_COLOR);
-            g2d.setStroke(STROKE_3);
-            g2d.drawRect(0, 0, worldWidth, worldHeight);
-            g2d.setStroke(STROKE_1);
 
             // ===== RENDER FOOD PELLETS =====
             List<FoodPellet> foodPellets = engine.getFoodPellets();
