@@ -4,6 +4,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,6 +37,18 @@ public class Microbe {
      * (i.e. those seeded at simulation start).
      */
     private final long parentId;
+
+    /**
+     * Direct reference to the parent microbe, or {@code null} for seed microbes.
+     * Kept alive so the lineage tree can traverse up to living ancestors.
+     */
+    private final Microbe parent;
+
+    /**
+     * Live children spawned by this microbe. Uses a thread-safe list because
+     * children are added from worker threads while the EDT reads for the tree.
+     */
+    private final List<Microbe> children = new CopyOnWriteArrayList<>();
 
     // Genetic traits – immutable after construction
     private final double heatResistance;
@@ -75,6 +88,7 @@ public class Microbe {
     public Microbe(double x, double y) {
         this.id = ID_COUNTER.getAndIncrement();
         this.parentId = -1;
+        this.parent = null;
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -97,8 +111,12 @@ public class Microbe {
     public Microbe(Microbe parent, double x, double y) {
         this.id = ID_COUNTER.getAndIncrement();
         this.parentId = parent.id;
+        this.parent = parent;
         this.x = x;
         this.y = y;
+
+        // Register this child with the parent for lineage tree traversal
+        parent.children.add(this);
 
         // Inherit genes with slight mutation
         this.heatResistance = mutate(parent.heatResistance);
@@ -389,6 +407,21 @@ public class Microbe {
      */
     public void setSelected(boolean selected) {
         this.isSelected = selected;
+    }
+
+    /**
+     * Returns the parent microbe, or {@code null} for seed-generation microbes.
+     */
+    public Microbe getParent() {
+        return parent;
+    }
+
+    /**
+     * Returns an unmodifiable snapshot of this microbe's living and dead children.
+     * Thread-safe because the backing list is a {@link CopyOnWriteArrayList}.
+     */
+    public List<Microbe> getChildren() {
+        return Collections.unmodifiableList(children);
     }
 
     /**

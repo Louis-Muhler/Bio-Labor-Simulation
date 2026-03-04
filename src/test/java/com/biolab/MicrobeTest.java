@@ -232,5 +232,41 @@ class MicrobeTest {
         assertTrue(m.getEnergy() <= Microbe.getMaxEnergy(),
                 "Energy should be capped at MAX_ENERGY");
     }
+
+    // ===== Parent / Children lineage =====
+
+    @Test
+    void seedMicrobeShouldHaveNoParent() {
+        Microbe m = new Microbe(100, 100);
+        assertNull(m.getParent(), "Seed microbe should have no parent");
+        assertTrue(m.getChildren().isEmpty(), "New microbe should have no children");
+    }
+
+    @Test
+    void childShouldReferenceParentObject() {
+        Microbe parent = new Microbe(100, 100);
+        Microbe child = new Microbe(parent, 110, 110);
+        assertSame(parent, child.getParent(), "Child should hold a direct reference to its parent");
+    }
+
+    @Test
+    void parentShouldTrackChildren() {
+        Microbe parent = new Microbe(100, 100);
+        Microbe c1 = new Microbe(parent, 110, 110);
+        Microbe c2 = new Microbe(parent, 120, 120);
+        assertEquals(2, parent.getChildren().size(), "Parent should track all spawned children");
+        assertTrue(parent.getChildren().contains(c1));
+        assertTrue(parent.getChildren().contains(c2));
+    }
+
+    @Test
+    void grandparentChainShouldBeTraversable() {
+        Microbe grandparent = new Microbe(100, 100);
+        Microbe parent = new Microbe(grandparent, 100, 100);
+        Microbe child = new Microbe(parent, 100, 100);
+        assertSame(parent, child.getParent());
+        assertSame(grandparent, child.getParent().getParent());
+        assertNull(grandparent.getParent());
+    }
 }
 

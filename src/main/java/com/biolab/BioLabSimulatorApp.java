@@ -72,6 +72,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         inspectorPanel.setVisible(false);
         environmentPanel.setVisible(false);
 
+        // Wire up the lineage tree: clicking a living relative selects it
+        inspectorPanel.setOnRelativeClicked(this::onMicrobeSelected);
+
         setupUI();
         setupShutdownHook();
         setVisible(true);
