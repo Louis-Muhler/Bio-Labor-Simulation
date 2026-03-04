@@ -221,8 +221,6 @@ public class InspectorPanel extends JPanel {
                 AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 100 / 255f);
         private static final AlphaComposite DOT_GLOW_COMPOSITE =
                 AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 150 / 255f);
-        private static final AlphaComposite COLOR_GLOW_COMPOSITE =
-                AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 30 / 255f);
         // ── Layout spacing ──────────────────────────────────────────────
         private static final int LINE_H = 22;
         private static final int SECTION_GAP = 20;
@@ -233,6 +231,10 @@ public class InspectorPanel extends JPanel {
          * Extra vertical breathing room above the COLOR CODE section.
          */
         private static final int COLOR_CODE_GAP = 25;
+        /**
+         * Scale factor applied to the on-canvas microbe size (5 px) for the specimen preview.
+         */
+        private static final double PREVIEW_SCALE = 5.0;
         /**
          * Content width – frame margin and padding are handled by the scroll-pane border.
          */
@@ -277,8 +279,11 @@ public class InspectorPanel extends JPanel {
                 h += COLOR_CODE_GAP; // extra breath after chart legend
             }
 
-            h += SECTION_GAP;        // consistent gap before COLOR CODE
-            h += LINE_H + 45;        // colour indicator label + circle + pad
+            h += SECTION_GAP;
+            // Dynamic height: label + scaled size + max glow radius (3 layers * 2 * SCALE on each side) + padding
+            int previewSize = (int) (m.getSize() * PREVIEW_SCALE);
+            int maxGlowRadius = (int) (3 * 2 * PREVIEW_SCALE);
+            h += LINE_H + 40 + previewSize + maxGlowRadius + 20; // label gap + body + glow + bottom pad
             return h;
         }
 
@@ -459,19 +464,43 @@ public class InspectorPanel extends JPanel {
         private void drawColorIndicator(Graphics2D g2, int y, Microbe microbe) {
             g2.setColor(ACCENT);
             g2.setFont(LABEL_FONT);
-            drawCentered(g2, "COLOR CODE", CW / 2, y);
-            y += 35;
+            drawCentered(g2, "SPECIMEN", CW / 2, y);
+            y += 40;
+
+            // Scale factor so the on-canvas microbe (size=5 px) appears large here
+            int size = (int) (microbe.getSize() * PREVIEW_SCALE);
+            int cx = CW / 2;
+            int cy = y + size;  // leave room for glow above
+            int x = cx - size / 2;
+            int baseY = cy - size / 2;
 
             Color mc = microbe.getColor();
+            Color brightColor = new Color(
+                    Math.min(255, mc.getRed() + 40),
+                    Math.min(255, mc.getGreen() + 40),
+                    Math.min(255, mc.getBlue() + 40));
+
             Composite orig = g2.getComposite();
-            g2.setColor(mc);
+            double healthRatio = microbe.getHealthRatio();
+
+            // ── Exact copy of SimulationCanvas glow loop ──────────────────
             for (int i = 3; i > 0; i--) {
-                g2.setComposite(COLOR_GLOW_COMPOSITE);
-                g2.fillOval(CW / 2 - 15 - i * 2, y - 15 - i * 2, 30 + i * 4, 30 + i * 4);
+                float alpha = (float) ((20 + i * 15) * healthRatio / 255f);
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, alpha)));
+                g2.setColor(mc);
+                int glowSize = size + (int) (i * 4 * PREVIEW_SCALE);
+                g2.fillOval(x - (int) (i * 2 * PREVIEW_SCALE), baseY - (int) (i * 2 * PREVIEW_SCALE), glowSize, glowSize);
             }
+
+            // ── Bright inner layer ─────────────────────────────────────────
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220 / 255f));
+            g2.setColor(brightColor);
+            g2.fillOval(x, baseY, size, size);
+
+            // ── Base colour ────────────────────────────────────────────────
             g2.setComposite(orig);
             g2.setColor(mc);
-            g2.fillOval(CW / 2 - 15, y - 15, 30, 30);
+            g2.fillOval(x + 1, baseY + 1, size - 2, size - 2);
         }
 
         private record DataPoint(int generation, double value) {

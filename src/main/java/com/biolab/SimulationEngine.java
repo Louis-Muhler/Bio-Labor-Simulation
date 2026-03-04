@@ -224,6 +224,31 @@ public class SimulationEngine {
     }
 
     /**
+     * Returns a living child of the given microbe (one whose {@code parentId} matches),
+     * or {@code null} if none exists. Used for auto-selection after a microbe dies.
+     */
+    public Microbe findLivingChild(long parentId) {
+        synchronized (dataLock) {
+            for (Microbe m : microbes) {
+                if (!m.isDead() && m.getParentId() == parentId) return m;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns a random living microbe from the current population,
+     * or {@code null} if the population is empty.
+     */
+    public Microbe findRandomLivingMicrobe() {
+        synchronized (dataLock) {
+            if (microbes.isEmpty()) return null;
+            int idx = ThreadLocalRandom.current().nextInt(microbes.size());
+            return microbes.get(idx);
+        }
+    }
+
+    /**
      * Returns a defensive copy of the microbe list for safe rendering on the EDT.
      * Uses dataLock to prevent reading while update() is modifying the list.
      */

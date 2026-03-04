@@ -264,6 +264,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (microbe != null) microbe.setSelected(true);
         overlayManager.getInspectorPanel().setSelectedMicrobe(microbe);
         overlayManager.getInspectorPanel().showPanel();
+        canvas.startFollowing(microbe);
     }
 
     /** Called by the canvas when the user clicks empty space to deselect. */
@@ -272,21 +273,37 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         Microbe prev = selectedMicrobe;
         if (prev != null) prev.setSelected(false);
         selectedMicrobe = null;
-
+        canvas.stopFollowing();
         overlayManager.getInspectorPanel().hidePanel();
         getLayeredPane().repaint();
     }
 
-    /** Checks if the currently selected microbe has died and clears the selection if so. */
+    /**
+     * Checks if the currently selected microbe has died and performs auto-selection:
+     * Priority 1 – a living child of the dead microbe.
+     * Priority 2 – any random living microbe.
+     * The camera smoothly pans to the new target.
+     */
     private void checkDeadSelectedMicrobe() {
         Microbe current = selectedMicrobe;
-        if (current != null && current.isDead()) {
-            selectedMicrobe = null;
-            SwingUtilities.invokeLater(() -> {
-                current.setSelected(false);
+        if (current == null || !current.isDead()) return;
+
+        // Find replacement before clearing state
+        Microbe replacement = engine.findLivingChild(current.getId());
+        if (replacement == null) replacement = engine.findRandomLivingMicrobe();
+
+        final Microbe next = replacement;
+        selectedMicrobe = null;
+
+        SwingUtilities.invokeLater(() -> {
+            current.setSelected(false);
+            if (next != null) {
+                onMicrobeSelected(next);
+            } else {
                 overlayManager.getInspectorPanel().hidePanel();
+                canvas.stopFollowing();
                 getLayeredPane().repaint();
-            });
-        }
+            }
+        });
     }
 }

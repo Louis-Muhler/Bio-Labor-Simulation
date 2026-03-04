@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Represents a single microbe entity in the simulation.
@@ -14,15 +15,27 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p><b>Thread-Safety Model:</b> Each microbe is modified by exactly one worker thread
  * per frame (chunk-based partitioning in {@code SimulationEngine.processMicrobeChunk()}).
  * This guarantees write-safety without locks. Mutable fields ({@code x}, {@code y},
- * {@code health}, {@code energy}, {@code age}, {@code velocityX/Y}) are {@code volatile}
- * to ensure visibility for the EDT, which reads them for rendering via
- * {@code SimulationEngine.getMicrobes()}, which acquires {@code dataLock} —
- * establishing a happens-before between the worker writes and the EDT reads.
- * Therefore mutable simulation fields do NOT need {@code volatile}; the lock
- * provides the required memory barrier. Only {@code isSelected} is {@code volatile}
- * because it is written directly from the EDT outside the lock.</p>
+ * {@code health}, {@code energy}, {@code age}, {@code velocityX/Y}) are read by the EDT
+ * only via {@code getMicrobes()} which acquires {@code dataLock} — establishing a
+ * happens-before between worker writes and EDT reads.
+ * Only {@code isSelected} is {@code volatile} because it is written directly from the
+ * EDT outside the lock.</p>
  */
 public class Microbe {
+
+    // ── Identity ──────────────────────────────────────────────────────────
+    private static final AtomicLong ID_COUNTER = new AtomicLong(0);
+
+    /**
+     * Unique, monotonically increasing ID assigned at construction.
+     */
+    private final long id;
+
+    /**
+     * ID of the parent microbe, or {@code -1} for microbes with no parent
+     * (i.e. those seeded at simulation start).
+     */
+    private final long parentId;
 
     // Genetic traits – immutable after construction
     private final double heatResistance;
@@ -60,6 +73,8 @@ public class Microbe {
      * Creates a new microbe with random genes.
      */
     public Microbe(double x, double y) {
+        this.id = ID_COUNTER.getAndIncrement();
+        this.parentId = -1;
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -80,6 +95,8 @@ public class Microbe {
      * Creates a child microbe through reproduction (with mutation).
      */
     public Microbe(Microbe parent, double x, double y) {
+        this.id = ID_COUNTER.getAndIncrement();
+        this.parentId = parent.id;
         this.x = x;
         this.y = y;
 
@@ -264,13 +281,37 @@ public class Microbe {
     }
 
     /**
-     * Checks collision with a point for mouse selection.
-     * Uses squared distance to avoid expensive Math.sqrt().
+     * Returns the health as a [0.0, 1.0] ratio, used to scale visual glow intensity.
+     */
+    public double getHealthRatio() {
+        return Math.max(0.0, health / MAX_HEALTH);
+    }
+
+    /**
+     * Checks whether a world-space point falls within the click hit area.
+     * The hit radius is {@code 3 × SIZE} so small microbes are easier to select.
+     * Uses squared distance to avoid {@code Math.sqrt()}.
      */
     public boolean contains(double px, double py) {
+        final int hitRadius = SIZE * 3;
         double dx = px - x;
         double dy = py - y;
-        return (dx * dx + dy * dy) <= (SIZE * SIZE);
+        return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
+    }
+
+    /**
+     * Returns the unique numeric ID of this microbe.
+     */
+    public long getId() {
+        return id;
+    }
+
+    /**
+     * Returns the ID of the parent microbe, or {@code -1} if this microbe
+     * was seeded at simulation start and has no parent.
+     */
+    public long getParentId() {
+        return parentId;
     }
 
     /**
