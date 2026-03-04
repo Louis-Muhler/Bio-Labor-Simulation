@@ -38,7 +38,13 @@ public class SimulationCanvas extends JPanel {
     // Mouse drag state
     private int lastMouseX;
     private int lastMouseY;
+    /**
+     * Pixel threshold below which a press+release is treated as a click, not a drag.
+     */
+    private static final int DRAG_THRESHOLD = 5;
+    private int pressMouseX;
     private boolean isDragging = false;
+    private int pressMouseY;
 
     /**
      * Creates the simulation canvas.
@@ -79,11 +85,12 @@ public class SimulationCanvas extends JPanel {
                     if (clicked != null) {
                         selectionListener.onMicrobeSelected(clicked);
                     } else {
-                        selectionListener.onSelectionCleared();
-                        // Start dragging camera
+                        // Record press position to distinguish click vs. drag on release
+                        pressMouseX = e.getX();
+                        pressMouseY = e.getY();
                         lastMouseX = e.getX();
                         lastMouseY = e.getY();
-                        isDragging = true;
+                        isDragging  = true;
                         setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                     }
                 }
@@ -92,6 +99,14 @@ public class SimulationCanvas extends JPanel {
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+                    if (isDragging) {
+                        // Only clear selection when it was a true click (not a camera drag)
+                        int dx = Math.abs(e.getX() - pressMouseX);
+                        int dy = Math.abs(e.getY() - pressMouseY);
+                        if (dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD) {
+                            selectionListener.onSelectionCleared();
+                        }
+                    }
                     isDragging = false;
                     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
                 }
@@ -121,13 +136,7 @@ public class SimulationCanvas extends JPanel {
                 zoom /= ZOOM_STEP;
             }
             zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
-            double minZoomForWorld = Math.max(
-                    (double) getWidth() / worldWidth,
-                    (double) getHeight() / worldHeight
-            );
-            zoom = Math.max(minZoomForWorld, zoom);
-            clampCamera();
-            repaint();
+            clampZoomAndCamera();
         });
     }
 
@@ -135,10 +144,26 @@ public class SimulationCanvas extends JPanel {
      * Clamps the camera position so the viewport never shows outside the world.
      */
     private void clampCamera() {
-        double visibleWidth = getWidth() / zoom;
+        double visibleWidth = getWidth()  / zoom;
         double visibleHeight = getHeight() / zoom;
         cameraX = Math.max(visibleWidth / 2, Math.min(worldWidth - visibleWidth / 2, cameraX));
         cameraY = Math.max(visibleHeight / 2, Math.min(worldHeight - visibleHeight / 2, cameraY));
+    }
+
+    /**
+     * Enforces the minimum zoom level for the current canvas size and clamps the
+     * camera. Must be called after every resize or display-mode change to prevent
+     * the viewport from showing outside the world boundary.
+     */
+    public void clampZoomAndCamera() {
+        if (getWidth() <= 0 || getHeight() <= 0) return;
+        double minZoomForWorld = Math.max(
+                (double) getWidth() / worldWidth,
+                (double) getHeight() / worldHeight
+        );
+        zoom = Math.max(minZoomForWorld, zoom);
+        clampCamera();
+        repaint();
     }
 
     /**

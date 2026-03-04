@@ -138,11 +138,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 if (settingsOverlay != null) {
                     settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
                 }
+                // Enforce min-zoom and clamp camera to prevent out-of-bounds view
+                SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
             }
 
             @Override
             public void componentShown(java.awt.event.ComponentEvent e) {
                 overlayManager.repositionAllOverlays();
+                SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
             }
         });
     }
@@ -182,7 +185,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         // Force layout and overlay recalculation after mode change
         revalidate();
         repaint();
-        SwingUtilities.invokeLater(overlayManager::repositionAllOverlays);
+        SwingUtilities.invokeLater(() -> {
+            overlayManager.repositionAllOverlays();
+            canvas.clampZoomAndCamera();
+        });
     }
 
 
