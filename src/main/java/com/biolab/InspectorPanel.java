@@ -208,6 +208,7 @@ public class InspectorPanel extends JPanel {
         private static final Color CHART_HEAT = new Color(255, 100, 100);
         private static final Color CHART_TOXIN = new Color(100, 255, 100);
         private static final Color CHART_SPEED = new Color(100, 150, 255);
+        private static final Color CHART_DIET = new Color(255, 180, 50);
         // ── Cached strokes ──────────────────────────────────────────────
         private static final BasicStroke STROKE_1 = new BasicStroke(1);
         private static final BasicStroke STROKE_2 = new BasicStroke(2);
@@ -246,7 +247,11 @@ public class InspectorPanel extends JPanel {
         }
 
         private static int sectionHeight() {
-            return LINE_H + 3 * LINE_H;
+            return sectionHeight(3);
+        }
+
+        private static int sectionHeight(int dataLines) {
+            return LINE_H + dataLines * LINE_H;
         }
 
         private static void drawCentered(Graphics2D g2, String text, int x, int y) {
@@ -265,9 +270,9 @@ public class InspectorPanel extends JPanel {
             int h = 0;
             h += LINE_H + 5;       // title
             h += LINE_H;           // separator
-            h += sectionHeight();  // vital signs
+            h += sectionHeight();    // vital signs (3 lines)
             h += SECTION_GAP;
-            h += sectionHeight();  // genetic profile
+            h += sectionHeight(4);   // genetic profile (4 lines: heat, toxin, speed, diet)
             h += SECTION_GAP;
 
             List<AncestorSnapshot> ancestry = m.getAncestry();
@@ -313,17 +318,18 @@ public class InspectorPanel extends JPanel {
 
                 // Vital Signs
                 y = drawSection(g2, y, "VITAL SIGNS", new String[]{
-                        String.format("Health: %.1f%%", microbe.getHealth() / Microbe.getMaxHealth() * 100),
-                        String.format("Energy: %.1f%%", microbe.getEnergy() / Microbe.getMaxEnergy() * 100),
+                        String.format("Health: %.1f %%", microbe.getHealth() / Microbe.getMaxHealth() * 100),
+                        String.format("Energy: %.1f %%", microbe.getEnergy() / Microbe.getMaxEnergy() * 100),
                         String.format("Age: %d cycles", microbe.getAge())
                 });
                 y += SECTION_GAP;
 
                 // Genetic Profile
                 y = drawSection(g2, y, "GENETIC PROFILE", new String[]{
-                        String.format("Heat Resistance: %.2f", microbe.getHeatResistance()),
-                        String.format("Toxin Resistance: %.2f", microbe.getToxinResistance()),
-                        String.format("Speed Factor: %.2f", microbe.getSpeed())
+                        String.format("%-20s %6.1f %%", "Heat Resistance:", microbe.getHeatResistance() * 100),
+                        String.format("%-20s %6.1f %%", "Toxin Resistance:", microbe.getToxinResistance() * 100),
+                        String.format("%-20s %6.1f %%", "Speed Factor:", microbe.getSpeed() * 100),
+                        String.format("%-20s %6.1f %%", "Diet:", microbe.getDiet() * 100)
                 });
                 y += SECTION_GAP;
 
@@ -388,31 +394,37 @@ public class InspectorPanel extends JPanel {
             List<DataPoint> heat = new java.util.ArrayList<>();
             List<DataPoint> toxin = new java.util.ArrayList<>();
             List<DataPoint> speed = new java.util.ArrayList<>();
+            List<DataPoint> diet = new java.util.ArrayList<>();
 
             heat.add(new DataPoint(0, microbe.getHeatResistance()));
             toxin.add(new DataPoint(0, microbe.getToxinResistance()));
             speed.add(new DataPoint(0, microbe.getSpeed()));
+            diet.add(new DataPoint(0, microbe.getDiet()));
 
             for (AncestorSnapshot a : ancestry) {
                 int gen = a.generation() + 1;
                 heat.add(new DataPoint(gen, a.heatResistance()));
                 toxin.add(new DataPoint(gen, a.toxinResistance()));
                 speed.add(new DataPoint(gen, a.speed()));
+                diet.add(new DataPoint(gen, a.diet()));
             }
 
             heat.sort((a, b) -> Integer.compare(b.generation, a.generation));
             toxin.sort((a, b) -> Integer.compare(b.generation, a.generation));
             speed.sort((a, b) -> Integer.compare(b.generation, a.generation));
+            diet.sort((a, b) -> Integer.compare(b.generation, a.generation));
 
             drawLineChart(g2, heat, chartX, chartY, chartW, CHART_HEIGHT, CHART_HEAT);
             drawLineChart(g2, toxin, chartX, chartY, chartW, CHART_HEIGHT, CHART_TOXIN);
             drawLineChart(g2, speed, chartX, chartY, chartW, CHART_HEIGHT, CHART_SPEED);
+            drawLineChart(g2, diet, chartX, chartY, chartW, CHART_HEIGHT, CHART_DIET);
 
             y = chartY + CHART_HEIGHT + 15;
             g2.setFont(MONO_FONT);
-            drawLegendItem(g2, 5, y, CHART_HEAT, "Heat Res");
-            drawLegendItem(g2, 90, y, CHART_TOXIN, "Toxin Res");
-            drawLegendItem(g2, 180, y, CHART_SPEED, "Speed");
+            drawLegendItem(g2, 5, y, CHART_HEAT, "Heat");
+            drawLegendItem(g2, 60, y, CHART_TOXIN, "Toxin");
+            drawLegendItem(g2, 120, y, CHART_SPEED, "Speed");
+            drawLegendItem(g2, 185, y, CHART_DIET, "Diet");
 
             return y + 10;
         }

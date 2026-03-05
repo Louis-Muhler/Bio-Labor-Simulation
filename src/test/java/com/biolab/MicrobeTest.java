@@ -162,7 +162,7 @@ class MicrobeTest {
         Microbe child = new Microbe(parent, 100, 100);
         java.lang.reflect.Method addMethod = java.util.List.class.getMethod("add", Object.class);
         try {
-            addMethod.invoke(child.getAncestry(), new AncestorSnapshot(0, 0, 0, 0));
+            addMethod.invoke(child.getAncestry(), new AncestorSnapshot(0, 0, 0, 0, 0));
             fail("Expected UnsupportedOperationException – ancestry list must be unmodifiable");
         } catch (java.lang.reflect.InvocationTargetException e) {
             assertInstanceOf(UnsupportedOperationException.class, e.getCause(),

@@ -39,6 +39,16 @@ public class Microbe {
 
     // Genetic traits – immutable after construction
     private final double heatResistance;
+    /**
+     * Diet gene: 0.0 = pure Herbivore, 1.0 = pure Carnivore.
+     */
+    private final double diet;
+    /**
+     * Intrinsic lock that guards all mutations to {@code health} and {@code energy}.
+     * Required because cross-thread predator/prey interactions mean a microbe in
+     * Thread A may now write to a microbe that is owned by Thread B.
+     */
+    private final Object stateLock = new Object();
     private double y;
     private double velocityX;
     private double velocityY;
@@ -81,6 +91,7 @@ public class Microbe {
         this.heatResistance = random.nextDouble();
         this.toxinResistance = random.nextDouble();
         this.speed = random.nextDouble();
+        this.diet = random.nextDouble();
         this.health = MAX_HEALTH;
         this.energy = INITIAL_ENERGY;
         this.age = 0;
@@ -104,6 +115,7 @@ public class Microbe {
         this.heatResistance = mutate(parent.heatResistance);
         this.toxinResistance = mutate(parent.toxinResistance);
         this.speed = mutate(parent.speed);
+        this.diet = mutate(parent.diet);
 
         this.health = MAX_HEALTH;
         this.energy = INITIAL_ENERGY;
@@ -117,6 +129,7 @@ public class Microbe {
             parent.heatResistance,
             parent.toxinResistance,
             parent.speed,
+                parent.diet,
             0
         );
         ancestry.add(parentSnapshot);
@@ -128,6 +141,7 @@ public class Microbe {
                     ancestor.heatResistance(),
                     ancestor.toxinResistance(),
                     ancestor.speed(),
+                    ancestor.diet(),
                     ancestor.generation() + 1
             );
             ancestry.add(shifted);
@@ -164,7 +178,9 @@ public class Microbe {
      */
     public void move(int width, int height) {
         double energyCost = MOVEMENT_ENERGY_COST * (1.0 + speed);
-        energy -= energyCost;
+        synchronized (stateLock) {
+            energy -= energyCost;
+        }
 
         x += velocityX;
         y += velocityY;
@@ -193,7 +209,9 @@ public class Microbe {
         double heatDamage = temperature * (1.0 - heatResistance) * 0.5;
         double toxinDamage = toxicity * (1.0 - toxinResistance) * 0.5;
 
-        health -= (heatDamage + toxinDamage);
+        synchronized (stateLock) {
+            health -= (heatDamage + toxinDamage);
+        }
 
         age++;
     }
@@ -231,8 +249,10 @@ public class Microbe {
      */
     public void resetReproduction() {
         age = 0;
-        health -= MAX_HEALTH * 0.3;
-        energy -= REPRODUCTION_ENERGY_COST;
+        synchronized (stateLock) {
+            health -= MAX_HEALTH * 0.3;
+            energy -= REPRODUCTION_ENERGY_COST;
+        }
     }
 
     /**
@@ -277,7 +297,41 @@ public class Microbe {
      * Increases energy by {@code energyGain}, capped at {@link #MAX_ENERGY}.
      */
     public void eat(double energyGain) {
-        energy = Math.min(MAX_ENERGY, energy + energyGain);
+        synchronized (stateLock) {
+            energy = Math.min(MAX_ENERGY, energy + energyGain);
+        }
+    }
+
+    /**
+     * Inflicts {@code damage} on this microbe and returns the energy the attacker absorbs.
+     *
+     * <p>Called from the attacker's worker thread, so the victim may belong to a different
+     * thread – hence this method is fully guarded by {@code stateLock}.</p>
+     *
+     * <ul>
+     *   <li>If the victim survives the hit, the attacker receives energy proportional to the
+     *       fraction of health removed (scaled to {@link #MAX_ENERGY}).</li>
+     *   <li>If the victim is killed by the hit, the attacker receives <em>all</em> of the
+     *       victim's remaining energy before it dies (energy is then zeroed).</li>
+     * </ul>
+     *
+     * @param damage raw damage amount (positive value)
+     * @return energy awarded to the attacker (≥ 0)
+     */
+    public double takeDamageAndTransferEnergy(double damage) {
+        synchronized (stateLock) {
+            double energyTransferred;
+            health -= damage;
+            if (health <= 0) {
+                // Victim dies – attacker claims all remaining energy
+                energyTransferred = energy;
+                energy = 0;
+            } else {
+                // Victim survives – attacker gets energy proportional to damage dealt
+                energyTransferred = (damage / MAX_HEALTH) * MAX_ENERGY;
+            }
+            return energyTransferred;
+        }
     }
 
     /**
@@ -368,6 +422,13 @@ public class Microbe {
      */
     public double getSpeed() {
         return speed;
+    }
+
+    /**
+     * Returns the diet gene value (0.0 = pure Herbivore, 1.0 = pure Carnivore).
+     */
+    public double getDiet() {
+        return diet;
     }
 
     /**
