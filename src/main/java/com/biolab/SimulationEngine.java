@@ -34,6 +34,7 @@ public class SimulationEngine {
     private static final int SPATIAL_CELL_SIZE = 30;
     private final Object dataLock = new Object();
     private final SpatialGrid spatialGrid;
+    private final MicrobeGrid microbeGrid;
     private volatile double foodSpawnRate = 0.3;
 
     /**
@@ -62,6 +63,7 @@ public class SimulationEngine {
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.spatialGrid = new SpatialGrid(width, height, SPATIAL_CELL_SIZE);
+        this.microbeGrid = new MicrobeGrid(width, height, SPATIAL_CELL_SIZE);
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -114,6 +116,8 @@ public class SimulationEngine {
 
         // Rebuild spatial grid for O(1) food lookup
         spatialGrid.rebuild(foodSnapshot);
+        // Rebuild microbe spatial index for O(1) neighbor lookup
+        microbeGrid.rebuild(snapshot);
 
         int chunkSize = Math.max(1, microbeCount / THREAD_COUNT);
         List<Future<?>> futures = new ArrayList<>();
@@ -121,7 +125,7 @@ public class SimulationEngine {
         for (int i = 0; i < microbeCount; i += chunkSize) {
             final int start = i;
             final int end = Math.min(i + chunkSize, microbeCount);
-            Future<?> future = executorService.submit(() -> processMicrobeChunk(snapshot, spatialGrid, start, end, temp, tox));
+            Future<?> future = executorService.submit(() -> processMicrobeChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
             futures.add(future);
         }
 
@@ -167,6 +171,7 @@ public class SimulationEngine {
      * Processes a chunk of microbes concurrently in a worker thread.
      */
     private void processMicrobeChunk(List<Microbe> snapshot, SpatialGrid foodGrid,
+                                     MicrobeGrid microbeGrid,
                                      int start, int end, double temperature, double toxicity) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
 

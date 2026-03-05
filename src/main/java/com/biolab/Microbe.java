@@ -65,7 +65,7 @@ public class Microbe {
     private static final double MAX_ENERGY = 100.0;
     private static final double INITIAL_ENERGY = 80.0;
     private static final int REPRODUCTION_AGE = 120;
-    private static final double MOVEMENT_ENERGY_COST = 0.05;
+    private static final double MOVEMENT_ENERGY_COST = 0.02;
     private static final double REPRODUCTION_ENERGY_COST = 40.0;
     private static final double MIN_REPRODUCTION_ENERGY = 60.0;
     private static final int MAX_ANCESTRY_DEPTH = 5;
@@ -88,9 +88,9 @@ public class Microbe {
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        this.heatResistance = random.nextDouble();
-        this.toxinResistance = random.nextDouble();
-        this.speed = random.nextDouble();
+        this.heatResistance = random.nextDouble() * 0.3;
+        this.toxinResistance = random.nextDouble() * 0.3;
+        this.speed = random.nextDouble() * 0.3;
         this.diet = random.nextDouble();
         this.health = MAX_HEALTH;
         this.energy = INITIAL_ENERGY;
@@ -206,8 +206,8 @@ public class Microbe {
      * Microbes with better resistance genes take less damage.
      */
     public void updateHealth(double temperature, double toxicity) {
-        double heatDamage = temperature * (1.0 - heatResistance) * 0.5;
-        double toxinDamage = toxicity * (1.0 - toxinResistance) * 0.5;
+        double heatDamage = temperature * (1.0 - heatResistance) * 0.05;
+        double toxinDamage = toxicity * (1.0 - toxinResistance) * 0.05;
 
         synchronized (stateLock) {
             health -= (heatDamage + toxinDamage);
