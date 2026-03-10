@@ -111,11 +111,16 @@ public class SimulationLoopController {
      * Periodically updates the population count display (once per second).
      */
     private void updatePopulationDisplay() {
+        if (overlayManager == null) return;
         long currentTime = System.nanoTime();
         if (currentTime - lastPopulationUpdateTime >= 1_000_000_000) {
             lastPopulationUpdateTime = currentTime;
             int population = engine.getPopulationCount();
             SwingUtilities.invokeLater(() -> overlayManager.updatePopulationLabel(population));
+
+            // Append a CSV snapshot of the current simulation state (runs once per second,
+            // on the simulation loop thread – never on the EDT so blocking I/O is safe).
+            DataExporter.logSimulationData(engine.getMicrobes(), engine.getEnvironment());
         }
     }
 

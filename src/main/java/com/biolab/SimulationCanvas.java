@@ -45,6 +45,14 @@ public class SimulationCanvas extends JPanel {
     private static final Color ATTACK_RING_COLOR = new Color(255, 30, 30);
     private static final Color ATTACK_RING_GLOW = new Color(255, 60, 60, 120);
     private static final BasicStroke STROKE_ATTACK = new BasicStroke(2.5f);
+
+    // ── Debug / Developer Vision rendering ───────────────────────────────
+    private static final Color DEBUG_HUNT_LINE_COLOR = new Color(255, 50, 50);
+    private static final Color DEBUG_FLEE_LINE_COLOR = new Color(0, 230, 255);
+    private static final Color DEBUG_VISION_COLOR = new Color(255, 255, 255, 30);
+    private static final Color DEBUG_ID_COLOR = new Color(220, 220, 220);
+    private static final Font DEBUG_ID_FONT = new Font("Monospaced", Font.PLAIN, 9);
+    private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
     /**
      * Exponential pull strength per timer tick (~16 ms).
      * Each tick the camera closes this fraction of the remaining distance to
@@ -104,6 +112,7 @@ public class SimulationCanvas extends JPanel {
         setPreferredSize(new Dimension(canvasWidth, canvasHeight));
         setBackground(new Color(18, 18, 18));
         setOpaque(false);
+        setFocusable(true);
 
         cameraX = worldWidth / 2.0;
         cameraY = worldHeight / 2.0;
@@ -113,6 +122,7 @@ public class SimulationCanvas extends JPanel {
         followTimer.start();
 
         setupMouseListeners();
+        setupKeyBindings();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -177,6 +187,32 @@ public class SimulationCanvas extends JPanel {
             zoom = e.getWheelRotation() < 0 ? zoom * ZOOM_STEP : zoom / ZOOM_STEP;
             zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
             clampZoomAndCamera();
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Key input
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Registers keyboard shortcuts using InputMap/ActionMap so they work even
+     * when focus is on a child component.
+     * <ul>
+     *   <li><b>D</b> – toggle {@link SimulationEngine#DEBUG_MODE} (Developer Vision)</li>
+     * </ul>
+     */
+    private void setupKeyBindings() {
+        InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
+        ActionMap am = getActionMap();
+
+        im.put(javax.swing.KeyStroke.getKeyStroke('d'), "toggleDebug");
+        im.put(javax.swing.KeyStroke.getKeyStroke('D'), "toggleDebug");
+        am.put("toggleDebug", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                SimulationEngine.DEBUG_MODE = !SimulationEngine.DEBUG_MODE;
+                repaint();
+            }
         });
     }
 
@@ -356,8 +392,8 @@ public class SimulationCanvas extends JPanel {
                 Composite orig = g2d.getComposite();
                 double healthRatio = microbe.getHealthRatio();
                 for (int i = 3; i > 0; i--) {
-                    float alpha = (float) ((20 + i * 15) * healthRatio / 255f);
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, alpha)));
+                    float alpha = Math.max(0.0f, Math.min(1.0f, (float) ((20 + i * 15) * healthRatio / 255f)));
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
                     g2d.setColor(microbeColor);
                     int gs = size + (i * 4);
                     g2d.fillOval(x - i * 2, y - i * 2, gs, gs);
@@ -373,7 +409,7 @@ public class SimulationCanvas extends JPanel {
                 long msSinceAttack = nowMs - microbe.getLastAttackTime();
                 if (microbe.isCarnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
                     // Fade alpha linearly from full → 0 over the flash duration
-                    float flashAlpha = 1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS;
+                    float flashAlpha = Math.max(0.0f, Math.min(1.0f, (1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS)));
                     int ringPad = 5;
                     int ringX = x - ringPad;
                     int ringY = y - ringPad;
@@ -405,6 +441,37 @@ public class SimulationCanvas extends JPanel {
                     g2d.drawOval(x - 4, y - 4, size + 8, size + 8);
                     g2d.setStroke(STROKE_1);
                     g2d.drawOval(x - 3, y - 3, size + 6, size + 6);
+                }
+
+                // ── Developer Vision (Debug) overlay ──────────────────────
+                if (SimulationEngine.DEBUG_MODE) {
+                    Composite origComp = g2d.getComposite();
+                    g2d.setStroke(STROKE_DEBUG_LINE);
+
+                    // Vision / aggro radius circle
+                    int visionR = SimulationEngine.getSpatialCellSize();
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
+                    g2d.setColor(DEBUG_VISION_COLOR);
+                    g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);
+
+                    // AI intent line to target
+                    String aiState = microbe.getAiState();
+                    double tx = microbe.getTargetX();
+                    double ty = microbe.getTargetY();
+                    if (tx >= 0 && ("HUNT".equals(aiState) || "FLEE".equals(aiState))) {
+                        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f));
+                        g2d.setColor("HUNT".equals(aiState) ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
+                        g2d.drawLine((int) mx, (int) my, (int) tx, (int) ty);
+                    }
+
+                    // Microbe ID label
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f));
+                    g2d.setColor(DEBUG_ID_COLOR);
+                    g2d.setFont(DEBUG_ID_FONT);
+                    g2d.drawString(String.valueOf(microbe.getId()), (int) mx + size / 2 + 2, (int) my - size / 2 - 2);
+
+                    g2d.setComposite(origComp);
+                    g2d.setStroke(STROKE_1);
                 }
             }
 

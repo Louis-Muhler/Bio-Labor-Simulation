@@ -98,6 +98,49 @@ public class Microbe {
      */
     private volatile long lastAttackTime = 0;
 
+    // ── Debug / AI Intent fields ──────────────────────────────────────────
+    /**
+     * Duration (ms) for which adrenaline stays active after a hit.
+     */
+    private static final long ADRENALINE_DURATION_MS = 2000;
+    /**
+     * Speed multiplier while adrenaline is active.
+     */
+    private static final double ADRENALINE_SPEED_MULT = 2.0;
+    /**
+     * Energy cost multiplier while adrenaline is active.
+     */
+    private static final double ADRENALINE_ENERGY_MULT = 3.0;
+    /**
+     * Damping factor applied to every incoming knockback force.
+     * Reduces raw impulse values from the engine to prevent physics explosions.
+     */
+    private static final double KNOCKBACK_DAMPING = 0.15;
+    /**
+     * World-space X coordinate of the microbe's current AI target.
+     * -1 means no active target (WANDER state).
+     * {@code volatile} so the EDT can read it without acquiring stateLock.
+     */
+    private volatile double targetX = -1;
+    /**
+     * World-space Y coordinate of the microbe's current AI target.
+     * -1 means no active target (WANDER state).
+     */
+    private volatile double targetY = -1;
+    /**
+     * Human-readable string describing the current AI state.
+     * One of: "HUNT", "FLEE", "WANDER".
+     */
+    private volatile String aiState = "WANDER";
+    /**
+     * Timestamp (ms) at which this microbe last took damage.
+     * While within {@code ADRENALINE_DURATION_MS} of this timestamp the microbe
+     * moves twice as fast but burns 3× the energy (panic / adrenaline mechanic).
+     * {@code volatile} for cross-thread visibility (written by victim's attacker
+     * thread, read by the victim's own thread during {@code move()}).
+     */
+    private volatile long adrenalineTimer = 0;
+
     /**
      * Creates a new microbe with random genes.
      */
@@ -185,6 +228,35 @@ public class Microbe {
     }
 
     /**
+     * Debug constructor that forces a specific diet value.
+     * Used by {@code DebugSandboxApp} to spawn microbes with a known role.
+     *
+     * @param x          initial X position
+     * @param y          initial Y position
+     * @param forcedDiet diet gene value to force (0.0 = Herbivore, 1.0 = Carnivore)
+     */
+    public Microbe(double x, double y, double forcedDiet) {
+        this.id = ID_COUNTER.getAndIncrement();
+        this.parentId = -1;
+        this.absoluteGeneration = 1;
+        this.x = x;
+        this.y = y;
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        this.heatResistance = random.nextDouble() * 0.3;
+        this.toxinResistance = random.nextDouble() * 0.3;
+        this.speed = 0.3 + random.nextDouble() * 0.4; // slightly faster for sandbox visibility
+        this.diet = Math.max(0.0, Math.min(1.0, forcedDiet));
+        this.health = MAX_HEALTH;
+        this.energy = INITIAL_ENERGY;
+        this.age = 0;
+        this.ancestry = new ArrayList<>();
+        this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
+        this.cachedColor = computeColor();
+        this.cachedBrightColor = computeBrightColor();
+        randomizeVelocity();
+    }
+
+    /**
      * Mutates a gene value slightly.
      */
     private double mutate(double value) {
@@ -206,15 +278,25 @@ public class Microbe {
 
     /**
      * Updates position and velocity. Movement costs energy proportional to speed.
+     * While adrenaline is active (within {@value #ADRENALINE_DURATION_MS} ms of
+     * the last hit), the microbe moves at double speed but burns 3× the energy.
      */
     public void move(int width, int height) {
+        boolean hasAdrenaline = (System.currentTimeMillis() - adrenalineTimer < ADRENALINE_DURATION_MS);
+
         double energyCost = MOVEMENT_ENERGY_COST * (1.0 + speed);
+        if (hasAdrenaline) {
+            energyCost *= ADRENALINE_ENERGY_MULT;
+        }
         synchronized (stateLock) {
             energy -= energyCost;
         }
 
-        x += velocityX;
-        y += velocityY;
+        double appliedVX = hasAdrenaline ? velocityX * ADRENALINE_SPEED_MULT : velocityX;
+        double appliedVY = hasAdrenaline ? velocityY * ADRENALINE_SPEED_MULT : velocityY;
+
+        x += appliedVX;
+        y += appliedVY;
 
         // Bounce off world boundaries
         if (x < 0 || x > width) {
@@ -342,17 +424,19 @@ public class Microbe {
     }
 
     /**
-     * Applies a knockback impulse to this microbe's velocity.
+     * Applies a knockback impulse to this microbe's velocity, damped by
+     * {@link #KNOCKBACK_DAMPING} (0.15) to prevent physics explosions from
+     * raw engine force values.
      * Called from the attacker's worker thread; guarded by {@code stateLock}
      * because the victim may belong to a different worker thread.
      *
-     * @param forceX horizontal velocity delta
-     * @param forceY vertical velocity delta
+     * @param forceX horizontal velocity delta (before damping)
+     * @param forceY vertical velocity delta (before damping)
      */
     public void applyKnockback(double forceX, double forceY) {
         synchronized (stateLock) {
-            this.velocityX += forceX;
-            this.velocityY += forceY;
+            this.velocityX += forceX * KNOCKBACK_DAMPING;
+            this.velocityY += forceY * KNOCKBACK_DAMPING;
         }
     }
 
@@ -362,6 +446,22 @@ public class Microbe {
      */
     public long getLastAttackTime() {
         return lastAttackTime;
+    }
+
+    /**
+     * Returns the timestamp (ms) at which this microbe last took damage,
+     * or {@code 0} if it has never been hit.  Used for adrenaline/panic logic.
+     */
+    public long getAdrenalineTimer() {
+        return adrenalineTimer;
+    }
+
+    /**
+     * Returns {@code true} if the adrenaline/panic effect is currently active.
+     * Convenience method for renderers and AI code.
+     */
+    public boolean isAdrenalineActive() {
+        return (System.currentTimeMillis() - adrenalineTimer) < ADRENALINE_DURATION_MS;
     }
 
     /**
@@ -392,6 +492,8 @@ public class Microbe {
         synchronized (stateLock) {
             double energyTransferred;
             health -= damage;
+            // Trigger the adrenaline/panic response on any hit
+            adrenalineTimer = System.currentTimeMillis();
             if (health <= 0) {
                 // Victim dies – attacker claims all remaining energy
                 energyTransferred = energy;
@@ -536,5 +638,49 @@ public class Microbe {
      */
     public List<AncestorSnapshot> getAncestry() {
         return unmodifiableAncestry;
+    }
+
+    // ── AI Intent accessors (debug / Developer Vision) ────────────────────
+
+    /**
+     * Returns the world-space X of the current AI target, or -1 if none.
+     */
+    public double getTargetX() {
+        return targetX;
+    }
+
+    /**
+     * Sets the world-space X of the current AI target.
+     */
+    public void setTargetX(double x) {
+        this.targetX = x;
+    }
+
+    /**
+     * Returns the world-space Y of the current AI target, or -1 if none.
+     */
+    public double getTargetY() {
+        return targetY;
+    }
+
+    /**
+     * Sets the world-space Y of the current AI target.
+     */
+    public void setTargetY(double y) {
+        this.targetY = y;
+    }
+
+    /**
+     * Returns the current AI state string: "HUNT", "FLEE", or "WANDER".
+     */
+    public String getAiState() {
+        return aiState;
+    }
+
+    /**
+     * Sets the current AI state. Expected values: "HUNT", "FLEE", "WANDER".
+     */
+    public void setAiState(String state) {
+        this.aiState = state;
     }
 }

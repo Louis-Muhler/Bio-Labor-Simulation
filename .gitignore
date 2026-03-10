@@ -4,6 +4,7 @@ target/
 !**/src/test/**/target/
 .kotlin
 /qodana.yaml
+/biolab_stats.csv
 
 ### IntelliJ IDEA ###
 .idea/
