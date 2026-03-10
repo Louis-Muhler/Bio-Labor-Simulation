@@ -37,6 +37,13 @@ public class Microbe {
      */
     private final long parentId;
 
+    /**
+     * Maximum number of ancestry snapshots retained per lineage chain.
+     * The smart-thinning algorithm keeps exactly this many snapshots, evenly
+     * distributed across the absolute generation timeline.
+     */
+    private static final int MAX_SNAPSHOTS = 10;
+
     // Genetic traits – immutable after construction
     private final double heatResistance;
     /**
@@ -68,7 +75,11 @@ public class Microbe {
     private static final double MOVEMENT_ENERGY_COST = 0.02;
     private static final double REPRODUCTION_ENERGY_COST = 40.0;
     private static final double MIN_REPRODUCTION_ENERGY = 60.0;
-    private static final int MAX_ANCESTRY_DEPTH = 5;
+    /**
+     * Absolute generation counter: 1 for seed microbes, parent.absoluteGeneration + 1
+     * for every child born through reproduction.  Never changes after construction.
+     */
+    private final int absoluteGeneration;
     private static final int SIZE = 5;
     // Mutable simulation state – written by one worker thread per frame,
     // read by the EDT only via getMicrobes() which acquires dataLock (happens-before guaranteed).
@@ -85,6 +96,7 @@ public class Microbe {
     public Microbe(double x, double y) {
         this.id = ID_COUNTER.getAndIncrement();
         this.parentId = -1;
+        this.absoluteGeneration = 1;
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -108,6 +120,7 @@ public class Microbe {
     public Microbe(Microbe parent, double x, double y) {
         this.id = ID_COUNTER.getAndIncrement();
         this.parentId = parent.id;
+        this.absoluteGeneration = parent.absoluteGeneration + 1;
         this.x = x;
         this.y = y;
 
@@ -121,33 +134,43 @@ public class Microbe {
         this.energy = INITIAL_ENERGY;
         this.age = 0;
 
-        // Build ancestry: copy parent's ancestry and add parent as generation 0
-        this.ancestry = new ArrayList<>();
-
-        // Create snapshot of parent (generation 0 = parent)
-        AncestorSnapshot parentSnapshot = new AncestorSnapshot(
-            parent.heatResistance,
-            parent.toxinResistance,
-            parent.speed,
+        // ── Smart ancestry thinning ──────────────────────────────────────
+        // Copy the parent's ancestry list and append the parent itself as the
+        // newest (most-recent) snapshot, using its absolute generation number.
+        List<AncestorSnapshot> newAncestry = new ArrayList<>(parent.getAncestry());
+        newAncestry.add(new AncestorSnapshot(
+                parent.heatResistance,
+                parent.toxinResistance,
+                parent.speed,
                 parent.diet,
-            0
-        );
-        ancestry.add(parentSnapshot);
+                parent.absoluteGeneration   // absolute, not relative
+        ));
 
-        // Copy parent's ancestors, incrementing their generation numbers
-        for (AncestorSnapshot ancestor : parent.ancestry) {
-            if (ancestry.size() >= MAX_ANCESTRY_DEPTH) break;
-            AncestorSnapshot shifted = new AncestorSnapshot(
-                    ancestor.heatResistance(),
-                    ancestor.toxinResistance(),
-                    ancestor.speed(),
-                    ancestor.diet(),
-                    ancestor.generation() + 1
-            );
-            ancestry.add(shifted);
+        // If we have too many snapshots, drop the internal point whose removal
+        // causes the least deviation from an ideally-even distribution across
+        // the full absolute generation timeline (index 0 and the last entry
+        // are always preserved as anchors).
+        if (newAncestry.size() > MAX_SNAPSHOTS) {
+            // Ideal gap between consecutive kept snapshots
+            double idealGap = (double) parent.absoluteGeneration
+                    / (MAX_SNAPSHOTS - 1);
+            double minCost = Double.MAX_VALUE;
+            int indexToRemove = 1; // fallback: always a valid internal index
+
+            for (int i = 1; i < newAncestry.size() - 1; i++) {
+                int gapIfRemoved = newAncestry.get(i + 1).generation()
+                        - newAncestry.get(i - 1).generation();
+                double cost = Math.abs(gapIfRemoved - idealGap);
+                if (cost < minCost) {
+                    minCost = cost;
+                    indexToRemove = i;
+                }
+            }
+            newAncestry.remove(indexToRemove);
         }
 
-        this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
+        this.ancestry = newAncestry;
+        this.unmodifiableAncestry = Collections.unmodifiableList(this.ancestry);
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
         randomizeVelocity();
@@ -450,6 +473,15 @@ public class Microbe {
      */
     public void setSelected(boolean selected) {
         this.isSelected = selected;
+    }
+
+    /**
+     * Returns the absolute generation counter.
+     * Seed microbes have generation 0; each reproduction increments this by 1.
+     * Never mutates after construction, so no synchronisation is required.
+     */
+    public int getAbsoluteGeneration() {
+        return absoluteGeneration;
     }
 
     /**
