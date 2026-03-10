@@ -206,13 +206,15 @@ public class OverlayManager {
         int speedX = lpW - SPEED_BUTTON_WIDTH - OVERLAY_EDGE_MARGIN;
         int speedY = lpH - SPEED_BUTTON_HEIGHT - OVERLAY_EDGE_MARGIN;
 
-        if (speedButton.getParent() != lp) {
-            lp.add(speedButton, JLayeredPane.PALETTE_LAYER);
+        if (speedButton != null) {
+            if (speedButton.getParent() != lp) {
+                lp.add(speedButton, JLayeredPane.PALETTE_LAYER);
+            }
+            speedButton.setBounds(speedX, speedY, SPEED_BUTTON_WIDTH, SPEED_BUTTON_HEIGHT);
+            speedButton.setVisible(true);
+            speedButton.revalidate();
+            speedButton.repaint();
         }
-        speedButton.setBounds(speedX, speedY, SPEED_BUTTON_WIDTH, SPEED_BUTTON_HEIGHT);
-        speedButton.setVisible(true);
-        speedButton.revalidate();
-        speedButton.repaint();
 
         int popX = (lpW - POP_OVERLAY_WIDTH) / 2;
         int popY = contentTop + OVERLAY_EDGE_MARGIN + 5;

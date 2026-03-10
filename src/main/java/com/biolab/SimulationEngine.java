@@ -44,6 +44,16 @@ public class SimulationEngine {
     private final MicrobeGrid microbeGrid;
     private volatile double foodSpawnRate = 0.3;
 
+    // ── Lock-free render snapshot ─────────────────────────────────────────
+
+    /**
+     * Latest snapshot, published atomically (volatile pointer swap) at the end of
+     * every {@code update()} call.  Readers (EDT, DataExporter) access it without
+     * synchronisation.  The lists inside are unmodifiable defensive copies created
+     * under {@code dataLock}.
+     */
+    private volatile RenderSnapshot renderSnapshot = new RenderSnapshot(List.of(), List.of());
+
     /**
      * Creates and initialises the simulation engine.
      *
@@ -83,6 +93,9 @@ public class SimulationEngine {
         for (int i = 0; i < INITIAL_FOOD_COUNT; i++) {
             foodPellets.add(FoodPellet.createRandom(width, height));
         }
+
+        // Publish initial snapshot so the EDT can render before the first update()
+        renderSnapshot = new RenderSnapshot(List.copyOf(microbes), List.copyOf(foodPellets));
     }
 
     /**
@@ -171,7 +184,23 @@ public class SimulationEngine {
                     microbes.add(newbornsCopy.get(i));
                 }
             }
+
+            // Publish an immutable snapshot for lock-free EDT reading.
+            // Both lists are unmodifiable copies created while holding dataLock,
+            // guaranteeing happens-before visibility via the volatile write.
+            renderSnapshot = new RenderSnapshot(
+                    List.copyOf(microbes),
+                    List.copyOf(foodPellets));
         }
+    }
+
+    /**
+     * Returns the latest immutable render snapshot for lock-free reading.
+     * Contains unmodifiable lists of microbes and food pellets.
+     * The snapshot is published atomically (volatile) at the end of each {@code update()}.
+     */
+    public RenderSnapshot getRenderSnapshot() {
+        return renderSnapshot;
     }
 
     /**
@@ -208,22 +237,26 @@ public class SimulationEngine {
     }
 
     /**
-     * Returns a defensive copy of the microbe list for safe rendering on the EDT.
-     * Uses dataLock to prevent reading while update() is modifying the list.
+     * Returns the microbe list from the latest render snapshot.
+     * Lock-free, allocation-free — safe to call from the EDT on every frame.
      */
     public List<Microbe> getMicrobes() {
-        synchronized (dataLock) {
-            return new ArrayList<>(microbes);
-        }
+        return renderSnapshot.microbes();
     }
 
     /**
-     * Returns a defensive copy of the food pellet list for safe rendering on the EDT.
+     * Returns the food pellet list from the latest render snapshot.
+     * Lock-free, allocation-free — safe to call from the EDT on every frame.
      */
     public List<FoodPellet> getFoodPellets() {
-        synchronized (dataLock) {
-            return new ArrayList<>(foodPellets);
-        }
+        return renderSnapshot.food();
+    }
+
+    /**
+     * Returns the current population count. Thread-safe.
+     */
+    public int getPopulationCount() {
+        return renderSnapshot.microbes().size();
     }
 
     /**
@@ -234,11 +267,15 @@ public class SimulationEngine {
     }
 
     /**
-     * Returns the current population count. Thread-safe.
+     * Directly adds a microbe to the simulation.
+     * Intended for sandbox / debug use only – bypasses population caps.
+     *
+     * @param microbe the microbe to inject
      */
-    public int getPopulationCount() {
+    public void spawnMicrobe(Microbe microbe) {
         synchronized (dataLock) {
-            return microbes.size();
+            microbes.add(microbe);
+            renderSnapshot = new RenderSnapshot(List.copyOf(microbes), List.copyOf(foodPellets));
         }
     }
 
@@ -452,15 +489,10 @@ public class SimulationEngine {
     }
 
     /**
-     * Directly adds a microbe to the simulation.
-     * Intended for sandbox / debug use only – bypasses population caps.
-     *
-     * @param microbe the microbe to inject
+     * Immutable snapshot of the simulation state published after each {@code update()}.
+     * The EDT reads this via a single volatile read — no lock, no ArrayList copy.
      */
-    public void spawnMicrobe(Microbe microbe) {
-        synchronized (dataLock) {
-            microbes.add(microbe);
-        }
+    public record RenderSnapshot(List<Microbe> microbes, List<FoodPellet> food) {
     }
 
     /**

@@ -2,6 +2,7 @@ package com.biolab;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 /**
  * Canvas for rendering the simulation world with camera controls (pan, zoom).
@@ -53,6 +54,53 @@ public class SimulationCanvas extends JPanel {
     private static final Color DEBUG_ID_COLOR = new Color(220, 220, 220);
     private static final Font DEBUG_ID_FONT = new Font("Monospaced", Font.PLAIN, 9);
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
+
+    // ── Pre-cached AlphaComposite instances ───────────────────────────────
+    // Avoids AlphaComposite.getInstance() per microbe per frame (thousands of allocations + pipeline flushes).
+    private static final AlphaComposite AC_BRIGHT_FILL = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220f / 255f);
+    private static final AlphaComposite AC_FLASH_GLOW = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f);
+    private static final AlphaComposite AC_FLASH_RING = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.95f);
+    private static final AlphaComposite AC_DEBUG_VISION = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f);
+    private static final AlphaComposite AC_DEBUG_LINE = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f);
+    private static final AlphaComposite AC_DEBUG_ID = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f);
+
+    /**
+     * Quantised AlphaComposite table for health-based glow layers.
+     * 11 steps (0.0 – 1.0 health ratio, step 0.1) × 3 glow rings.
+     * Index: {@code [healthBucket][glowLayer]} where glowLayer 0 = outermost.
+     * Avoids per-microbe AlphaComposite.getInstance() calls.
+     */
+    private static final AlphaComposite[][] GLOW_COMPOSITES = buildGlowTable();
+
+    /**
+     * @param worldWidth        width of the simulation world in world units
+     * @param worldHeight       height of the simulation world in world units
+     * @param canvasWidth       preferred pixel width of the canvas component
+     * @param canvasHeight      preferred pixel height of the canvas component
+     * @param engine            simulation engine to query for render data
+     * @param selectionListener receives microbe click / deselect events
+     */
+    public SimulationCanvas(int worldWidth, int worldHeight, int canvasWidth, int canvasHeight,
+                            SimulationEngine engine, SelectionListener selectionListener) {
+        this.worldWidth = worldWidth;
+        this.worldHeight = worldHeight;
+        this.engine = engine;
+        this.selectionListener = selectionListener;
+        setPreferredSize(new Dimension(canvasWidth, canvasHeight));
+        setBackground(new Color(18, 18, 18));
+        setOpaque(true);    // canvas fills entire area – prevents costly parent repaints
+        setFocusable(true);
+
+        cameraX = worldWidth / 2.0;
+        cameraY = worldHeight / 2.0;
+
+        // follow timer runs independently of the simulation loop to keep the camera smoothly in sync with the render frames, without risking desync from simulation lag spikes or pauses.
+        javax.swing.Timer followTimer = new javax.swing.Timer(16, e -> tickFollowCamera());
+        followTimer.start();
+
+        setupMouseListeners();
+        setupKeyBindings();
+    }
     /**
      * Exponential pull strength per timer tick (~16 ms).
      * Each tick the camera closes this fraction of the remaining distance to
@@ -95,34 +143,18 @@ public class SimulationCanvas extends JPanel {
     // Construction
     // ─────────────────────────────────────────────────────────────────────
 
-    /**
-     * @param worldWidth        width of the simulation world in world units
-     * @param worldHeight       height of the simulation world in world units
-     * @param canvasWidth       preferred pixel width of the canvas component
-     * @param canvasHeight      preferred pixel height of the canvas component
-     * @param engine            simulation engine to query for render data
-     * @param selectionListener receives microbe click / deselect events
-     */
-    public SimulationCanvas(int worldWidth, int worldHeight, int canvasWidth, int canvasHeight,
-                            SimulationEngine engine, SelectionListener selectionListener) {
-        this.worldWidth = worldWidth;
-        this.worldHeight = worldHeight;
-        this.engine = engine;
-        this.selectionListener = selectionListener;
-        setPreferredSize(new Dimension(canvasWidth, canvasHeight));
-        setBackground(new Color(18, 18, 18));
-        setOpaque(false);
-        setFocusable(true);
-
-        cameraX = worldWidth / 2.0;
-        cameraY = worldHeight / 2.0;
-
-        // follow timer runs independently of the simulation loop to keep the camera smoothly in sync with the render frames, without risking desync from simulation lag spikes or pauses.
-        javax.swing.Timer followTimer = new javax.swing.Timer(16, e -> tickFollowCamera());
-        followTimer.start();
-
-        setupMouseListeners();
-        setupKeyBindings();
+    private static AlphaComposite[][] buildGlowTable() {
+        AlphaComposite[][] table = new AlphaComposite[11][3];
+        for (int h = 0; h <= 10; h++) {
+            double healthRatio = h / 10.0;
+            for (int i = 0; i < 3; i++) {
+                int layer = 3 - i;  // layer 3,2,1 matching the loop
+                float alpha = (float) ((20 + layer * 15) * healthRatio / 255.0);
+                alpha = Math.max(0.0f, Math.min(1.0f, alpha));
+                table[h][i] = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha);
+            }
+        }
+        return table;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -321,6 +353,12 @@ public class SimulationCanvas extends JPanel {
 
         Graphics2D g2d = (Graphics2D) g.create();
         try {
+            // ── Read the snapshot ONCE per frame (lock-free, allocation-free) ──
+            SimulationEngine.RenderSnapshot snapshot = engine.getRenderSnapshot();
+            List<Microbe> snapshotMicrobes = snapshot.microbes();
+            List<FoodPellet> snapshotFood = snapshot.food();
+
+            // AA ON for grid lines only – turned OFF before entity rendering
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
             g2d.setColor(WORLD_BG_COLOR);
@@ -352,8 +390,11 @@ public class SimulationCanvas extends JPanel {
             for (int gy = startGridY; gy <= endGridY; gy += GRID_SIZE)
                 g2d.drawLine((int) visibleX1, gy, (int) visibleX2, gy);
 
+            // ── Disable AA for mass entity rendering (tiny ovals don't benefit) ──
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+
             // ── Food pellets ──────────────────────────────────────────────
-            for (FoodPellet food : engine.getFoodPellets()) {
+            for (FoodPellet food : snapshotFood) {
                 if (food == null || food.isConsumed()) continue;
                 double fx = food.getX(), fy = food.getY();
                 if (fx < visibleX1 - 20 || fx > visibleX2 + 20
@@ -376,7 +417,10 @@ public class SimulationCanvas extends JPanel {
 
             // ── Microbes ──────────────────────────────────────────────────
             long nowMs = System.currentTimeMillis();
-            for (Microbe microbe : engine.getMicrobes()) {
+            final Composite defaultComposite = g2d.getComposite();
+            final boolean debugOn = SimulationEngine.DEBUG_MODE;
+
+            for (Microbe microbe : snapshotMicrobes) {
                 if (microbe == null) continue;
                 double mx = microbe.getX(), my = microbe.getY();
                 if (mx < visibleX1 - 20 || mx > visibleX2 + 20
@@ -388,20 +432,19 @@ public class SimulationCanvas extends JPanel {
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
-                // Health-scaled multi-layer glow
-                Composite orig = g2d.getComposite();
-                double healthRatio = microbe.getHealthRatio();
-                for (int i = 3; i > 0; i--) {
-                    float alpha = Math.max(0.0f, Math.min(1.0f, (float) ((20 + i * 15) * healthRatio / 255f)));
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+                // Health-scaled multi-layer glow (cached AlphaComposite lookup)
+                int healthBucket = Math.max(0, Math.min(10, (int) (microbe.getHealthRatio() * 10)));
+                for (int i = 0; i < 3; i++) {
+                    int layer = 3 - i;  // 3, 2, 1
+                    g2d.setComposite(GLOW_COMPOSITES[healthBucket][i]);
                     g2d.setColor(microbeColor);
-                    int gs = size + (i * 4);
-                    g2d.fillOval(x - i * 2, y - i * 2, gs, gs);
+                    int gs = size + (layer * 4);
+                    g2d.fillOval(x - layer * 2, y - layer * 2, gs, gs);
                 }
-                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220 / 255f));
+                g2d.setComposite(AC_BRIGHT_FILL);
                 g2d.setColor(microbe.getBrightColor());
                 g2d.fillOval(x, y, size, size);
-                g2d.setComposite(orig);
+                g2d.setComposite(defaultComposite);
                 g2d.setColor(microbeColor);
                 g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
 
@@ -409,7 +452,7 @@ public class SimulationCanvas extends JPanel {
                 long msSinceAttack = nowMs - microbe.getLastAttackTime();
                 if (microbe.isCarnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
                     // Fade alpha linearly from full → 0 over the flash duration
-                    float flashAlpha = Math.max(0.0f, Math.min(1.0f, (1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS)));
+                    float flashAlpha = Math.max(0.0f, Math.min(1.0f, 1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS));
                     int ringPad = 5;
                     int ringX = x - ringPad;
                     int ringY = y - ringPad;
@@ -428,11 +471,12 @@ public class SimulationCanvas extends JPanel {
                     g2d.setStroke(STROKE_ATTACK);
                     g2d.drawOval(ringX, ringY, ringW, ringH);
 
-                    g2d.setComposite(orig);
+                    g2d.setComposite(defaultComposite);
                     g2d.setStroke(STROKE_1);
                 }
 
                 if (microbe.isSelected()) {
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(SELECTION_GLOW_COLOR);
                     g2d.setStroke(STROKE_3);
                     g2d.drawOval(x - 5, y - 5, size + 10, size + 10);
@@ -441,16 +485,16 @@ public class SimulationCanvas extends JPanel {
                     g2d.drawOval(x - 4, y - 4, size + 8, size + 8);
                     g2d.setStroke(STROKE_1);
                     g2d.drawOval(x - 3, y - 3, size + 6, size + 6);
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
                 }
 
                 // ── Developer Vision (Debug) overlay ──────────────────────
-                if (SimulationEngine.DEBUG_MODE) {
-                    Composite origComp = g2d.getComposite();
+                if (debugOn) {
                     g2d.setStroke(STROKE_DEBUG_LINE);
 
                     // Vision / aggro radius circle
                     int visionR = SimulationEngine.getSpatialCellSize();
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
+                    g2d.setComposite(AC_DEBUG_VISION);
                     g2d.setColor(DEBUG_VISION_COLOR);
                     g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);
 
@@ -459,18 +503,18 @@ public class SimulationCanvas extends JPanel {
                     double tx = microbe.getTargetX();
                     double ty = microbe.getTargetY();
                     if (tx >= 0 && ("HUNT".equals(aiState) || "FLEE".equals(aiState))) {
-                        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f));
+                        g2d.setComposite(AC_DEBUG_LINE);
                         g2d.setColor("HUNT".equals(aiState) ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
                         g2d.drawLine((int) mx, (int) my, (int) tx, (int) ty);
                     }
 
                     // Microbe ID label
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f));
+                    g2d.setComposite(AC_DEBUG_ID);
                     g2d.setColor(DEBUG_ID_COLOR);
                     g2d.setFont(DEBUG_ID_FONT);
                     g2d.drawString(String.valueOf(microbe.getId()), (int) mx + size / 2 + 2, (int) my - size / 2 - 2);
 
-                    g2d.setComposite(origComp);
+                    g2d.setComposite(defaultComposite);
                     g2d.setStroke(STROKE_1);
                 }
             }

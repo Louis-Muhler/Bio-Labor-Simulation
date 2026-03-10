@@ -76,6 +76,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         setupShutdownHook();
         setVisible(true);
         applyDisplayMode();
+        loopController.setRenderFps(settingsManager.getSimulationFps());
         loopController.start();
     }
 
@@ -227,6 +228,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         removeSettingsOverlay();
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
+        loopController.setRenderFps(settingsManager.getSimulationFps());
         applyDisplayMode();           // always – even if nothing changed
         loopController.resume();
         revalidate();

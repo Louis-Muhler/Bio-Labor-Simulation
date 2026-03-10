@@ -23,11 +23,13 @@ public class SettingsManager {
     private static final int DEFAULT_WIDTH = 1920;
     private static final int DEFAULT_HEIGHT = 1080;
     private static final boolean DEFAULT_FULLSCREEN = false;
+    private static final int DEFAULT_SIMULATION_FPS = 60;
 
     // Settings
     private int windowWidth;
     private int windowHeight;
     private boolean fullscreen;
+    private int simulationFps;
 
     /**
      * Creates a SettingsManager and immediately loads persisted settings (or defaults).
@@ -52,6 +54,7 @@ public class SettingsManager {
                 windowWidth = parseIntOrDefault(props.getProperty("window.width"), DEFAULT_WIDTH);
                 windowHeight = parseIntOrDefault(props.getProperty("window.height"), DEFAULT_HEIGHT);
                 fullscreen = Boolean.parseBoolean(props.getProperty("window.fullscreen", String.valueOf(DEFAULT_FULLSCREEN)));
+                simulationFps = parseIntOrDefault(props.getProperty("simulation.fps"), DEFAULT_SIMULATION_FPS);
 
                 // Validate settings
                 validateSettings();
@@ -76,6 +79,7 @@ public class SettingsManager {
         props.setProperty("window.width", String.valueOf(windowWidth));
         props.setProperty("window.height", String.valueOf(windowHeight));
         props.setProperty("window.fullscreen", String.valueOf(fullscreen));
+        props.setProperty("simulation.fps", String.valueOf(simulationFps));
 
         try {
             // Create config directory if it doesn't exist
@@ -101,8 +105,9 @@ public class SettingsManager {
         windowWidth = DEFAULT_WIDTH;
         windowHeight = DEFAULT_HEIGHT;
         fullscreen = DEFAULT_FULLSCREEN;
+        simulationFps = DEFAULT_SIMULATION_FPS;
     }
-    
+
     /**
      * Validates settings to ensure they are within acceptable ranges.
      */
@@ -115,6 +120,10 @@ public class SettingsManager {
         if (windowHeight < 600 || windowHeight > 4320) {
             LOGGER.warning("Invalid height " + windowHeight + ", resetting to default");
             windowHeight = DEFAULT_HEIGHT;
+        }
+        if (simulationFps < 10 || simulationFps > 240) {
+            LOGGER.warning("Invalid simulationFps " + simulationFps + ", resetting to default");
+            simulationFps = DEFAULT_SIMULATION_FPS;
         }
     }
     
@@ -177,5 +186,21 @@ public class SettingsManager {
      */
     public synchronized void setFullscreen(boolean fullscreen) {
         this.fullscreen = fullscreen;
+    }
+
+    /**
+     * Returns the target simulation FPS (10–240). Default is 60.
+     */
+    public synchronized int getSimulationFps() {
+        return simulationFps;
+    }
+
+    /**
+     * Sets the target simulation FPS. Does not persist until {@link #saveSettings()} is called.
+     *
+     * @param fps value clamped to [10, 240]
+     */
+    public synchronized void setSimulationFps(int fps) {
+        this.simulationFps = Math.max(10, Math.min(240, fps));
     }
 }

@@ -30,7 +30,7 @@ public class DebugSandboxApp {
     /**
      * Sandbox world dimensions – intentionally tiny for easy observation.
      */
-    private static final int SANDBOX_WORLD_SIZE = 2500;
+    private static final int SANDBOX_WORLD_SIZE = 800;
 
     /**
      * Microbe counts to spawn manually.

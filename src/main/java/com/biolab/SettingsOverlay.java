@@ -74,6 +74,11 @@ public class SettingsOverlay extends JPanel {
     // ── Stateful UI controls ─────────────────────────────────────────────
     private JCheckBox fullscreenCheck;
     private JComboBox<String> resolutionCombo;
+    /**
+     * Available FPS presets shown in the settings dropdown.
+     */
+    private static final int[] FPS_PRESETS = {15, 30, 60, 120, 144, 240};
+    private JComboBox<String> fpsCombo;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -284,6 +289,19 @@ public class SettingsOverlay extends JPanel {
 
         c.gridy++;
         c.fill = GridBagConstraints.NONE;
+        c.insets = new Insets(0, 0, 6, 0);
+        card.add(createSectionLabel("SIMULATION FPS"), c);
+
+        c.gridy++;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.insets = new Insets(0, 0, 24, 0);
+        String[] fpsLabels = new String[FPS_PRESETS.length];
+        for (int i = 0; i < FPS_PRESETS.length; i++) fpsLabels[i] = FPS_PRESETS[i] + " FPS";
+        fpsCombo = createStyledComboBox(fpsLabels);
+        card.add(fpsCombo, c);
+
+        c.gridy++;
+        c.fill = GridBagConstraints.NONE;
         c.anchor = GridBagConstraints.CENTER;
         c.insets = new Insets(0, 0, 0, 0);
 
@@ -315,6 +333,19 @@ public class SettingsOverlay extends JPanel {
         String key = findResolutionKey(settingsManager.getWindowWidth(),
                 settingsManager.getWindowHeight());
         if (key != null) resolutionCombo.setSelectedItem(key);
+
+        // Select the closest FPS preset to the saved value
+        int savedFps = settingsManager.getSimulationFps();
+        int bestIdx = 0;
+        int bestDiff = Integer.MAX_VALUE;
+        for (int i = 0; i < FPS_PRESETS.length; i++) {
+            int diff = Math.abs(FPS_PRESETS[i] - savedFps);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                bestIdx = i;
+            }
+        }
+        fpsCombo.setSelectedIndex(bestIdx);
     }
 
     /**
@@ -342,6 +373,10 @@ public class SettingsOverlay extends JPanel {
                 settingsManager.setWindowWidth(dim.width);
                 settingsManager.setWindowHeight(dim.height);
             }
+        }
+        int fpsIdx = fpsCombo.getSelectedIndex();
+        if (fpsIdx >= 0 && fpsIdx < FPS_PRESETS.length) {
+            settingsManager.setSimulationFps(FPS_PRESETS[fpsIdx]);
         }
         settingsManager.saveSettings();
         if (onApply != null) onApply.run();
