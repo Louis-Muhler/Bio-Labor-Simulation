@@ -169,48 +169,152 @@ public class SimulationEngine {
 
     /**
      * Processes a chunk of microbes concurrently in a worker thread.
+     *
+     * <h3>Thread-safety notes</h3>
+     * <ul>
+     *   <li>Each microbe in [start,end) is <em>owned</em> by this thread for the
+     *       duration of the frame (chunk partitioning guarantees no two threads
+     *       write the same microbe's movement/age state).</li>
+     *   <li>Combat writes that cross chunk boundaries (damage, knockback, energy
+     *       transfer) are serialised via {@code stateLock} inside the Microbe
+     *       methods, so they are safe even when attacker and victim live in
+     *       different chunks.</li>
+     *   <li>{@code microbeGrid} and {@code foodGrid} are read-only during this
+     *       phase; they were fully built before any worker thread was submitted.</li>
+     * </ul>
      */
     private void processMicrobeChunk(List<Microbe> snapshot, SpatialGrid foodGrid,
                                      MicrobeGrid microbeGrid,
                                      int start, int end, double temperature, double toxicity) {
+        // Tuning constants for combat & steering
+        // Damage per hit: a carnivore needs ~8-12 bites to kill a healthy herbivore
+        final double COMBAT_DAMAGE = 9.0;
+        // How strongly a carnivore steers toward prey (fraction of speed gene per frame)
+        final double HUNT_STEER_STRENGTH = 0.12;
+        // How strongly a herbivore steers away from a predator
+        final double FLEE_STEER_STRENGTH = 0.18;
+        // Maximum speed component added by steering (prevents runaway acceleration)
+        final double MAX_STEER_DELTA = 1.2;
+        // Minimum time (ms) between two attacks by the same carnivore (attack cooldown)
+        final long ATTACK_COOLDOWN_MS = 300;
+
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         for (int i = start; i < end; i++) {
             Microbe microbe = snapshot.get(i);
+            if (microbe.isDead()) continue;
 
-            // Update position
+            // ── 1. Movement ───────────────────────────────────────────────
             microbe.move(width, height);
 
-            // Update health based on environment (natural selection!)
+            // ── 2. Environmental damage (natural selection) ───────────────
             microbe.updateHealth(temperature, toxicity);
 
-            // Food collision detection – only check nearby cells via spatial grid
-            for (FoodPellet food : foodGrid.getNearbyFood(microbe.getX(), microbe.getY())) {
-                if (food.checkCollision(microbe)) {
-                    double energyGain = food.consume();
-                    if (energyGain > 0) {
-                        microbe.eat(energyGain);
+            // ── 3. Predator / Prey interaction ────────────────────────────
+            List<Microbe> neighbours = microbeGrid.getNearbyMicrobes(microbe.getX(), microbe.getY());
+            boolean isCarnivore = microbe.isCarnivore();
+            int size = microbe.getSize();
+
+            if (isCarnivore) {
+                // ── Carnivore: hunt the nearest Herbivore ──────────────────
+                Microbe prey = null;
+                double bestDistSq = Double.MAX_VALUE;
+
+                for (Microbe other : neighbours) {
+                    if (other == microbe || other.isDead() || other.isCarnivore()) continue;
+                    double dx = other.getX() - microbe.getX();
+                    double dy = other.getY() - microbe.getY();
+                    double dSq = dx * dx + dy * dy;
+                    if (dSq < bestDistSq) {
+                        bestDistSq = dSq;
+                        prey = other;
                     }
-                    break;
+                }
+
+                if (prey != null) {
+                    double dx = prey.getX() - microbe.getX();
+                    double dy = prey.getY() - microbe.getY();
+                    double dist = Math.sqrt(bestDistSq);
+
+                    // Steering: nudge velocity toward prey (normalised, scaled)
+                    double steerX = (dx / dist) * microbe.getSpeed() * HUNT_STEER_STRENGTH;
+                    double steerY = (dy / dist) * microbe.getSpeed() * HUNT_STEER_STRENGTH;
+                    steerX = Math.max(-MAX_STEER_DELTA, Math.min(MAX_STEER_DELTA, steerX));
+                    steerY = Math.max(-MAX_STEER_DELTA, Math.min(MAX_STEER_DELTA, steerY));
+                    microbe.applyKnockback(steerX, steerY);   // reuses the velocity-delta method
+
+                    // Combat: bite if within range and cooldown has elapsed
+                    double attackRange = (size + prey.getSize()) * 1.5;
+                    long now = System.currentTimeMillis();
+                    if (dist < attackRange
+                            && !prey.isDead()
+                            && (now - microbe.getLastAttackTime()) >= ATTACK_COOLDOWN_MS) {
+
+                        double energyGain = prey.takeDamageAndTransferEnergy(COMBAT_DAMAGE);
+                        microbe.eat(energyGain);
+                        microbe.markAttack();
+
+                        // Knockback: push prey away from attacker
+                        double kbScale = 2.5 / Math.max(dist, 0.01);
+                        prey.applyKnockback(dx * kbScale, dy * kbScale);
+                    }
+                }
+
+            } else {
+                // ── Herbivore: eat food + flee nearest Carnivore ───────────
+
+                // Food consumption (herbivores only)
+                for (FoodPellet food : foodGrid.getNearbyFood(microbe.getX(), microbe.getY())) {
+                    if (food.checkCollision(microbe)) {
+                        double energyGain = food.consume();
+                        if (energyGain > 0) microbe.eat(energyGain);
+                        break;
+                    }
+                }
+
+                // Find nearest carnivore threat
+                Microbe threat = null;
+                double bestDistSq = Double.MAX_VALUE;
+
+                for (Microbe other : neighbours) {
+                    if (other == microbe || other.isDead() || !other.isCarnivore()) continue;
+                    double dx = other.getX() - microbe.getX();
+                    double dy = other.getY() - microbe.getY();
+                    double dSq = dx * dx + dy * dy;
+                    if (dSq < bestDistSq) {
+                        bestDistSq = dSq;
+                        threat = other;
+                    }
+                }
+
+                if (threat != null) {
+                    double dx = microbe.getX() - threat.getX(); // away vector
+                    double dy = microbe.getY() - threat.getY();
+                    double dist = Math.sqrt(bestDistSq);
+
+                    // Steering: nudge velocity away from threat (normalised, scaled)
+                    double steerX = (dx / dist) * microbe.getSpeed() * FLEE_STEER_STRENGTH;
+                    double steerY = (dy / dist) * microbe.getSpeed() * FLEE_STEER_STRENGTH;
+                    steerX = Math.max(-MAX_STEER_DELTA, Math.min(MAX_STEER_DELTA, steerX));
+                    steerY = Math.max(-MAX_STEER_DELTA, Math.min(MAX_STEER_DELTA, steerY));
+                    microbe.applyKnockback(steerX, steerY);
                 }
             }
 
-            // Attempt reproduction with atomic slot claiming
+            // ── 4. Reproduction ───────────────────────────────────────────
             if (microbe.canReproduce()) {
                 int retryCount = 0;
                 while (retryCount < MAX_REPRODUCTION_ATTEMPTS) {
                     int currentSlots = availableReproductionSlots.get();
-                    if (currentSlots <= 0) {
-                        break;
-                    }
+                    if (currentSlots <= 0) break;
 
                     if (availableReproductionSlots.compareAndSet(currentSlots, currentSlots - 1)) {
                         double offsetX = (random.nextDouble() - 0.5) * 20;
                         double offsetY = (random.nextDouble() - 0.5) * 20;
                         Microbe child = new Microbe(
-                            microbe,
-                            microbe.getX() + offsetX,
-                            microbe.getY() + offsetY
+                                microbe,
+                                microbe.getX() + offsetX,
+                                microbe.getY() + offsetY
                         );
                         synchronized (newMicrobes) {
                             newMicrobes.add(child);

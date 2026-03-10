@@ -33,6 +33,18 @@ public class SimulationCanvas extends JPanel {
     private static final BasicStroke STROKE_1 = new BasicStroke(1);
     private static final BasicStroke STROKE_2 = new BasicStroke(2);
     private static final BasicStroke STROKE_3 = new BasicStroke(3);
+    // ── Predator / attack-flash rendering ────────────────────────────────
+    /**
+     * Extra radius added to carnivore body size so predators look visually larger.
+     */
+    private static final int CARNIVORE_SIZE_BONUS = 2;
+    /**
+     * Duration (ms) for which the red attack-flash ring is visible after a bite.
+     */
+    private static final long ATTACK_FLASH_DURATION_MS = 300;
+    private static final Color ATTACK_RING_COLOR = new Color(255, 30, 30);
+    private static final Color ATTACK_RING_GLOW = new Color(255, 60, 60, 120);
+    private static final BasicStroke STROKE_ATTACK = new BasicStroke(2.5f);
     /**
      * Exponential pull strength per timer tick (~16 ms).
      * Each tick the camera closes this fraction of the remaining distance to
@@ -327,6 +339,7 @@ public class SimulationCanvas extends JPanel {
             }
 
             // ── Microbes ──────────────────────────────────────────────────
+            long nowMs = System.currentTimeMillis();
             for (Microbe microbe : engine.getMicrobes()) {
                 if (microbe == null) continue;
                 double mx = microbe.getX(), my = microbe.getY();
@@ -334,7 +347,8 @@ public class SimulationCanvas extends JPanel {
                         || my < visibleY1 - 20 || my > visibleY2 + 20) continue;
 
                 Color microbeColor = microbe.getColor();
-                int size = microbe.getSize();
+                // Carnivores are drawn slightly larger so they stand out visually
+                int size = microbe.getSize() + (microbe.isCarnivore() ? CARNIVORE_SIZE_BONUS : 0);
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
@@ -355,6 +369,33 @@ public class SimulationCanvas extends JPanel {
                 g2d.setColor(microbeColor);
                 g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
 
+                // ── Attack-flash ring (carnivore recently bit something) ───
+                long msSinceAttack = nowMs - microbe.getLastAttackTime();
+                if (microbe.isCarnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
+                    // Fade alpha linearly from full → 0 over the flash duration
+                    float flashAlpha = 1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS;
+                    int ringPad = 5;
+                    int ringX = x - ringPad;
+                    int ringY = y - ringPad;
+                    int ringW = size + ringPad * 2;
+                    int ringH = size + ringPad * 2;
+
+                    // Outer glow ring
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, flashAlpha * 0.55f));
+                    g2d.setColor(ATTACK_RING_GLOW);
+                    g2d.setStroke(STROKE_3);
+                    g2d.drawOval(ringX - 2, ringY - 2, ringW + 4, ringH + 4);
+
+                    // Sharp inner ring
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, flashAlpha * 0.95f));
+                    g2d.setColor(ATTACK_RING_COLOR);
+                    g2d.setStroke(STROKE_ATTACK);
+                    g2d.drawOval(ringX, ringY, ringW, ringH);
+
+                    g2d.setComposite(orig);
+                    g2d.setStroke(STROKE_1);
+                }
+
                 if (microbe.isSelected()) {
                     g2d.setColor(SELECTION_GLOW_COLOR);
                     g2d.setStroke(STROKE_3);
@@ -363,7 +404,7 @@ public class SimulationCanvas extends JPanel {
                     g2d.setStroke(STROKE_2);
                     g2d.drawOval(x - 4, y - 4, size + 8, size + 8);
                     g2d.setStroke(STROKE_1);
-                    g2d.drawOval(x - 3, y - 3, size + 6, size +  6);
+                    g2d.drawOval(x - 3, y - 3, size + 6, size + 6);
                 }
             }
 

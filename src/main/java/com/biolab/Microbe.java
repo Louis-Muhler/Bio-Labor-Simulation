@@ -91,6 +91,14 @@ public class Microbe {
     private volatile boolean isSelected = false;
 
     /**
+     * Timestamp (ms) of the last successful attack this microbe landed.
+     * Written by the simulation worker thread that owns this microbe's chunk;
+     * read by the EDT for rendering only.  {@code volatile} guarantees visibility
+     * without needing to enter {@code stateLock}.
+     */
+    private volatile long lastAttackTime = 0;
+
+    /**
      * Creates a new microbe with random genes.
      */
     public Microbe(double x, double y) {
@@ -326,6 +334,45 @@ public class Microbe {
     }
 
     /**
+     * Returns {@code true} if this microbe is a Carnivore (diet gene &gt; 0.6).
+     * Carnivores hunt Herbivores and ignore food pellets.
+     */
+    public boolean isCarnivore() {
+        return diet > 0.6;
+    }
+
+    /**
+     * Applies a knockback impulse to this microbe's velocity.
+     * Called from the attacker's worker thread; guarded by {@code stateLock}
+     * because the victim may belong to a different worker thread.
+     *
+     * @param forceX horizontal velocity delta
+     * @param forceY vertical velocity delta
+     */
+    public void applyKnockback(double forceX, double forceY) {
+        synchronized (stateLock) {
+            this.velocityX += forceX;
+            this.velocityY += forceY;
+        }
+    }
+
+    /**
+     * Returns the timestamp (ms) of the last successful attack this microbe landed,
+     * or {@code 0} if it has never attacked.  Used only for visual feedback.
+     */
+    public long getLastAttackTime() {
+        return lastAttackTime;
+    }
+
+    /**
+     * Records that this microbe just successfully attacked.
+     * Must only be called from the worker thread that owns this microbe's chunk.
+     */
+    void markAttack() {
+        lastAttackTime = System.currentTimeMillis();
+    }
+
+    /**
      * Inflicts {@code damage} on this microbe and returns the energy the attacker absorbs.
      *
      * <p>Called from the attacker's worker thread, so the victim may belong to a different
@@ -477,7 +524,7 @@ public class Microbe {
 
     /**
      * Returns the absolute generation counter.
-     * Seed microbes have generation 0; each reproduction increments this by 1.
+     * Seed microbes have generation 1; each reproduction increments this by 1.
      * Never mutates after construction, so no synchronisation is required.
      */
     public int getAbsoluteGeneration() {
