@@ -102,9 +102,9 @@ class FoodPelletTest {
     void checkCollisionBoundaryCase() {
         FoodPellet food = new FoodPellet(100, 100);
         // Place microbe just at the edge of collision distance
-        // collisionDist = FoodPellet.SIZE(6) + Microbe.SIZE(5) = 11
-        Microbe nearMicrobe = new Microbe(110, 100); // dx=10, dy=0, dist=10 < 11
-        Microbe farMicrobe = new Microbe(112, 100);  // dx=12, dy=0, dist=12 > 11
+        // collisionDist = FoodPellet.SIZE(6) + Microbe.getSize()(5 for diet=0.0) = 11
+        Microbe nearMicrobe = new Microbe(110, 100, 0.0); // dx=10, dy=0, dist=10 < 11
+        Microbe farMicrobe = new Microbe(112, 100, 0.0);  // dx=12, dy=0, dist=12 > 11
 
         assertTrue(food.checkCollision(nearMicrobe), "Microbe within collision distance should collide");
         assertFalse(food.checkCollision(farMicrobe), "Microbe outside collision distance should not collide");

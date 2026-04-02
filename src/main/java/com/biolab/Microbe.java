@@ -73,14 +73,13 @@ public class Microbe {
     private static final double INITIAL_ENERGY = 80.0;
     private static final int REPRODUCTION_AGE = 120;
     private static final double MOVEMENT_ENERGY_COST = 0.02;
-    private static final double REPRODUCTION_ENERGY_COST = 40.0;
-    private static final double MIN_REPRODUCTION_ENERGY = 60.0;
+    private static final double REPRODUCTION_ENERGY_COST = 50.0;
+    private static final double MIN_REPRODUCTION_ENERGY = 75.0;
     /**
      * Absolute generation counter: 1 for seed microbes, parent.absoluteGeneration + 1
      * for every child born through reproduction.  Never changes after construction.
      */
     private final int absoluteGeneration;
-    private static final int SIZE = 5;
     // Mutable simulation state – written by one worker thread per frame,
     // read by the EDT only via getMicrobes() which acquires dataLock (happens-before guaranteed).
     private double x;
@@ -182,7 +181,7 @@ public class Microbe {
         this.diet = mutate(parent.diet);
 
         this.health = MAX_HEALTH;
-        this.energy = INITIAL_ENERGY;
+        this.energy = REPRODUCTION_ENERGY_COST;
         this.age = 0;
 
         // ── Smart ancestry thinning ──────────────────────────────────────
@@ -295,8 +294,9 @@ public class Microbe {
         double appliedVX = hasAdrenaline ? velocityX * ADRENALINE_SPEED_MULT : velocityX;
         double appliedVY = hasAdrenaline ? velocityY * ADRENALINE_SPEED_MULT : velocityY;
 
-        x += appliedVX;
-        y += appliedVY;
+        double vitality = getVitality();
+        x += appliedVX * vitality;
+        y += appliedVY * vitality;
 
         // Bounce off world boundaries
         if (x < 0 || x > width) {
@@ -321,9 +321,11 @@ public class Microbe {
     public void updateHealth(double temperature, double toxicity) {
         double heatDamage = temperature * (1.0 - heatResistance) * 0.05;
         double toxinDamage = toxicity * (1.0 - toxinResistance) * 0.05;
+        double vitality = getVitality();
+        double totalDamage = (heatDamage + toxinDamage) / vitality;
 
         synchronized (stateLock) {
-            health -= (heatDamage + toxinDamage);
+            health -= totalDamage;
         }
 
         age++;
@@ -434,9 +436,10 @@ public class Microbe {
      * @param forceY vertical velocity delta (before damping)
      */
     public void applyKnockback(double forceX, double forceY) {
+        double sizeFactor = getSize() / 5.0;
         synchronized (stateLock) {
-            this.velocityX += forceX * KNOCKBACK_DAMPING;
-            this.velocityY += forceY * KNOCKBACK_DAMPING;
+            this.velocityX += (forceX * KNOCKBACK_DAMPING) / sizeFactor;
+            this.velocityY += (forceY * KNOCKBACK_DAMPING) / sizeFactor;
         }
     }
 
@@ -490,17 +493,22 @@ public class Microbe {
      */
     public double takeDamageAndTransferEnergy(double damage) {
         synchronized (stateLock) {
-            double energyTransferred;
-            health -= damage;
+            double vitality = getVitality();
+            double scaledDamage = Math.max(0.0, damage) / vitality;
+            double healthBeforeHit = Math.max(0.0, health);
+            double actualDamage = Math.min(healthBeforeHit, scaledDamage);
+
+            health -= actualDamage;
             // Trigger the adrenaline/panic response on any hit
             adrenalineTimer = System.currentTimeMillis();
-            if (health <= 0) {
-                // Victim dies – attacker claims all remaining energy
-                energyTransferred = energy;
-                energy = 0;
-            } else {
-                // Victim survives – attacker gets energy proportional to damage dealt
-                energyTransferred = (damage / MAX_HEALTH) * MAX_ENERGY;
+
+            // Transfer only what was actually "harvested" by this hit, capped by victim's current energy.
+            double potentialTransfer = (actualDamage / MAX_HEALTH) * MAX_ENERGY;
+            double energyTransferred = Math.min(energy, potentialTransfer);
+            energy -= energyTransferred;
+
+            if (health < 0) {
+                health = 0;
             }
             return energyTransferred;
         }
@@ -515,11 +523,11 @@ public class Microbe {
 
     /**
      * Checks whether a world-space point falls within the click hit area.
-     * The hit radius is {@code 3 × SIZE} so small microbes are easier to select.
+     * The hit radius is {@code 3 × getSize()} so microbes remain easy to select.
      * Uses squared distance to avoid {@code Math.sqrt()}.
      */
     public boolean contains(double px, double py) {
-        final int hitRadius = SIZE * 3;
+        final int hitRadius = getSize() * 3;
         double dx = px - x;
         double dy = py - y;
         return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
@@ -558,7 +566,16 @@ public class Microbe {
      * Returns the visual radius of this microbe.
      */
     public int getSize() {
-        return SIZE;
+        return 5 + (int) (diet * 7);
+    }
+
+    /**
+     * Returns a senescence factor in [0.1, 1.0].
+     * Young microbes are fully vital; old microbes become slower and more fragile.
+     */
+    public double getVitality() {
+        if (age < 1000) return 1.0;
+        return Math.max(0.1, 1.0 - ((age - 1000) / 1500.0));
     }
 
     /**

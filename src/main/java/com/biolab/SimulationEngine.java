@@ -389,7 +389,11 @@ public class SimulationEngine {
                             && !prey.isDead()
                             && (now - microbe.getLastAttackTime()) >= ATTACK_COOLDOWN_MS) {
 
-                        double energyGain = prey.takeDamageAndTransferEnergy(COMBAT_DAMAGE);
+                        double sizeMultiplier = size / (double) Math.max(1, prey.getSize());
+                        sizeMultiplier = Math.max(0.5, Math.min(2.5, sizeMultiplier));
+                        double scaledDamage = COMBAT_DAMAGE * sizeMultiplier;
+
+                        double energyGain = prey.takeDamageAndTransferEnergy(scaledDamage);
                         microbe.eat(energyGain);
                         microbe.markAttack();
 

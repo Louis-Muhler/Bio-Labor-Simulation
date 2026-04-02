@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -90,7 +91,7 @@ public final class DataExporter {
         double temp = env.getTemperature();
         double tox = env.getToxicity();
 
-        String row = String.format("%s,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f%n",
+        String row = String.format(Locale.US, "%s,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f%n",
                 timestamp, population, temp, tox,
                 avgHealth, avgEnergy, avgHeatRes, avgToxRes, avgSpeed, avgDiet);
 
