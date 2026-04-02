@@ -240,7 +240,7 @@ public class SimulationCanvas extends JPanel {
         am.put("toggleDebug", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                SimulationEngine.DEBUG_MODE = !SimulationEngine.DEBUG_MODE;
+                SimulationEngine.toggleDebugMode();
                 repaint();
             }
         });

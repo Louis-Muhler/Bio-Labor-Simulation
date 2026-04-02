@@ -450,21 +450,6 @@ public class Microbe {
         return lastAttackTime;
     }
 
-    /**
-     * Returns the timestamp (ms) at which this microbe last took damage,
-     * or {@code 0} if it has never been hit.  Used for adrenaline/panic logic.
-     */
-    public long getAdrenalineTimer() {
-        return adrenalineTimer;
-    }
-
-    /**
-     * Returns {@code true} if the adrenaline/panic effect is currently active.
-     * Convenience method for renderers and AI code.
-     */
-    public boolean isAdrenalineActive() {
-        return (System.currentTimeMillis() - adrenalineTimer) < ADRENALINE_DURATION_MS;
-    }
 
     /**
      * Records that this microbe just successfully attacked.
