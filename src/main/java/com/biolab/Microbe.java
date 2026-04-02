@@ -15,9 +15,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p><b>Thread-Safety Model:</b> Each microbe is modified by exactly one worker thread
  * per frame (chunk-based partitioning in {@code SimulationEngine.processMicrobeChunk()}).
  * This guarantees write-safety without locks. Mutable fields ({@code x}, {@code y},
- * {@code health}, {@code energy}, {@code age}, {@code velocityX/Y}) are read by the EDT
- * only via {@code getMicrobes()} which acquires {@code dataLock} — establishing a
- * happens-before between worker writes and EDT reads.
+ * {@code health}, {@code energy}, {@code age}, {@code velocityX/Y}) are published to the EDT
+ * through immutable render snapshots created by {@link #toRenderState()} at the end of each
+ * engine update.
  * Only {@code isSelected} is {@code volatile} because it is written directly from the
  * EDT outside the lock.</p>
  */
@@ -80,8 +80,7 @@ public class Microbe {
      * for every child born through reproduction.  Never changes after construction.
      */
     private final int absoluteGeneration;
-    // Mutable simulation state – written by one worker thread per frame,
-    // read by the EDT only via getMicrobes() which acquires dataLock (happens-before guaranteed).
+    // Mutable simulation state – written by one worker thread per frame.
     private double x;
     private double health;
     private double energy;
@@ -655,6 +654,55 @@ public class Microbe {
      */
     public List<AncestorSnapshot> getAncestry() {
         return unmodifiableAncestry;
+    }
+
+    /**
+     * Captures a single immutable snapshot of all render-relevant values.
+     */
+    public RenderState toRenderState() {
+        return new RenderState(
+                id,
+                x,
+                y,
+                getSize(),
+                cachedColor,
+                cachedBrightColor,
+                Math.max(0.0, health / MAX_HEALTH),
+                isCarnivore(),
+                isSelected,
+                lastAttackTime,
+                aiState,
+                targetX,
+                targetY
+        );
+    }
+
+    /**
+     * Immutable state consumed by rendering and hit-testing on the EDT.
+     */
+    public record RenderState(
+            long id,
+            double x,
+            double y,
+            int size,
+            Color color,
+            Color brightColor,
+            double healthRatio,
+            boolean carnivore,
+            boolean selected,
+            long lastAttackTime,
+            String aiState,
+            double targetX,
+            double targetY) {
+        /**
+         * Returns whether a world-space point is inside this microbe's click area.
+         */
+        public boolean contains(double px, double py) {
+            int hitRadius = size * 3;
+            double dx = px - x;
+            double dy = py - y;
+            return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
+        }
     }
 
     // ── AI Intent accessors (debug / Developer Vision) ────────────────────

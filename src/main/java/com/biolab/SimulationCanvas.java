@@ -315,8 +315,11 @@ public class SimulationCanvas extends JPanel {
     private Microbe findMicrobeAtScreenPos(int screenX, int screenY) {
         double worldX = (screenX - getWidth() / 2.0) / zoom + cameraX;
         double worldY = (screenY - getHeight() / 2.0) / zoom + cameraY;
-        for (Microbe m : engine.getMicrobes()) {
-            if (m.contains(worldX, worldY)) return m;
+        SimulationEngine.RenderSnapshot snapshot = engine.getRenderSnapshot();
+        for (Microbe.RenderState m : snapshot.microbes()) {
+            if (m.contains(worldX, worldY)) {
+                return engine.findMicrobeById(m.id());
+            }
         }
         return null;
     }
@@ -353,7 +356,7 @@ public class SimulationCanvas extends JPanel {
         try {
             // ── Read the snapshot ONCE per frame (lock-free, allocation-free) ──
             SimulationEngine.RenderSnapshot snapshot = engine.getRenderSnapshot();
-            List<Microbe> snapshotMicrobes = snapshot.microbes();
+            List<Microbe.RenderState> snapshotMicrobes = snapshot.microbes();
             List<FoodPellet> snapshotFood = snapshot.food();
 
             // AA ON for grid lines only – turned OFF before entity rendering
@@ -418,20 +421,20 @@ public class SimulationCanvas extends JPanel {
             final Composite defaultComposite = g2d.getComposite();
             final boolean debugOn = SimulationEngine.DEBUG_MODE;
 
-            for (Microbe microbe : snapshotMicrobes) {
+            for (Microbe.RenderState microbe : snapshotMicrobes) {
                 if (microbe == null) continue;
-                double mx = microbe.getX(), my = microbe.getY();
+                double mx = microbe.x(), my = microbe.y();
                 if (mx < visibleX1 - 20 || mx > visibleX2 + 20
                         || my < visibleY1 - 20 || my > visibleY2 + 20) continue;
 
-                Color microbeColor = microbe.getColor();
+                Color microbeColor = microbe.color();
                 // Carnivores are drawn slightly larger so they stand out visually
-                int size = microbe.getSize() + (microbe.isCarnivore() ? CARNIVORE_SIZE_BONUS : 0);
+                int size = microbe.size() + (microbe.carnivore() ? CARNIVORE_SIZE_BONUS : 0);
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
                 // Health-scaled multi-layer glow (cached AlphaComposite lookup)
-                int healthBucket = Math.max(0, Math.min(10, (int) (microbe.getHealthRatio() * 10)));
+                int healthBucket = Math.max(0, Math.min(10, (int) (microbe.healthRatio() * 10)));
                 for (int i = 0; i < 3; i++) {
                     int layer = 3 - i;  // 3, 2, 1
                     g2d.setComposite(GLOW_COMPOSITES[healthBucket][i]);
@@ -440,15 +443,15 @@ public class SimulationCanvas extends JPanel {
                     g2d.fillOval(x - layer * 2, y - layer * 2, gs, gs);
                 }
                 g2d.setComposite(AC_BRIGHT_FILL);
-                g2d.setColor(microbe.getBrightColor());
+                g2d.setColor(microbe.brightColor());
                 g2d.fillOval(x, y, size, size);
                 g2d.setComposite(defaultComposite);
                 g2d.setColor(microbeColor);
                 g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
 
                 // ── Attack-flash ring (carnivore recently bit something) ───
-                long msSinceAttack = nowMs - microbe.getLastAttackTime();
-                if (microbe.isCarnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
+                long msSinceAttack = nowMs - microbe.lastAttackTime();
+                if (microbe.carnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
                     // Fade alpha linearly from full → 0 over the flash duration
                     float flashAlpha = Math.max(0.0f, Math.min(1.0f, 1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS));
                     int ringPad = 5;
@@ -473,7 +476,7 @@ public class SimulationCanvas extends JPanel {
                     g2d.setStroke(STROKE_1);
                 }
 
-                if (microbe.isSelected()) {
+                if (microbe.selected()) {
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(SELECTION_GLOW_COLOR);
                     g2d.setStroke(STROKE_3);
@@ -497,9 +500,9 @@ public class SimulationCanvas extends JPanel {
                     g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);
 
                     // AI intent line to target
-                    String aiState = microbe.getAiState();
-                    double tx = microbe.getTargetX();
-                    double ty = microbe.getTargetY();
+                    String aiState = microbe.aiState();
+                    double tx = microbe.targetX();
+                    double ty = microbe.targetY();
                     if (tx >= 0 && ("HUNT".equals(aiState) || "FLEE".equals(aiState))) {
                         g2d.setComposite(AC_DEBUG_LINE);
                         g2d.setColor("HUNT".equals(aiState) ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
@@ -510,7 +513,7 @@ public class SimulationCanvas extends JPanel {
                     g2d.setComposite(AC_DEBUG_ID);
                     g2d.setColor(DEBUG_ID_COLOR);
                     g2d.setFont(DEBUG_ID_FONT);
-                    g2d.drawString(String.valueOf(microbe.getId()), (int) mx + size / 2 + 2, (int) my - size / 2 - 2);
+                    g2d.drawString(String.valueOf(microbe.id()), (int) mx + size / 2 + 2, (int) my - size / 2 - 2);
 
                     g2d.setComposite(defaultComposite);
                     g2d.setStroke(STROKE_1);

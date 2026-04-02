@@ -48,7 +48,7 @@ public class SimulationEngine {
 
     /**
      * Latest snapshot, published atomically (volatile pointer swap) at the end of
-     * every {@code update()} call.  Readers (EDT, DataExporter) access it without
+     * every {@code update()} call.  Readers (EDT) access it without
      * synchronisation.  The lists inside are unmodifiable defensive copies created
      * under {@code dataLock}.
      */
@@ -95,7 +95,10 @@ public class SimulationEngine {
         }
 
         // Publish initial snapshot so the EDT can render before the first update()
-        renderSnapshot = new RenderSnapshot(List.copyOf(microbes), List.copyOf(foodPellets));
+        List<Microbe.RenderState> initialMicrobeStates = microbes.stream()
+                .map(Microbe::toRenderState)
+                .toList();
+        renderSnapshot = new RenderSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
     }
 
     /**
@@ -189,7 +192,7 @@ public class SimulationEngine {
             // Both lists are unmodifiable copies created while holding dataLock,
             // guaranteeing happens-before visibility via the volatile write.
             renderSnapshot = new RenderSnapshot(
-                    List.copyOf(microbes),
+                    microbes.stream().map(Microbe::toRenderState).toList(),
                     List.copyOf(foodPellets));
         }
     }
@@ -237,11 +240,26 @@ public class SimulationEngine {
     }
 
     /**
-     * Returns the microbe list from the latest render snapshot.
-     * Lock-free, allocation-free — safe to call from the EDT on every frame.
+     * Returns a defensive copy of current microbe entities.
+     * Intended for low-frequency operations (e.g. resolving hit-test IDs).
      */
     public List<Microbe> getMicrobes() {
-        return renderSnapshot.microbes();
+        synchronized (dataLock) {
+            return List.copyOf(microbes);
+        }
+    }
+
+    /**
+     * Returns the microbe instance with the given ID, or {@code null} if not found.
+     * Used by EDT hit-testing that runs against immutable render snapshots.
+     */
+    public Microbe findMicrobeById(long id) {
+        synchronized (dataLock) {
+            for (Microbe microbe : microbes) {
+                if (microbe.getId() == id) return microbe;
+            }
+        }
+        return null;
     }
 
     /**
@@ -267,7 +285,9 @@ public class SimulationEngine {
     public void spawnMicrobe(Microbe microbe) {
         synchronized (dataLock) {
             microbes.add(microbe);
-            renderSnapshot = new RenderSnapshot(List.copyOf(microbes), List.copyOf(foodPellets));
+            renderSnapshot = new RenderSnapshot(
+                    microbes.stream().map(Microbe::toRenderState).toList(),
+                    List.copyOf(foodPellets));
         }
     }
 
@@ -482,9 +502,9 @@ public class SimulationEngine {
 
     /**
      * Immutable snapshot of the simulation state published after each {@code update()}.
-     * The EDT reads this via a single volatile read — no lock, no ArrayList copy.
+     * The EDT reads this via a single volatile read — no lock, no entity mutation races.
      */
-    public record RenderSnapshot(List<Microbe> microbes, List<FoodPellet> food) {
+    public record RenderSnapshot(List<Microbe.RenderState> microbes, List<FoodPellet> food) {
     }
 
     /**
