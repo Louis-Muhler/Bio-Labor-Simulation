@@ -283,6 +283,64 @@ public class SimulationEngine {
     }
 
     /**
+     * Captures a serializable snapshot of the full simulation state.
+     */
+    public SimulationState captureState() {
+        synchronized (dataLock) {
+            List<Microbe.PersistedState> microbesState = microbes.stream()
+                    .map(Microbe::toPersistedState)
+                    .toList();
+            List<SimulationState.FoodState> foodState = foodPellets.stream()
+                    .filter(food -> !food.isConsumed())
+                    .map(food -> new SimulationState.FoodState(food.getX(), food.getY()))
+                    .toList();
+            return new SimulationState(
+                    width,
+                    height,
+                    environment.getTemperature(),
+                    environment.getToxicity(),
+                    foodSpawnRate,
+                    microbesState,
+                    foodState,
+                    DEBUG_MODE
+            );
+        }
+    }
+
+    /**
+     * Replaces the current world with a previously captured simulation state.
+     */
+    public void loadState(SimulationState state) {
+        if (state == null) {
+            throw new IllegalArgumentException("state must not be null");
+        }
+        synchronized (dataLock) {
+            microbes.clear();
+            foodPellets.clear();
+            synchronized (newMicrobes) {
+                newMicrobes.clear();
+            }
+
+            for (Microbe.PersistedState m : state.microbes()) {
+                microbes.add(Microbe.fromPersistedState(m));
+            }
+            for (SimulationState.FoodState f : state.food()) {
+                foodPellets.add(new FoodPellet(f.x(), f.y()));
+            }
+
+            environment.setTemperature(state.temperature());
+            environment.setToxicity(state.toxicity());
+            setFoodSpawnRate(state.foodSpawnRate());
+            DEBUG_MODE = state.debugMode();
+
+            renderSnapshot = new RenderSnapshot(
+                    microbes.stream().map(Microbe::toRenderState).toList(),
+                    List.copyOf(foodPellets)
+            );
+        }
+    }
+
+    /**
      * Returns the shared {@link Environment} object (thread-safe via internal synchronisation).
      */
     public Environment getEnvironment() {
@@ -378,15 +436,20 @@ public class SimulationEngine {
         TargetCandidate preyCandidate = findNearestPrey(microbe, neighbours);
         Microbe prey = preyCandidate.target();
         if (prey == null) {
-            microbe.setAiState("WANDER");
+            microbe.setAiState(AiState.WANDER);
             return;
         }
 
         double dx = prey.getX() - microbe.getX();
         double dy = prey.getY() - microbe.getY();
-        double dist = Math.sqrt(preyCandidate.distSq());
+        double distSq = preyCandidate.distSq();
+        if (distSq <= 1e-12) {
+            microbe.setAiState(AiState.WANDER);
+            return;
+        }
+        double dist = Math.sqrt(distSq);
 
-        microbe.setAiState("HUNT");
+        microbe.setAiState(AiState.HUNT);
         microbe.setTargetX(prey.getX());
         microbe.setTargetY(prey.getY());
 
@@ -428,15 +491,20 @@ public class SimulationEngine {
         TargetCandidate threatCandidate = findNearestThreat(microbe, neighbours);
         Microbe threat = threatCandidate.target();
         if (threat == null) {
-            microbe.setAiState("WANDER");
+            microbe.setAiState(AiState.WANDER);
             return;
         }
 
         double dx = microbe.getX() - threat.getX();
         double dy = microbe.getY() - threat.getY();
-        double dist = Math.sqrt(threatCandidate.distSq());
+        double distSq = threatCandidate.distSq();
+        if (distSq <= 1e-12) {
+            microbe.setAiState(AiState.WANDER);
+            return;
+        }
+        double dist = Math.sqrt(distSq);
 
-        microbe.setAiState("FLEE");
+        microbe.setAiState(AiState.FLEE);
         microbe.setTargetX(threat.getX());
         microbe.setTargetY(threat.getY());
 

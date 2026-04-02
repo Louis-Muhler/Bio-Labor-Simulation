@@ -10,7 +10,7 @@ package com.biolab;
  * @param generation      absolute generation number (0 = first generation, monotonically increasing)
  */
 public record AncestorSnapshot(double heatResistance, double toxinResistance, double speed, double diet,
-                               int generation) {
+                               int generation) implements java.io.Serializable {
 
     @Override
     public String toString() {

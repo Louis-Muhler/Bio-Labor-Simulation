@@ -42,7 +42,7 @@ Simulating thousands of agents calculating their behavior, movement, and interac
 
 ### Settings System
 - **Persistent Configuration**: Settings are automatically saved and loaded from `~/.biolabsim/settings.properties`
-- **Settings Overlay**: Access via File menu → Settings or keyboard shortcut (Ctrl+S / Cmd+S)
+- **Settings Overlay**: Access via the gear button in the top-left overlay
   - Automatically pauses simulation when open
   - Semi-transparent overlay with blur effect
   - Close with ESC key or Cancel button

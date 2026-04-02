@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -16,8 +17,10 @@ import java.util.logging.Logger;
 public class SettingsManager {
     private static final Logger LOGGER = Logger.getLogger(SettingsManager.class.getName());
 
-    private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".biolabsim");
-    private static final Path CONFIG_FILE = CONFIG_DIR.resolve("settings.properties");
+    private static final Path DEFAULT_CONFIG_DIR = Path.of(System.getProperty("user.home"), ".biolabsim");
+
+    private final Path configDir;
+    private final Path configFile;
 
     // Default values
     private static final int DEFAULT_WIDTH = 1920;
@@ -35,7 +38,16 @@ public class SettingsManager {
      * Creates a SettingsManager and immediately loads persisted settings (or defaults).
      */
     public SettingsManager() {
-        // Load settings or use defaults
+        this(DEFAULT_CONFIG_DIR);
+    }
+
+    /**
+     * Creates a SettingsManager using a custom configuration directory.
+     * Primarily intended for tests to avoid touching user-home files.
+     */
+    public SettingsManager(Path configDir) {
+        this.configDir = Objects.requireNonNull(configDir, "configDir must not be null");
+        this.configFile = configDir.resolve("settings.properties");
         loadSettings();
     }
     
@@ -46,8 +58,8 @@ public class SettingsManager {
     public synchronized void loadSettings() {
         Properties props = new Properties();
 
-        if (Files.exists(CONFIG_FILE)) {
-            try (InputStream input = Files.newInputStream(CONFIG_FILE)) {
+        if (Files.exists(configFile)) {
+            try (InputStream input = Files.newInputStream(configFile)) {
                 props.load(input);
                 
                 // Parse settings with fallback to defaults
@@ -58,8 +70,8 @@ public class SettingsManager {
 
                 // Validate settings
                 validateSettings();
-                
-                LOGGER.info("Settings loaded successfully from " + CONFIG_FILE);
+
+                LOGGER.info("Settings loaded successfully from " + configFile);
             } catch (IOException | IllegalArgumentException e) {
                 LOGGER.log(Level.WARNING, "Failed to load settings, using defaults", e);
                 setDefaults();
@@ -83,16 +95,16 @@ public class SettingsManager {
 
         try {
             // Create config directory if it doesn't exist
-            if (!Files.exists(CONFIG_DIR)) {
-                Files.createDirectories(CONFIG_DIR);
+            if (!Files.exists(configDir)) {
+                Files.createDirectories(configDir);
             }
             
             // Save properties to file
-            try (OutputStream output = Files.newOutputStream(CONFIG_FILE)) {
+            try (OutputStream output = Files.newOutputStream(configFile)) {
                 props.store(output, "Bio-Lab Simulator Settings");
             }
-            
-            LOGGER.info("Settings saved successfully to " + CONFIG_FILE);
+
+            LOGGER.info("Settings saved successfully to " + configFile);
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Failed to save settings", e);
         }

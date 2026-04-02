@@ -500,12 +500,12 @@ public class SimulationCanvas extends JPanel {
                     g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);
 
                     // AI intent line to target
-                    String aiState = microbe.aiState();
+                    AiState aiState = microbe.aiState();
                     double tx = microbe.targetX();
                     double ty = microbe.targetY();
-                    if (tx >= 0 && ("HUNT".equals(aiState) || "FLEE".equals(aiState))) {
+                    if (tx >= 0 && (aiState == AiState.HUNT || aiState == AiState.FLEE)) {
                         g2d.setComposite(AC_DEBUG_LINE);
-                        g2d.setColor("HUNT".equals(aiState) ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
+                        g2d.setColor(aiState == AiState.HUNT ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
                         g2d.drawLine((int) mx, (int) my, (int) tx, (int) ty);
                     }
 

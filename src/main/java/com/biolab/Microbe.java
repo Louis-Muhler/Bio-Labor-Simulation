@@ -116,20 +116,19 @@ public class Microbe {
     private static final double KNOCKBACK_DAMPING = 0.15;
     /**
      * World-space X coordinate of the microbe's current AI target.
-     * -1 means no active target (WANDER state).
+     * -1 means no active target (wander state).
      * {@code volatile} so the EDT can read it without acquiring stateLock.
      */
     private volatile double targetX = -1;
     /**
      * World-space Y coordinate of the microbe's current AI target.
-     * -1 means no active target (WANDER state).
+     * -1 means no active target (wander state).
      */
     private volatile double targetY = -1;
     /**
-     * Human-readable string describing the current AI state.
-     * One of: "HUNT", "FLEE", "WANDER".
+     * Current typed AI state used by behaviour and debug rendering.
      */
-    private volatile String aiState = "WANDER";
+    private volatile AiState aiState = AiState.WANDER;
     /**
      * Timestamp (ms) at which this microbe last took damage.
      * While within {@code ADRENALINE_DURATION_MS} of this timestamp the microbe
@@ -161,6 +160,53 @@ public class Microbe {
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
         randomizeVelocity();
+    }
+
+    private Microbe(long id,
+                    long parentId,
+                    int absoluteGeneration,
+                    double x,
+                    double y,
+                    double heatResistance,
+                    double toxinResistance,
+                    double speed,
+                    double diet,
+                    double health,
+                    double energy,
+                    int age,
+                    double velocityX,
+                    double velocityY,
+                    boolean selected,
+                    long lastAttackTime,
+                    double targetX,
+                    double targetY,
+                    AiState aiState,
+                    long adrenalineTimer,
+                    List<AncestorSnapshot> ancestry) {
+        this.id = id;
+        this.parentId = parentId;
+        this.absoluteGeneration = absoluteGeneration;
+        this.x = x;
+        this.y = y;
+        this.heatResistance = heatResistance;
+        this.toxinResistance = toxinResistance;
+        this.speed = speed;
+        this.diet = diet;
+        this.health = health;
+        this.energy = energy;
+        this.age = age;
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.isSelected = selected;
+        this.lastAttackTime = lastAttackTime;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.aiState = aiState == null ? AiState.WANDER : aiState;
+        this.adrenalineTimer = adrenalineTimer;
+        this.ancestry = new ArrayList<>(ancestry);
+        this.unmodifiableAncestry = Collections.unmodifiableList(this.ancestry);
+        this.cachedColor = computeColor();
+        this.cachedBrightColor = computeBrightColor();
     }
 
     /**
@@ -330,8 +376,16 @@ public class Microbe {
         age++;
     }
 
-    public boolean isDead() {
-        return health <= 0 || energy <= 0;
+    private static void ensureCounterAtLeast(long nextValueExclusive) {
+        while (true) {
+            long current = ID_COUNTER.get();
+            if (current >= nextValueExclusive) {
+                return;
+            }
+            if (ID_COUNTER.compareAndSet(current, nextValueExclusive)) {
+                return;
+            }
+        }
     }
 
     /**
@@ -498,11 +552,32 @@ public class Microbe {
         }
     }
 
-    /**
-     * Returns the health as a [0.0, 1.0] ratio, used to scale visual glow intensity.
-     */
-    public double getHealthRatio() {
-        return Math.max(0.0, health / MAX_HEALTH);
+    public static Microbe fromPersistedState(PersistedState state) {
+        Microbe microbe = new Microbe(
+                state.id(),
+                state.parentId(),
+                state.absoluteGeneration(),
+                state.x(),
+                state.y(),
+                state.heatResistance(),
+                state.toxinResistance(),
+                state.speed(),
+                state.diet(),
+                state.health(),
+                state.energy(),
+                state.age(),
+                state.velocityX(),
+                state.velocityY(),
+                state.selected(),
+                state.lastAttackTime(),
+                state.targetX(),
+                state.targetY(),
+                state.aiState(),
+                state.adrenalineTimer(),
+                state.ancestry()
+        );
+        ensureCounterAtLeast(state.id() + 1);
+        return microbe;
     }
 
     /**
@@ -562,18 +637,19 @@ public class Microbe {
         return Math.max(0.1, 1.0 - ((age - 1000) / 1500.0));
     }
 
-    /**
-     * Returns current health (0–{@link #MAX_HEALTH}).
-     */
-    public double getHealth() {
-        return health;
+    public boolean isDead() {
+        synchronized (stateLock) {
+            return health <= 0 || energy <= 0;
+        }
     }
 
     /**
-     * Returns current energy (0–{@link #MAX_ENERGY}).
+     * Returns the health as a [0.0, 1.0] ratio, used to scale visual glow intensity.
      */
-    public double getEnergy() {
-        return energy;
+    public double getHealthRatio() {
+        synchronized (stateLock) {
+            return Math.max(0.0, health / MAX_HEALTH);
+        }
     }
 
     /**
@@ -642,9 +718,47 @@ public class Microbe {
     }
 
     /**
+     * Returns current health (0–{@link #MAX_HEALTH}).
+     */
+    public double getHealth() {
+        synchronized (stateLock) {
+            return health;
+        }
+    }
+
+    /**
+     * Returns current energy (0–{@link #MAX_ENERGY}).
+     */
+    public double getEnergy() {
+        synchronized (stateLock) {
+            return energy;
+        }
+    }
+
+    // ── AI Intent accessors (debug / Developer Vision) ────────────────────
+
+    /**
+     * Sets the world-space X of the current AI target.
+     */
+    public void setTargetX(double x) {
+        this.targetX = x;
+    }
+
+    /**
+     * Sets the world-space Y of the current AI target.
+     */
+    public void setTargetY(double y) {
+        this.targetY = y;
+    }
+
+    /**
      * Captures a single immutable snapshot of all render-relevant values.
      */
     public RenderState toRenderState() {
+        double healthRatio;
+        synchronized (stateLock) {
+            healthRatio = Math.max(0.0, health / MAX_HEALTH);
+        }
         return new RenderState(
                 id,
                 x,
@@ -652,13 +766,52 @@ public class Microbe {
                 getSize(),
                 cachedColor,
                 cachedBrightColor,
-                Math.max(0.0, health / MAX_HEALTH),
+                healthRatio,
                 isCarnivore(),
                 isSelected,
                 lastAttackTime,
                 aiState,
                 targetX,
                 targetY
+        );
+    }
+
+    /**
+     * Sets the current AI state.
+     */
+    public void setAiState(AiState state) {
+        this.aiState = state == null ? AiState.WANDER : state;
+    }
+
+    public PersistedState toPersistedState() {
+        double h;
+        double e;
+        synchronized (stateLock) {
+            h = health;
+            e = energy;
+        }
+        return new PersistedState(
+                id,
+                parentId,
+                absoluteGeneration,
+                x,
+                y,
+                velocityX,
+                velocityY,
+                heatResistance,
+                toxinResistance,
+                speed,
+                diet,
+                h,
+                e,
+                age,
+                isSelected,
+                lastAttackTime,
+                targetX,
+                targetY,
+                aiState,
+                adrenalineTimer,
+                List.copyOf(ancestry)
         );
     }
 
@@ -676,7 +829,7 @@ public class Microbe {
             boolean carnivore,
             boolean selected,
             long lastAttackTime,
-            String aiState,
+            AiState aiState,
             double targetX,
             double targetY) {
         /**
@@ -690,47 +843,27 @@ public class Microbe {
         }
     }
 
-    // ── AI Intent accessors (debug / Developer Vision) ────────────────────
-
-    /**
-     * Returns the world-space X of the current AI target, or -1 if none.
-     */
-    public double getTargetX() {
-        return targetX;
-    }
-
-    /**
-     * Sets the world-space X of the current AI target.
-     */
-    public void setTargetX(double x) {
-        this.targetX = x;
-    }
-
-    /**
-     * Returns the world-space Y of the current AI target, or -1 if none.
-     */
-    public double getTargetY() {
-        return targetY;
-    }
-
-    /**
-     * Sets the world-space Y of the current AI target.
-     */
-    public void setTargetY(double y) {
-        this.targetY = y;
-    }
-
-    /**
-     * Returns the current AI state string: "HUNT", "FLEE", or "WANDER".
-     */
-    public String getAiState() {
-        return aiState;
-    }
-
-    /**
-     * Sets the current AI state. Expected values: "HUNT", "FLEE", "WANDER".
-     */
-    public void setAiState(String state) {
-        this.aiState = state;
+    public record PersistedState(
+            long id,
+            long parentId,
+            int absoluteGeneration,
+            double x,
+            double y,
+            double velocityX,
+            double velocityY,
+            double heatResistance,
+            double toxinResistance,
+            double speed,
+            double diet,
+            double health,
+            double energy,
+            int age,
+            boolean selected,
+            long lastAttackTime,
+            double targetX,
+            double targetY,
+            AiState aiState,
+            long adrenalineTimer,
+            List<AncestorSnapshot> ancestry) implements java.io.Serializable {
     }
 }

@@ -2,6 +2,10 @@ package com.biolab;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -9,18 +13,27 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SettingsManagerTest {
 
+    private SettingsManager newIsolatedManager() {
+        try {
+            Path dir = Files.createTempDirectory("biolab-settings-test-");
+            return new SettingsManager(dir);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     // ===== Defaults =====
 
     @Test
     void defaultsShouldBeReasonable() {
-        SettingsManager sm = new SettingsManager();
+        SettingsManager sm = newIsolatedManager();
         assertTrue(sm.getWindowWidth() >= 800, "Default width should be >= 800");
         assertTrue(sm.getWindowHeight() >= 600, "Default height should be >= 600");
     }
 
     @Test
     void setDefaultsShouldResetAllValues() {
-        SettingsManager sm = new SettingsManager();
+        SettingsManager sm = newIsolatedManager();
         sm.setWindowWidth(999);
         sm.setWindowHeight(777);
         sm.setFullscreen(true);
@@ -34,7 +47,7 @@ class SettingsManagerTest {
 
     @Test
     void gettersAndSettersShouldWork() {
-        SettingsManager sm = new SettingsManager();
+        SettingsManager sm = newIsolatedManager();
         sm.setWindowWidth(1280);
         assertEquals(1280, sm.getWindowWidth());
         sm.setWindowHeight(720);
@@ -49,13 +62,19 @@ class SettingsManagerTest {
 
     @Test
     void saveAndLoadShouldPreserveSettings() {
-        SettingsManager sm1 = new SettingsManager();
+        Path dir;
+        try {
+            dir = Files.createTempDirectory("biolab-settings-cycle-");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        SettingsManager sm1 = new SettingsManager(dir);
         sm1.setWindowWidth(1600);
         sm1.setWindowHeight(900);
         sm1.setFullscreen(false);
         sm1.saveSettings();
 
-        SettingsManager sm2 = new SettingsManager();
+        SettingsManager sm2 = new SettingsManager(dir);
         assertEquals(1600, sm2.getWindowWidth());
         assertEquals(900, sm2.getWindowHeight());
         assertFalse(sm2.isFullscreen());
@@ -68,11 +87,17 @@ class SettingsManagerTest {
 
     @Test
     void loadSettingsShouldResetInvalidWidth() {
-        SettingsManager sm = new SettingsManager();
+        Path dir;
+        try {
+            dir = Files.createTempDirectory("biolab-settings-width-");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        SettingsManager sm = new SettingsManager(dir);
         sm.setWindowWidth(100);
         sm.saveSettings();
 
-        SettingsManager sm2 = new SettingsManager();
+        SettingsManager sm2 = new SettingsManager(dir);
         assertEquals(1920, sm2.getWindowWidth(), "Invalid width should be reset to default");
 
         sm2.setDefaults();
@@ -81,11 +106,17 @@ class SettingsManagerTest {
 
     @Test
     void loadSettingsShouldResetInvalidHeight() {
-        SettingsManager sm = new SettingsManager();
+        Path dir;
+        try {
+            dir = Files.createTempDirectory("biolab-settings-height-");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        SettingsManager sm = new SettingsManager(dir);
         sm.setWindowHeight(100);
         sm.saveSettings();
 
-        SettingsManager sm2 = new SettingsManager();
+        SettingsManager sm2 = new SettingsManager(dir);
         assertEquals(1080, sm2.getWindowHeight(), "Invalid height should be reset to default");
 
         sm2.setDefaults();
@@ -96,7 +127,7 @@ class SettingsManagerTest {
 
     @Test
     void synchronizedGettersSettersShouldNotThrow() throws InterruptedException {
-        SettingsManager sm = new SettingsManager();
+        SettingsManager sm = newIsolatedManager();
         int threads = 4;
         int iterations = 1000;
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threads);
