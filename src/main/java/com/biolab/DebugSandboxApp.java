@@ -174,8 +174,11 @@ public class DebugSandboxApp {
 
         // Start simulation loop (overlayManager = null → no population label update)
         SimulationLoopController loop = new SimulationLoopController(
-                engine, canvas, /* overlayManager = */ null, () -> {
-        });
+                engine,
+                canvas,
+                () -> {
+                },
+                null);
         loop.start();
 
         // Shutdown hook – stop loop and engine gracefully on window close

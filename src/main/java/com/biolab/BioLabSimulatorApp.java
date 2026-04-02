@@ -62,8 +62,12 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         overlayManager = new OverlayManager(this::getLayeredPane,
                 inspectorPanel, environmentPanel, envToggleButton, settingsButton, speedButton);
 
-        loopController = new SimulationLoopController(engine, canvas, overlayManager,
-                this::checkDeadSelectedMicrobe);
+        loopController = new SimulationLoopController(
+                engine,
+                canvas,
+                this::checkDeadSelectedMicrobe,
+                population -> SwingUtilities.invokeLater(() -> overlayManager.updatePopulationLabel(population))
+        );
 
         envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
         settingsButton.addActionListener(e -> showSettingsOverlay());

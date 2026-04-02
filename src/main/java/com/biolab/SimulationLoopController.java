@@ -1,6 +1,6 @@
 package com.biolab;
 
-import javax.swing.*;
+import java.util.function.IntConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -27,8 +27,8 @@ public class SimulationLoopController {
 
     private final SimulationEngine engine;
     private final SimulationCanvas canvas;
-    private final OverlayManager overlayManager;
     private final Runnable onDeadMicrobeCheck;
+    private final IntConsumer onPopulationUpdated;
 
     private volatile boolean running = true;
     private volatile boolean paused = false;
@@ -46,11 +46,12 @@ public class SimulationLoopController {
     private long lastRenderTime = System.nanoTime();
 
     public SimulationLoopController(SimulationEngine engine, SimulationCanvas canvas,
-                                    OverlayManager overlayManager, Runnable onDeadMicrobeCheck) {
+                                    Runnable onDeadMicrobeCheck,
+                                    IntConsumer onPopulationUpdated) {
         this.engine = engine;
         this.canvas = canvas;
-        this.overlayManager = overlayManager;
         this.onDeadMicrobeCheck = onDeadMicrobeCheck;
+        this.onPopulationUpdated = onPopulationUpdated;
         // Both default to 30 TPS / 60 render-FPS until callers set them explicitly.
         this.frameIntervalNs = 1_000_000_000L / (BASE_TPS * SPEED_MULTIPLIERS[0]);
         this.renderIntervalNs = 1_000_000_000L / 60;
@@ -134,15 +135,15 @@ public class SimulationLoopController {
     }
 
     /**
-     * Periodically updates the population count display (once per second).
+     * Emits the population count once per second to the optional observer callback.
      */
     private void updatePopulationDisplay() {
-        if (overlayManager == null) return;
+        if (onPopulationUpdated == null) return;
         long currentTime = System.nanoTime();
         if (currentTime - lastPopulationUpdateTime >= 1_000_000_000) {
             lastPopulationUpdateTime = currentTime;
             int population = engine.getPopulationCount();
-            SwingUtilities.invokeLater(() -> overlayManager.updatePopulationLabel(population));
+            onPopulationUpdated.accept(population);
         }
     }
 
