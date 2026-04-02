@@ -142,18 +142,35 @@ class MicrobeTest {
         Microbe child = new Microbe(parent, 100, 100);
 
         assertFalse(child.getAncestry().isEmpty(), "Child should have ancestry");
-        assertEquals(0, child.getAncestry().get(0).generation(), "First ancestor should be generation 0 (parent)");
+        assertEquals(parent.getAbsoluteGeneration(), child.getAncestry().get(0).generation(),
+                "First ancestry entry should be the direct parent generation for first child");
     }
 
     @Test
-    void ancestryDepthShouldBeLimited() {
+    void ancestryShouldUseSmartThinningAndKeepPatientZeroAnchor() {
         // Create a chain of generations
         Microbe current = new Microbe(100, 100);
         for (int i = 0; i < 20; i++) {
             current = new Microbe(current, 100, 100);
         }
-        assertTrue(current.getAncestry().size() <= 5,
-                "Ancestry should be limited to MAX_ANCESTRY_DEPTH (5), was: " + current.getAncestry().size());
+
+        var ancestry = current.getAncestry();
+        assertFalse(ancestry.isEmpty(), "Deep lineage should retain ancestry snapshots");
+        assertTrue(ancestry.size() <= 10,
+                "Ancestry should be limited to MAX_SNAPSHOTS (10), was: " + ancestry.size());
+
+        int patientZeroGeneration = ancestry.get(0).generation();
+        assertTrue(patientZeroGeneration == 0 || patientZeroGeneration == 1,
+                "0th ancestry index should be Patient Zero (gen 0 or 1), was: " + patientZeroGeneration);
+
+        int lastGeneration = ancestry.get(ancestry.size() - 1).generation();
+        assertEquals(current.getAbsoluteGeneration() - 1, lastGeneration,
+                "Newest ancestry snapshot should stay anchored to the direct parent generation");
+
+        for (int i = 1; i < ancestry.size(); i++) {
+            assertTrue(ancestry.get(i).generation() > ancestry.get(i - 1).generation(),
+                    "Smart-thinned ancestry must stay in strictly increasing absolute-generation order");
+        }
     }
 
     @Test

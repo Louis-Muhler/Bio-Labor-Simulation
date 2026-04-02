@@ -245,14 +245,6 @@ public class SimulationEngine {
     }
 
     /**
-     * Returns the food pellet list from the latest render snapshot.
-     * Lock-free, allocation-free — safe to call from the EDT on every frame.
-     */
-    public List<FoodPellet> getFoodPellets() {
-        return renderSnapshot.food();
-    }
-
-    /**
      * Returns the current population count. Thread-safe.
      */
     public int getPopulationCount() {
@@ -397,10 +389,6 @@ public class SimulationEngine {
                         microbe.eat(energyGain);
                         microbe.markAttack();
 
-                        if (DEBUG_MODE) {
-                            System.out.printf("[COMBAT] Carnivore ID:%d attacked Herbivore ID:%d%n",
-                                    microbe.getId(), prey.getId());
-                        }
 
                         // Knockback: normalised direction × flat force (5.0 world-units/frame).
                         // applyKnockback() further damps this by 0.15, giving a real delta of 0.75.

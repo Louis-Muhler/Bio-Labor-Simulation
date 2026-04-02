@@ -58,8 +58,6 @@ public class SimulationCanvas extends JPanel {
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
     // Avoids AlphaComposite.getInstance() per microbe per frame (thousands of allocations + pipeline flushes).
     private static final AlphaComposite AC_BRIGHT_FILL = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220f / 255f);
-    private static final AlphaComposite AC_FLASH_GLOW = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f);
-    private static final AlphaComposite AC_FLASH_RING = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.95f);
     private static final AlphaComposite AC_DEBUG_VISION = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f);
     private static final AlphaComposite AC_DEBUG_LINE = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f);
     private static final AlphaComposite AC_DEBUG_ID = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f);

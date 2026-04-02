@@ -143,7 +143,6 @@ public class SimulationLoopController {
             lastPopulationUpdateTime = currentTime;
             int population = engine.getPopulationCount();
             SwingUtilities.invokeLater(() -> overlayManager.updatePopulationLabel(population));
-            DataExporter.logSimulationData(engine.getMicrobes(), engine.getEnvironment());
         }
     }
 
