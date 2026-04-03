@@ -57,19 +57,10 @@ public class SimulationCanvas extends JPanel {
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
 
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
-    // Avoids AlphaComposite.getInstance() per microbe per frame (thousands of allocations + pipeline flushes).
-    private static final AlphaComposite AC_BRIGHT_FILL = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220f / 255f);
+    // Avoids AlphaComposite.getInstance() per frame for debug overlays.
     private static final AlphaComposite AC_DEBUG_VISION = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f);
     private static final AlphaComposite AC_DEBUG_LINE = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f);
     private static final AlphaComposite AC_DEBUG_ID = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f);
-
-    /**
-     * Quantised AlphaComposite table for health-based glow layers.
-     * 11 steps (0.0 – 1.0 health ratio, step 0.1) × 3 glow rings.
-     * Index: {@code [healthBucket][glowLayer]} where glowLayer 0 = outermost.
-     * Avoids per-microbe AlphaComposite.getInstance() calls.
-     */
-    private static final AlphaComposite[][] GLOW_COMPOSITES = buildGlowTable();
 
     private final SimulationRuntime engine;
     /**
@@ -141,20 +132,6 @@ public class SimulationCanvas extends JPanel {
     // ─────────────────────────────────────────────────────────────────────
     // Construction
     // ─────────────────────────────────────────────────────────────────────
-
-    private static AlphaComposite[][] buildGlowTable() {
-        AlphaComposite[][] table = new AlphaComposite[11][3];
-        for (int h = 0; h <= 10; h++) {
-            double healthRatio = h / 10.0;
-            for (int i = 0; i < 3; i++) {
-                int layer = 3 - i;  // layer 3,2,1 matching the loop
-                float alpha = (float) ((20 + layer * 15) * healthRatio / 255.0);
-                alpha = Math.max(0.0f, Math.min(1.0f, alpha));
-                table[h][i] = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha);
-            }
-        }
-        return table;
-    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Mouse input
@@ -434,21 +411,16 @@ public class SimulationCanvas extends JPanel {
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
-                // Health-scaled multi-layer glow (cached AlphaComposite lookup)
-                int healthBucket = Math.max(0, Math.min(10, (int) (microbe.healthRatio() * 10)));
-                for (int i = 0; i < 3; i++) {
-                    int layer = 3 - i;  // 3, 2, 1
-                    g2d.setComposite(GLOW_COMPOSITES[healthBucket][i]);
-                    g2d.setColor(microbeColor);
-                    int gs = size + (layer * 4);
-                    g2d.fillOval(x - layer * 2, y - layer * 2, gs, gs);
-                }
-                g2d.setComposite(AC_BRIGHT_FILL);
-                g2d.setColor(microbe.brightColor());
-                g2d.fillOval(x, y, size, size);
-                g2d.setComposite(defaultComposite);
-                g2d.setColor(microbeColor);
-                g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
+                MicrobeRenderStyle.drawCore(
+                        g2d,
+                        x,
+                        y,
+                        size,
+                        microbeColor,
+                        microbe.brightColor(),
+                        microbe.healthRatio(),
+                        defaultComposite
+                );
 
                 // Defense ring: high defense microbes get a thicker outer shell.
                 float defense = (float) Math.max(0.0, Math.min(1.0, microbe.defense()));

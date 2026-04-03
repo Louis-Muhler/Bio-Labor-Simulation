@@ -8,6 +8,7 @@ import java.awt.geom.Path2D;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Inspector panel that displays live data for a selected {@link Microbe}.
@@ -262,8 +263,7 @@ public class InspectorPanel extends JPanel {
                     mousePos = e.getPoint();
                     HoveredPoint prev = hoveredPoint;
                     hoveredPoint = findHoveredPoint(mousePos);
-                    if (prev != hoveredPoint &&
-                            (prev == null || !prev.equals(hoveredPoint))) {
+                    if (!Objects.equals(prev, hoveredPoint)) {
                         repaint();
                     }
                 }
@@ -662,32 +662,19 @@ public class InspectorPanel extends JPanel {
             int baseY = cy - size / 2;
 
             Color mc = microbe.getColor();
-            Color brightColor = new Color(
-                    Math.min(255, mc.getRed() + 40),
-                    Math.min(255, mc.getGreen() + 40),
-                    Math.min(255, mc.getBlue() + 40));
 
             Composite orig = g2.getComposite();
-            double healthRatio = microbe.getHealthRatio();
 
-            // ── Exact copy of SimulationCanvas glow loop ──────────────────
-            for (int i = 3; i > 0; i--) {
-                float alpha = (float) ((20 + i * 15) * healthRatio / 255f);
-                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, alpha)));
-                g2.setColor(mc);
-                int glowSize = size + (int) (i * 4 * PREVIEW_SCALE);
-                g2.fillOval(x - (int) (i * 2 * PREVIEW_SCALE), baseY - (int) (i * 2 * PREVIEW_SCALE), glowSize, glowSize);
-            }
-
-            // ── Bright inner layer ─────────────────────────────────────────
-            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 220 / 255f));
-            g2.setColor(brightColor);
-            g2.fillOval(x, baseY, size, size);
-
-            // ── Base colour ────────────────────────────────────────────────
-            g2.setComposite(orig);
-            g2.setColor(mc);
-            g2.fillOval(x + 1, baseY + 1, size - 2, size - 2);
+            MicrobeRenderStyle.drawCore(
+                    g2,
+                    x,
+                    baseY,
+                    size,
+                    mc,
+                    microbe.getBrightColor(),
+                    microbe.getHealthRatio(),
+                    orig
+            );
         }
 
         private record DataPoint(int generation, double value) {

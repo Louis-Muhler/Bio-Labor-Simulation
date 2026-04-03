@@ -31,10 +31,8 @@ public class SimulationEngine implements SimulationRuntime {
     private final ExecutorService executorService;
     private static final int INITIAL_FOOD_COUNT = 1200;
     private static final int MAX_FOOD_PELLETS = 6000;
-    private final ConcurrentLinkedQueue<SimulationCommand> commandQueue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentHashMap<SimulationCommand.CommandKey, SimulationCommand> coalescedCommands =
-            new ConcurrentHashMap<>();
-    private final AtomicInteger queuedCommandCount = new AtomicInteger();
+    private final SimulationCommandProcessor commandProcessor =
+            new SimulationCommandProcessor(MAX_QUEUED_COMMANDS);
     private final ConcurrentHashMap<Long, Microbe> microbeById = new ConcurrentHashMap<>();
     /**
      * When {@code true}, the engine logs combat events to stdout and the canvas
@@ -62,6 +60,11 @@ public class SimulationEngine implements SimulationRuntime {
     private static final int SHUTDOWN_NOW_TIMEOUT_SECONDS = 1;
     private static final int SPATIAL_CELL_SIZE = 30;
     private final Object dataLock = new Object();
+    /**
+     * Serializes full-frame world mutation with state capture/load operations.
+     * This guarantees that persistence never interleaves with worker-thread updates.
+     */
+    private final Object frameMutationLock = new Object();
     private final SpatialGrid spatialGrid;
     private final MicrobeGrid microbeGrid;
     private volatile double foodSpawnRate = 0.75;
@@ -142,20 +145,21 @@ public class SimulationEngine implements SimulationRuntime {
      * This method is always called from the SimulationLoop thread (single writer).
      */
     public void update() {
-        if (executorService.isShutdown()) return;
+        synchronized (frameMutationLock) {
+            if (executorService.isShutdown()) return;
 
-        // Apply queued UI-originated commands on the simulation thread.
-        processPendingCommands();
+            // Apply queued UI-originated commands on the simulation thread.
+            processPendingCommands();
 
         // Get current environmental conditions (thread-safe)
-        final double temp = environment.getTemperature();
-        final double tox = environment.getToxicity();
+            final double temp = environment.getTemperature();
+            final double tox = environment.getToxicity();
 
-        final List<Microbe> snapshot;
-        final List<FoodPellet> foodSnapshot;
+            final List<Microbe> snapshot;
+            final List<FoodPellet> foodSnapshot;
 
         // Lock only for reading/modifying the shared lists
-        synchronized (dataLock) {
+            synchronized (dataLock) {
             // Calculate available slots for reproduction this frame
             int currentPop = microbes.size();
             int availableSlots = Math.max(0, MAX_POPULATION - currentPop);
@@ -170,47 +174,47 @@ public class SimulationEngine implements SimulationRuntime {
             // Create snapshots for safe chunk-based parallel processing
             snapshot = new ArrayList<>(microbes);
             foodSnapshot = new ArrayList<>(foodPellets);
-        }
-
-        final int microbeCount = snapshot.size();
-        if (microbeCount == 0) {
-            synchronized (dataLock) {
-                foodPellets.removeIf(FoodPellet::isConsumed);
-                renderSnapshot = new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
             }
-            return;
-        }
+
+            final int microbeCount = snapshot.size();
+            if (microbeCount == 0) {
+                synchronized (dataLock) {
+                    foodPellets.removeIf(FoodPellet::isConsumed);
+                    renderSnapshot = new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
+                }
+                return;
+            }
 
         // Rebuild spatial grid for O(1) food lookup
-        spatialGrid.rebuild(foodSnapshot);
+            spatialGrid.rebuild(foodSnapshot);
         // Rebuild microbe spatial index for O(1) neighbor lookup
-        microbeGrid.rebuild(snapshot);
+            microbeGrid.rebuild(snapshot);
 
-        int chunkSize = Math.max(1, microbeCount / THREAD_COUNT);
-        List<Future<?>> futures = new ArrayList<>();
+            int chunkSize = Math.max(1, microbeCount / THREAD_COUNT);
+            List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < microbeCount; i += chunkSize) {
-            final int start = i;
-            final int end = Math.min(i + chunkSize, microbeCount);
-            Future<?> future = executorService.submit(() -> processMicrobeChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
-            futures.add(future);
-        }
+            for (int i = 0; i < microbeCount; i += chunkSize) {
+                final int start = i;
+                final int end = Math.min(i + chunkSize, microbeCount);
+                Future<?> future = executorService.submit(() -> processMicrobeChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
+                futures.add(future);
+            }
 
         // Wait for all worker threads to complete
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
-                return;
-            } catch (ExecutionException e) {
-                LOGGER.log(Level.SEVERE, "Error during microbe chunk processing", e.getCause());
+            for (Future<?> future : futures) {
+                try {
+                    future.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
+                    return;
+                } catch (ExecutionException e) {
+                    LOGGER.log(Level.SEVERE, "Error during microbe chunk processing", e.getCause());
+                }
             }
-        }
 
         // Lock for list modifications (remove dead, add newborns)
-        synchronized (dataLock) {
+            synchronized (dataLock) {
             microbes.removeIf(Microbe::isDead);
             microbeById.entrySet().removeIf(e -> e.getValue().isDead());
             foodPellets.removeIf(FoodPellet::isConsumed);
@@ -241,9 +245,10 @@ public class SimulationEngine implements SimulationRuntime {
             // Publish an immutable snapshot for lock-free EDT reading.
             // Both lists are unmodifiable copies created while holding dataLock,
             // guaranteeing happens-before visibility via the volatile write.
-            renderSnapshot = new SimulationSnapshot(
-                    microbes.stream().map(Microbe::toRenderState).toList(),
-                    List.copyOf(foodPellets));
+                renderSnapshot = new SimulationSnapshot(
+                        microbes.stream().map(Microbe::toRenderState).toList(),
+                        List.copyOf(foodPellets));
+            }
         }
     }
 
@@ -258,44 +263,11 @@ public class SimulationEngine implements SimulationRuntime {
 
     @Override
     public void enqueueCommand(SimulationCommand command) {
-        if (command == null) return;
-        SimulationCommand.CommandKey key = command.coalescingKey();
-        if (key != null) {
-            coalescedCommands.put(key, command);
-            return;
-        }
-
-        int size = queuedCommandCount.incrementAndGet();
-        if (size > MAX_QUEUED_COMMANDS) {
-            queuedCommandCount.decrementAndGet();
-            return;
-        }
-        commandQueue.offer(command);
+        commandProcessor.enqueue(command);
     }
 
     private void processPendingCommands() {
-        SimulationCommand command;
-        while ((command = commandQueue.poll()) != null) {
-            queuedCommandCount.decrementAndGet();
-            try {
-                command.apply(this);
-            } catch (RuntimeException ex) {
-                LOGGER.log(Level.WARNING, "Failed to execute simulation command", ex);
-            }
-        }
-
-        if (!coalescedCommands.isEmpty()) {
-            List<SimulationCommand.CommandKey> keys = new ArrayList<>(coalescedCommands.keySet());
-            for (SimulationCommand.CommandKey key : keys) {
-                SimulationCommand latest = coalescedCommands.remove(key);
-                if (latest == null) continue;
-                try {
-                    latest.apply(this);
-                } catch (RuntimeException ex) {
-                    LOGGER.log(Level.WARNING, "Failed to execute coalesced simulation command", ex);
-                }
-            }
-        }
+        commandProcessor.processPending(this, LOGGER);
     }
 
     /**
@@ -351,24 +323,26 @@ public class SimulationEngine implements SimulationRuntime {
      * Captures a serializable snapshot of the full simulation state.
      */
     public SimulationState captureState() {
-        synchronized (dataLock) {
-            List<Microbe.PersistedState> microbesState = microbes.stream()
-                    .map(Microbe::toPersistedState)
-                    .toList();
-            List<SimulationState.FoodState> foodState = foodPellets.stream()
-                    .filter(food -> !food.isConsumed())
-                    .map(food -> new SimulationState.FoodState(food.getX(), food.getY()))
-                    .toList();
-            return new SimulationState(
-                    width,
-                    height,
-                    environment.getTemperature(),
-                    environment.getToxicity(),
-                    foodSpawnRate,
-                    microbesState,
-                    foodState,
-                    debugMode.get()
-            );
+        synchronized (frameMutationLock) {
+            synchronized (dataLock) {
+                List<Microbe.PersistedState> microbesState = microbes.stream()
+                        .map(Microbe::toPersistedState)
+                        .toList();
+                List<SimulationState.FoodState> foodState = foodPellets.stream()
+                        .filter(food -> !food.isConsumed())
+                        .map(food -> new SimulationState.FoodState(food.getX(), food.getY()))
+                        .toList();
+                return new SimulationState(
+                        width,
+                        height,
+                        environment.getTemperature(),
+                        environment.getToxicity(),
+                        foodSpawnRate,
+                        microbesState,
+                        foodState,
+                        debugMode.get()
+                );
+            }
         }
     }
 
@@ -384,34 +358,36 @@ public class SimulationEngine implements SimulationRuntime {
                     + state.worldWidth() + "x" + state.worldHeight()
                     + " do not match runtime world " + width + "x" + height);
         }
-        synchronized (dataLock) {
-            microbes.clear();
-            foodPellets.clear();
-            synchronized (newMicrobes) {
-                newMicrobes.clear();
-            }
+        synchronized (frameMutationLock) {
+            synchronized (dataLock) {
+                microbes.clear();
+                foodPellets.clear();
+                synchronized (newMicrobes) {
+                    newMicrobes.clear();
+                }
 
-            for (Microbe.PersistedState m : state.microbes()) {
-                microbes.add(Microbe.fromPersistedState(m));
-            }
-            for (SimulationState.FoodState f : state.food()) {
-                foodPellets.add(new FoodPellet(f.x(), f.y()));
-            }
+                for (Microbe.PersistedState m : state.microbes()) {
+                    microbes.add(Microbe.fromPersistedState(m));
+                }
+                for (SimulationState.FoodState f : state.food()) {
+                    foodPellets.add(new FoodPellet(f.x(), f.y()));
+                }
 
-            environment.setTemperature(state.temperature());
-            environment.setToxicity(state.toxicity());
-            setFoodSpawnRate(state.foodSpawnRate());
-            debugMode.set(state.debugMode());
+                environment.setTemperature(state.temperature());
+                environment.setToxicity(state.toxicity());
+                setFoodSpawnRate(state.foodSpawnRate());
+                debugMode.set(state.debugMode());
 
-            microbeById.clear();
-            for (Microbe microbe : microbes) {
-                microbeById.put(microbe.getId(), microbe);
+                microbeById.clear();
+                for (Microbe microbe : microbes) {
+                    microbeById.put(microbe.getId(), microbe);
+                }
+
+                renderSnapshot = new SimulationSnapshot(
+                        microbes.stream().map(Microbe::toRenderState).toList(),
+                        List.copyOf(foodPellets)
+                );
             }
-
-            renderSnapshot = new SimulationSnapshot(
-                    microbes.stream().map(Microbe::toRenderState).toList(),
-                    List.copyOf(foodPellets)
-            );
         }
     }
 
@@ -429,12 +405,14 @@ public class SimulationEngine implements SimulationRuntime {
      * @param microbe the microbe to inject
      */
     public void spawnMicrobe(Microbe microbe) {
-        synchronized (dataLock) {
-            microbes.add(microbe);
-            microbeById.put(microbe.getId(), microbe);
-            renderSnapshot = new SimulationSnapshot(
-                    microbes.stream().map(Microbe::toRenderState).toList(),
-                    List.copyOf(foodPellets));
+        synchronized (frameMutationLock) {
+            synchronized (dataLock) {
+                microbes.add(microbe);
+                microbeById.put(microbe.getId(), microbe);
+                renderSnapshot = new SimulationSnapshot(
+                        microbes.stream().map(Microbe::toRenderState).toList(),
+                        List.copyOf(foodPellets));
+            }
         }
     }
 

@@ -1,7 +1,5 @@
 package com.biolab;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-
 import javax.swing.*;
 import java.awt.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -42,18 +40,7 @@ public class DebugSandboxApp {
      * Entry point.  Bootstraps the Swing UI on the EDT with debug mode enabled.
      */
     public static void main(String[] args) {
-        // Enable FlatLaf native window decorations
-        JFrame.setDefaultLookAndFeelDecorated(true);
-        JDialog.setDefaultLookAndFeelDecorated(true);
-
-        UIManager.put("RootPane.background", new Color(18, 18, 18));
-        UIManager.put("TitlePane.background", new Color(18, 18, 18));
-        UIManager.put("TitlePane.inactiveBackground", new Color(18, 18, 18));
-        UIManager.put("TitlePane.foreground", new Color(200, 200, 200));
-        UIManager.put("TitlePane.inactiveForeground", new Color(130, 130, 130));
-        UIManager.put("TitlePane.unifiedBackground", true);
-
-        FlatDarkLaf.setup();
+        AppThemeBootstrap.installDarkTheme();
 
         SwingUtilities.invokeLater(() -> {
             try {

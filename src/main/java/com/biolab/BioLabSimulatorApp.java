@@ -1,7 +1,5 @@
 package com.biolab;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
@@ -88,21 +86,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
      * Application entry point – bootstraps the Swing UI on the EDT.
      */
     public static void main(String[] args) {
-        // Enable FlatLaf's native window decorations (provides OS frame, resize,
-        // Aero Snap, shadow, rounded corners). This replaces setUndecorated(true).
-        JFrame.setDefaultLookAndFeelDecorated(true);
-        JDialog.setDefaultLookAndFeelDecorated(true);
-
-        // Set title bar colors BEFORE setup() so FlatLaf uses them as defaults.
-        // #121212 = rgb(18,18,18) matches the app background.
-        UIManager.put("RootPane.background", new Color(18, 18, 18));
-        UIManager.put("TitlePane.background", new Color(18, 18, 18));
-        UIManager.put("TitlePane.inactiveBackground", new Color(18, 18, 18));
-        UIManager.put("TitlePane.foreground", new Color(200, 200, 200));
-        UIManager.put("TitlePane.inactiveForeground", new Color(130, 130, 130));
-        UIManager.put("TitlePane.unifiedBackground", true);
-
-        FlatDarkLaf.setup();
+        AppThemeBootstrap.installDarkTheme();
 
         SwingUtilities.invokeLater(() -> {
             try {
