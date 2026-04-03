@@ -83,25 +83,31 @@ public class MicrobeGrid {
      * was processed; callers should guard with {@link Microbe#isDead()} if needed)
      */
     public List<Microbe> getNearbyMicrobes(double x, double y) {
+        List<Microbe> nearby = new ArrayList<>();
+        fillNearbyMicrobes(x, y, nearby);
+        return nearby;
+    }
+
+    /**
+     * Writes nearby microbes into a caller-provided buffer to avoid per-query allocations.
+     */
+    public void fillNearbyMicrobes(double x, double y, List<Microbe> out) {
+        out.clear();
         int centerCol = Math.min((int) (x / cellSize), cols - 1);
         int centerRow = Math.min((int) (y / cellSize), rows - 1);
         centerCol = Math.max(0, centerCol);
         centerRow = Math.max(0, centerRow);
 
-        // Determine the 3×3 neighborhood bounds
         int minCol = Math.max(0, centerCol - 1);
         int maxCol = Math.min(cols - 1, centerCol + 1);
         int minRow = Math.max(0, centerRow - 1);
         int maxRow = Math.min(rows - 1, centerRow + 1);
 
-        // Collect microbes from the 3×3 neighborhood
-        List<Microbe> nearby = new ArrayList<>();
         for (int row = minRow; row <= maxRow; row++) {
             for (int col = minCol; col <= maxCol; col++) {
-                nearby.addAll(cells.get(row * cols + col));
+                out.addAll(cells.get(row * cols + col));
             }
         }
-        return nearby;
     }
 
     /**

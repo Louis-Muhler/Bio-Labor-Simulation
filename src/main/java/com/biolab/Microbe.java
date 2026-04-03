@@ -56,7 +56,7 @@ public class Microbe {
      * Thread A may now write to a microbe that is owned by Thread B.
      */
     private final Object stateLock = new Object();
-    private double y;
+    private volatile double y;
     private double velocityX;
     private double velocityY;
     // Ancestry tracking for evolution visualization
@@ -81,7 +81,7 @@ public class Microbe {
      */
     private final int absoluteGeneration;
     // Mutable simulation state – written by one worker thread per frame.
-    private double x;
+    private volatile double x;
     private double health;
     private double energy;
     private int age;

@@ -75,25 +75,31 @@ public class SpatialGrid {
      * @return list of food pellets in the 3×3 neighborhood (may contain consumed pellets)
      */
     public List<FoodPellet> getNearbyFood(double x, double y) {
+        List<FoodPellet> nearby = new ArrayList<>();
+        fillNearbyFood(x, y, nearby);
+        return nearby;
+    }
+
+    /**
+     * Writes nearby food into a caller-provided buffer to avoid per-query allocations.
+     */
+    public void fillNearbyFood(double x, double y, List<FoodPellet> out) {
+        out.clear();
         int centerCol = Math.min((int) (x / cellSize), cols - 1);
         int centerRow = Math.min((int) (y / cellSize), rows - 1);
         centerCol = Math.max(0, centerCol);
         centerRow = Math.max(0, centerRow);
 
-        // Determine the neighborhood bounds
         int minCol = Math.max(0, centerCol - 1);
         int maxCol = Math.min(cols - 1, centerCol + 1);
         int minRow = Math.max(0, centerRow - 1);
         int maxRow = Math.min(rows - 1, centerRow + 1);
 
-        // Collect pellets from the 3×3 neighborhood
-        List<FoodPellet> nearby = new ArrayList<>();
         for (int row = minRow; row <= maxRow; row++) {
             for (int col = minCol; col <= maxCol; col++) {
-                nearby.addAll(cells.get(row * cols + col));
+                out.addAll(cells.get(row * cols + col));
             }
         }
-        return nearby;
     }
 
     /**

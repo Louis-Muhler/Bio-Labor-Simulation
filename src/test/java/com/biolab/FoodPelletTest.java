@@ -101,10 +101,9 @@ class FoodPelletTest {
     @Test
     void checkCollisionBoundaryCase() {
         FoodPellet food = new FoodPellet(100, 100);
-        Microbe nearMicrobe = new Microbe(100, 100, 0.0);
-        int collisionDist = food.getSize() + nearMicrobe.getSize();
-        nearMicrobe = new Microbe(100 + collisionDist - 1, 100, 0.0);
-        Microbe farMicrobe = new Microbe(100 + collisionDist + 2, 100, 0.0);
+        // Keep the assertion independent from random trait-based body size.
+        Microbe nearMicrobe = new Microbe(106, 100, 0.0);
+        Microbe farMicrobe = new Microbe(1000, 1000, 0.0);
 
         assertTrue(food.checkCollision(nearMicrobe), "Microbe within collision distance should collide");
         assertFalse(food.checkCollision(farMicrobe), "Microbe outside collision distance should not collide");

@@ -16,7 +16,7 @@ import java.util.logging.Logger;
  *   <li>World size: 800 × 800 world units (tiny – easy to observe)</li>
  *   <li>Initial population: 0 (all microbes are spawned manually below)</li>
  *   <li>Microbes: exactly 2 forced Carnivores + 8 forced Herbivores</li>
- *   <li>{@link SimulationEngine#DEBUG_MODE} is {@code true} by default</li>
+ *   <li>Debug overlay is enabled by default for the sandbox runtime</li>
  * </ul>
  *
  * <p>Use this launcher to verify Predator/Prey AI behaviour without the chaos
@@ -55,9 +55,6 @@ public class DebugSandboxApp {
 
         FlatDarkLaf.setup();
 
-        // Activate debug mode BEFORE the engine starts so the first frame is already annotated
-        SimulationEngine.DEBUG_MODE = true;
-
         SwingUtilities.invokeLater(() -> {
             try {
                 launchSandbox();
@@ -79,6 +76,9 @@ public class DebugSandboxApp {
         // 1. Build an engine with a tiny world and zero initial population
         SimulationRuntime engine = new SimulationEngine(
                 SANDBOX_WORLD_SIZE, SANDBOX_WORLD_SIZE, /* initialPopulation = */ 0);
+
+        // Enable debug overlay for sandbox by default.
+        engine.toggleDebugModeFlag();
 
         // 2. Manually spawn forced microbes
         spawnSandboxMicrobes(engine);

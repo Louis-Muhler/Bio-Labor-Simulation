@@ -6,15 +6,49 @@ package com.biolab;
 @FunctionalInterface
 public interface SimulationCommand {
     static SimulationCommand setTemperature(double value) {
-        return runtime -> runtime.getEnvironment().setTemperature(value);
+        return new SimulationCommand() {
+            @Override
+            public void apply(SimulationRuntime runtime) {
+                runtime.getEnvironment().setTemperature(value);
+            }
+
+            @Override
+            public CommandKey coalescingKey() {
+                return CommandKey.SET_TEMPERATURE;
+            }
+        };
     }
 
     static SimulationCommand setToxicity(double value) {
-        return runtime -> runtime.getEnvironment().setToxicity(value);
+        return new SimulationCommand() {
+            @Override
+            public void apply(SimulationRuntime runtime) {
+                runtime.getEnvironment().setToxicity(value);
+            }
+
+            @Override
+            public CommandKey coalescingKey() {
+                return CommandKey.SET_TOXICITY;
+            }
+        };
     }
 
     static SimulationCommand setFoodSpawnRate(double value) {
-        return runtime -> runtime.setFoodSpawnRate(value);
+        return new SimulationCommand() {
+            @Override
+            public void apply(SimulationRuntime runtime) {
+                runtime.setFoodSpawnRate(value);
+            }
+
+            @Override
+            public CommandKey coalescingKey() {
+                return CommandKey.SET_FOOD_SPAWN_RATE;
+            }
+        };
+    }
+
+    default CommandKey coalescingKey() {
+        return null;
     }
 
     static SimulationCommand toggleDebugMode() {
@@ -22,6 +56,12 @@ public interface SimulationCommand {
     }
 
     void apply(SimulationRuntime runtime);
+
+    enum CommandKey {
+        SET_TEMPERATURE,
+        SET_TOXICITY,
+        SET_FOOD_SPAWN_RATE
+    }
 }
 
 

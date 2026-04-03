@@ -4,7 +4,7 @@ package com.biolab;
  * Read-focused view of the simulation state used by UI and inspection code.
  */
 public interface SimulationWorld {
-    SimulationEngine.RenderSnapshot getRenderSnapshot();
+    SimulationSnapshot getRenderSnapshot();
 
     Microbe findLivingChild(long parentId);
 

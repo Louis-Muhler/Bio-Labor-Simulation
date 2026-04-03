@@ -25,7 +25,6 @@ class SimulationCommandQueueTest {
 
     @Test
     void queuedDebugToggleShouldSwitchDebugFlag() {
-        SimulationEngine.DEBUG_MODE = false;
         SimulationEngine engine = new SimulationEngine(300, 300, 1);
 
         engine.enqueueCommand(SimulationCommand.toggleDebugMode());
@@ -39,7 +38,27 @@ class SimulationCommandQueueTest {
         assertFalse(engine.isDebugModeEnabled());
 
         engine.shutdown();
-        SimulationEngine.DEBUG_MODE = false;
+    }
+
+    @Test
+    void burstSliderCommandsShouldCoalesceToLatestValues() {
+        SimulationEngine engine = new SimulationEngine(300, 300, 1);
+
+        for (int i = 0; i < 10_000; i++) {
+            double value = (i % 1000) / 1000.0;
+            engine.enqueueCommand(SimulationCommand.setTemperature(value));
+            engine.enqueueCommand(SimulationCommand.setToxicity(1.0 - value));
+            engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(value));
+        }
+
+        engine.update();
+
+        double expected = 0.999;
+        assertEquals(expected, engine.getEnvironment().getTemperature(), 0.0001);
+        assertEquals(1.0 - expected, engine.getEnvironment().getToxicity(), 0.0001);
+        assertEquals(expected, engine.getFoodSpawnRate(), 0.0001);
+
+        engine.shutdown();
     }
 }
 

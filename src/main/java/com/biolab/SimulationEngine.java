@@ -14,12 +14,7 @@ import java.util.logging.Logger;
 public class SimulationEngine implements SimulationRuntime {
     private static final Logger LOGGER = Logger.getLogger(SimulationEngine.class.getName());
 
-    /**
-     * When {@code true}, the engine logs combat events to stdout and the canvas
-     * renders debug overlays (AI target lines, vision radii, IDs).
-     * Toggle at runtime via the 'D' key in {@link SimulationCanvas}.
-     */
-    public static volatile boolean DEBUG_MODE = false;
+    private static final int MAX_QUEUED_COMMANDS = 4096;
 
     private static final double COMBAT_DAMAGE = 7.0;
 
@@ -36,6 +31,16 @@ public class SimulationEngine implements SimulationRuntime {
     private static final int INITIAL_FOOD_COUNT = 1200;
     private static final int MAX_FOOD_PELLETS = 6000;
     private final ConcurrentLinkedQueue<SimulationCommand> commandQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentHashMap<SimulationCommand.CommandKey, SimulationCommand> coalescedCommands =
+            new ConcurrentHashMap<>();
+    private final AtomicInteger queuedCommandCount = new AtomicInteger();
+    private final ConcurrentHashMap<Long, Microbe> microbeById = new ConcurrentHashMap<>();
+    /**
+     * When {@code true}, the engine logs combat events to stdout and the canvas
+     * renders debug overlays (AI target lines, vision radii, IDs).
+     * Toggle at runtime via the 'D' key in {@link SimulationCanvas}.
+     */
+    private volatile boolean debugMode = false;
     private static final int MAX_POPULATION = 20000;
     private static final int MAX_REPRODUCTION_ATTEMPTS = 5;
     private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
@@ -51,7 +56,7 @@ public class SimulationEngine implements SimulationRuntime {
      * synchronisation.  The lists inside are unmodifiable defensive copies created
      * under {@code dataLock}.
      */
-    private volatile RenderSnapshot renderSnapshot;
+    private volatile SimulationSnapshot renderSnapshot;
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 2;
     private static final int SHUTDOWN_NOW_TIMEOUT_SECONDS = 1;
     private static final int SPATIAL_CELL_SIZE = 30;
@@ -61,24 +66,6 @@ public class SimulationEngine implements SimulationRuntime {
     private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
-
-    /**
-     * Toggles debug mode atomically and returns the new state.
-     */
-    public static synchronized boolean toggleDebugMode() {
-        DEBUG_MODE = !DEBUG_MODE;
-        return DEBUG_MODE;
-    }
-
-    @Override
-    public boolean toggleDebugModeFlag() {
-        return toggleDebugMode();
-    }
-
-    @Override
-    public boolean isDebugModeEnabled() {
-        return DEBUG_MODE;
-    }
 
     /**
      * Creates and initialises the simulation engine.
@@ -113,7 +100,9 @@ public class SimulationEngine implements SimulationRuntime {
         for (int i = 0; i < initialPopulation; i++) {
             double x = random.nextDouble() * width;
             double y = random.nextDouble() * height;
-            microbes.add(new Microbe(x, y));
+            Microbe seeded = new Microbe(x, y);
+            microbes.add(seeded);
+            microbeById.put(seeded.getId(), seeded);
         }
 
         for (int i = 0; i < INITIAL_FOOD_COUNT; i++) {
@@ -124,7 +113,21 @@ public class SimulationEngine implements SimulationRuntime {
         List<Microbe.RenderState> initialMicrobeStates = microbes.stream()
                 .map(Microbe::toRenderState)
                 .toList();
-        renderSnapshot = new RenderSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
+        renderSnapshot = new SimulationSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
+    }
+
+    /**
+     * Toggles debug mode atomically and returns the new state.
+     */
+    @Override
+    public boolean toggleDebugModeFlag() {
+        debugMode = !debugMode;
+        return debugMode;
+    }
+
+    @Override
+    public boolean isDebugModeEnabled() {
+        return debugMode;
     }
 
     /**
@@ -167,7 +170,7 @@ public class SimulationEngine implements SimulationRuntime {
         if (microbeCount == 0) {
             synchronized (dataLock) {
                 foodPellets.removeIf(FoodPellet::isConsumed);
-                renderSnapshot = new RenderSnapshot(List.of(), List.copyOf(foodPellets));
+                renderSnapshot = new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
             }
             return;
         }
@@ -203,6 +206,7 @@ public class SimulationEngine implements SimulationRuntime {
         // Lock for list modifications (remove dead, add newborns)
         synchronized (dataLock) {
             microbes.removeIf(Microbe::isDead);
+            microbeById.entrySet().removeIf(e -> e.getValue().isDead());
             foodPellets.removeIf(FoodPellet::isConsumed);
 
             // Add newborns within population limit
@@ -216,17 +220,22 @@ public class SimulationEngine implements SimulationRuntime {
 
             if (currentPopulation + newbornCount <= MAX_POPULATION) {
                 microbes.addAll(newbornsCopy);
+                for (Microbe newborn : newbornsCopy) {
+                    microbeById.put(newborn.getId(), newborn);
+                }
             } else {
                 int allowedNewborns = Math.max(0, MAX_POPULATION - currentPopulation);
                 for (int i = 0; i < allowedNewborns && i < newbornCount; i++) {
-                    microbes.add(newbornsCopy.get(i));
+                    Microbe newborn = newbornsCopy.get(i);
+                    microbes.add(newborn);
+                    microbeById.put(newborn.getId(), newborn);
                 }
             }
 
             // Publish an immutable snapshot for lock-free EDT reading.
             // Both lists are unmodifiable copies created while holding dataLock,
             // guaranteeing happens-before visibility via the volatile write.
-            renderSnapshot = new RenderSnapshot(
+            renderSnapshot = new SimulationSnapshot(
                     microbes.stream().map(Microbe::toRenderState).toList(),
                     List.copyOf(foodPellets));
         }
@@ -237,23 +246,48 @@ public class SimulationEngine implements SimulationRuntime {
      * Contains unmodifiable lists of microbes and food pellets.
      * The snapshot is published atomically (volatile) at the end of each {@code update()}.
      */
-    public RenderSnapshot getRenderSnapshot() {
+    public SimulationSnapshot getRenderSnapshot() {
         return renderSnapshot;
     }
 
     @Override
     public void enqueueCommand(SimulationCommand command) {
         if (command == null) return;
+        SimulationCommand.CommandKey key = command.coalescingKey();
+        if (key != null) {
+            coalescedCommands.put(key, command);
+            return;
+        }
+
+        int size = queuedCommandCount.incrementAndGet();
+        if (size > MAX_QUEUED_COMMANDS) {
+            queuedCommandCount.decrementAndGet();
+            return;
+        }
         commandQueue.offer(command);
     }
 
     private void processPendingCommands() {
         SimulationCommand command;
         while ((command = commandQueue.poll()) != null) {
+            queuedCommandCount.decrementAndGet();
             try {
                 command.apply(this);
             } catch (RuntimeException ex) {
                 LOGGER.log(Level.WARNING, "Failed to execute simulation command", ex);
+            }
+        }
+
+        if (!coalescedCommands.isEmpty()) {
+            List<SimulationCommand.CommandKey> keys = new ArrayList<>(coalescedCommands.keySet());
+            for (SimulationCommand.CommandKey key : keys) {
+                SimulationCommand latest = coalescedCommands.remove(key);
+                if (latest == null) continue;
+                try {
+                    latest.apply(this);
+                } catch (RuntimeException ex) {
+                    LOGGER.log(Level.WARNING, "Failed to execute coalesced simulation command", ex);
+                }
             }
         }
     }
@@ -306,12 +340,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Used by EDT hit-testing that runs against immutable render snapshots.
      */
     public Microbe findMicrobeById(long id) {
-        synchronized (dataLock) {
-            for (Microbe microbe : microbes) {
-                if (microbe.getId() == id) return microbe;
-            }
-        }
-        return null;
+        return microbeById.get(id);
     }
 
     /**
@@ -341,7 +370,7 @@ public class SimulationEngine implements SimulationRuntime {
                     foodSpawnRate,
                     microbesState,
                     foodState,
-                    DEBUG_MODE
+                    debugMode
             );
         }
     }
@@ -375,9 +404,14 @@ public class SimulationEngine implements SimulationRuntime {
             environment.setTemperature(state.temperature());
             environment.setToxicity(state.toxicity());
             setFoodSpawnRate(state.foodSpawnRate());
-            DEBUG_MODE = state.debugMode();
+            debugMode = state.debugMode();
 
-            renderSnapshot = new RenderSnapshot(
+            microbeById.clear();
+            for (Microbe microbe : microbes) {
+                microbeById.put(microbe.getId(), microbe);
+            }
+
+            renderSnapshot = new SimulationSnapshot(
                     microbes.stream().map(Microbe::toRenderState).toList(),
                     List.copyOf(foodPellets)
             );
@@ -400,7 +434,8 @@ public class SimulationEngine implements SimulationRuntime {
     public void spawnMicrobe(Microbe microbe) {
         synchronized (dataLock) {
             microbes.add(microbe);
-            renderSnapshot = new RenderSnapshot(
+            microbeById.put(microbe.getId(), microbe);
+            renderSnapshot = new SimulationSnapshot(
                     microbes.stream().map(Microbe::toRenderState).toList(),
                     List.copyOf(foodPellets));
         }
@@ -452,6 +487,8 @@ public class SimulationEngine implements SimulationRuntime {
                                      MicrobeGrid microbeGrid,
                                      int start, int end, double temperature, double toxicity) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<Microbe> nearbyMicrobes = new ArrayList<>(64);
+        List<FoodPellet> nearbyFood = new ArrayList<>(64);
 
         for (int i = start; i < end; i++) {
             Microbe microbe = snapshot.get(i);
@@ -464,11 +501,12 @@ public class SimulationEngine implements SimulationRuntime {
             microbe.updateHealth(temperature, toxicity);
 
             // ── 3. Predator / Prey interaction ────────────────────────────
-            List<Microbe> neighbours = microbeGrid.getNearbyMicrobes(microbe.getX(), microbe.getY());
+            microbeGrid.fillNearbyMicrobes(microbe.getX(), microbe.getY(), nearbyMicrobes);
             if (microbe.isCarnivore()) {
-                processCarnivoreBehaviour(microbe, neighbours);
+                processCarnivoreBehaviour(microbe, nearbyMicrobes);
             } else {
-                processHerbivoreBehaviour(microbe, neighbours, foodGrid);
+                foodGrid.fillNearbyFood(microbe.getX(), microbe.getY(), nearbyFood);
+                processHerbivoreBehaviour(microbe, nearbyMicrobes, nearbyFood);
             }
 
             // ── 4. Reproduction ───────────────────────────────────────────
@@ -523,8 +561,7 @@ public class SimulationEngine implements SimulationRuntime {
         prey.applyKnockback(kx, ky);
     }
 
-    private void processHerbivoreBehaviour(Microbe microbe, List<Microbe> neighbours, SpatialGrid foodGrid) {
-        List<FoodPellet> nearbyFood = foodGrid.getNearbyFood(microbe.getX(), microbe.getY());
+    private void processHerbivoreBehaviour(Microbe microbe, List<Microbe> neighbours, List<FoodPellet> nearbyFood) {
 
         // Try immediate consumption first.
         for (FoodPellet food : nearbyFood) {
@@ -663,8 +700,6 @@ public class SimulationEngine implements SimulationRuntime {
      * Immutable snapshot of the simulation state published after each {@code update()}.
      * The EDT reads this via a single volatile read — no lock, no entity mutation races.
      */
-    public record RenderSnapshot(List<Microbe.RenderState> microbes, List<FoodPellet> food) {
-    }
 
     /**
      * Shuts down the thread pool gracefully.

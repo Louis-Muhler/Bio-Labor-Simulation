@@ -316,7 +316,7 @@ public class SimulationCanvas extends JPanel {
     private Microbe findMicrobeAtScreenPos(int screenX, int screenY) {
         double worldX = (screenX - getWidth() / 2.0) / zoom + cameraX;
         double worldY = (screenY - getHeight() / 2.0) / zoom + cameraY;
-        SimulationEngine.RenderSnapshot snapshot = engine.getRenderSnapshot();
+        SimulationSnapshot snapshot = engine.getRenderSnapshot();
         for (Microbe.RenderState m : snapshot.microbes()) {
             if (m.contains(worldX, worldY)) {
                 return engine.findMicrobeById(m.id());
@@ -356,7 +356,7 @@ public class SimulationCanvas extends JPanel {
         Graphics2D g2d = (Graphics2D) g.create();
         try {
             // ── Read the snapshot ONCE per frame (lock-free, allocation-free) ──
-            SimulationEngine.RenderSnapshot snapshot = engine.getRenderSnapshot();
+            SimulationSnapshot snapshot = engine.getRenderSnapshot();
             List<Microbe.RenderState> snapshotMicrobes = snapshot.microbes();
             List<FoodPellet> snapshotFood = snapshot.food();
 
