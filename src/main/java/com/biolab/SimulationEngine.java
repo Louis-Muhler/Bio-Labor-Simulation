@@ -95,8 +95,8 @@ public class SimulationEngine implements SimulationRuntime {
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        List<Microbe> microbes = worldState.microbes();
-        ConcurrentHashMap<Long, Microbe> microbeById = worldState.microbeById();
+        List<Microbe> microbes = worldState.population().microbes();
+        ConcurrentHashMap<Long, Microbe> microbeById = worldState.index().byId();
         for (int i = 0; i < initialPopulation; i++) {
             double x = random.nextDouble() * width;
             double y = random.nextDouble() * height;
@@ -105,7 +105,7 @@ public class SimulationEngine implements SimulationRuntime {
             microbeById.put(seeded.getId(), seeded);
         }
 
-        List<FoodPellet> foodPellets = worldState.foodPellets();
+        List<FoodPellet> foodPellets = worldState.food().pellets();
         for (int i = 0; i < INITIAL_FOOD_COUNT; i++) {
             foodPellets.add(FoodPellet.createRandom(width, height));
         }
@@ -183,7 +183,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Used by EDT hit-testing that runs against immutable render snapshots.
      */
     public Microbe findMicrobeById(long id) {
-        return worldState.microbeById().get(id);
+        return worldState.index().byId().get(id);
     }
 
     /**

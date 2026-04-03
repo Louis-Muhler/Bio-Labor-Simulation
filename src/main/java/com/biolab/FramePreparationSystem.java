@@ -32,8 +32,8 @@ final class FramePreparationSystem {
 
     FrameBatch prepare(double foodSpawnRate) {
         synchronized (worldState.dataLock()) {
-            List<Microbe> microbes = worldState.microbes();
-            List<FoodPellet> foodPellets = worldState.foodPellets();
+            List<Microbe> microbes = worldState.population().microbes();
+            List<FoodPellet> foodPellets = worldState.food().pellets();
             int currentPop = microbes.size();
             int availableSlots = Math.max(0, maxPopulation - currentPop);
             availableReproductionSlots.set(availableSlots);

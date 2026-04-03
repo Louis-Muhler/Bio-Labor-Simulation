@@ -15,7 +15,7 @@ final class MicrobeLookupService {
 
     Microbe findLivingChild(long parentId) {
         synchronized (worldState.dataLock()) {
-            List<Microbe> microbes = worldState.microbes();
+            List<Microbe> microbes = worldState.population().microbes();
             for (Microbe m : microbes) {
                 if (!m.isDead() && m.getParentId() == parentId) return m;
             }
@@ -25,7 +25,7 @@ final class MicrobeLookupService {
 
     Microbe findRandomLivingMicrobe() {
         synchronized (worldState.dataLock()) {
-            List<Microbe> microbes = worldState.microbes();
+            List<Microbe> microbes = worldState.population().microbes();
             if (microbes.isEmpty()) return null;
             int idx = ThreadLocalRandom.current().nextInt(microbes.size());
             return microbes.get(idx);

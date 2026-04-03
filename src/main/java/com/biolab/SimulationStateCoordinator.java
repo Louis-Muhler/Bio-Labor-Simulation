@@ -27,8 +27,8 @@ final class SimulationStateCoordinator {
     }
 
     SimulationState captureState(double foodSpawnRate) {
-        List<Microbe> microbes = worldState.microbes();
-        List<FoodPellet> foodPellets = worldState.foodPellets();
+        List<Microbe> microbes = worldState.population().microbes();
+        List<FoodPellet> foodPellets = worldState.food().pellets();
         List<Microbe.PersistedState> microbesState = microbes.stream()
                 .map(Microbe::toPersistedState)
                 .toList();
@@ -59,9 +59,9 @@ final class SimulationStateCoordinator {
                     + " do not match runtime world " + width + "x" + height);
         }
 
-        List<Microbe> microbes = worldState.microbes();
-        List<Microbe> newMicrobes = worldState.newMicrobes();
-        List<FoodPellet> foodPellets = worldState.foodPellets();
+        List<Microbe> microbes = worldState.population().microbes();
+        List<Microbe> newMicrobes = worldState.population().newMicrobes();
+        List<FoodPellet> foodPellets = worldState.food().pellets();
 
         microbes.clear();
         foodPellets.clear();
@@ -81,25 +81,25 @@ final class SimulationStateCoordinator {
         foodSpawnRateSetter.accept(state.foodSpawnRate());
         debugModeService.setEnabled(state.debugMode());
 
-        worldState.microbeById().clear();
+        worldState.index().byId().clear();
         for (Microbe microbe : microbes) {
-            worldState.microbeById().put(microbe.getId(), microbe);
+            worldState.index().byId().put(microbe.getId(), microbe);
         }
 
         return snapshotFromCurrentWorld();
     }
 
     SimulationSnapshot spawnMicrobe(Microbe microbe) {
-        List<Microbe> microbes = worldState.microbes();
-        List<FoodPellet> foodPellets = worldState.foodPellets();
+        List<Microbe> microbes = worldState.population().microbes();
+        List<FoodPellet> foodPellets = worldState.food().pellets();
         microbes.add(microbe);
-        worldState.microbeById().put(microbe.getId(), microbe);
+        worldState.index().byId().put(microbe.getId(), microbe);
         return snapshotFromCurrentWorld();
     }
 
     private SimulationSnapshot snapshotFromCurrentWorld() {
-        List<Microbe> microbes = worldState.microbes();
-        List<FoodPellet> foodPellets = worldState.foodPellets();
+        List<Microbe> microbes = worldState.population().microbes();
+        List<FoodPellet> foodPellets = worldState.food().pellets();
         return new SimulationSnapshot(
                 microbes.stream().map(Microbe::toRenderState).toList(),
                 List.copyOf(foodPellets)

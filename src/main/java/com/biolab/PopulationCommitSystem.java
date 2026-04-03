@@ -18,11 +18,11 @@ final class PopulationCommitSystem {
 
     SimulationSnapshot finalizeFrame() {
         synchronized (worldState.dataLock()) {
-            List<Microbe> microbes = worldState.microbes();
-            List<Microbe> newMicrobes = worldState.newMicrobes();
-            List<FoodPellet> foodPellets = worldState.foodPellets();
+            List<Microbe> microbes = worldState.population().microbes();
+            List<Microbe> newMicrobes = worldState.population().newMicrobes();
+            List<FoodPellet> foodPellets = worldState.food().pellets();
             microbes.removeIf(Microbe::isDead);
-            worldState.microbeById().entrySet().removeIf(e -> e.getValue().isDead());
+            worldState.index().byId().entrySet().removeIf(e -> e.getValue().isDead());
             foodPellets.removeIf(FoodPellet::isConsumed);
 
             int currentPopulation = microbes.size();
@@ -35,14 +35,14 @@ final class PopulationCommitSystem {
             if (currentPopulation + newbornsCopy.size() <= maxPopulation) {
                 microbes.addAll(newbornsCopy);
                 for (Microbe newborn : newbornsCopy) {
-                    worldState.microbeById().put(newborn.getId(), newborn);
+                    worldState.index().byId().put(newborn.getId(), newborn);
                 }
             } else {
                 int allowedNewborns = Math.max(0, maxPopulation - currentPopulation);
                 for (int i = 0; i < allowedNewborns && i < newbornsCopy.size(); i++) {
                     Microbe newborn = newbornsCopy.get(i);
                     microbes.add(newborn);
-                    worldState.microbeById().put(newborn.getId(), newborn);
+                    worldState.index().byId().put(newborn.getId(), newborn);
                 }
             }
 
@@ -55,7 +55,7 @@ final class PopulationCommitSystem {
 
     SimulationSnapshot finalizeEmptyFrame() {
         synchronized (worldState.dataLock()) {
-            List<FoodPellet> foodPellets = worldState.foodPellets();
+            List<FoodPellet> foodPellets = worldState.food().pellets();
             foodPellets.removeIf(FoodPellet::isConsumed);
             return new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
         }
