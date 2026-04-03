@@ -31,17 +31,17 @@ public class SettingsOverlay extends JPanel {
     /**
      * Matches the dark panel background used by InspectorPanel and EnvironmentPanel.
      */
-    private static final Color CARD_BG = new Color(18, 18, 18, 240);
+    private static final Color CARD_BG = OverlayTheme.PANEL_BG_ALPHA;
     /**
      * Available window resolutions. Insertion order does not matter because
      * the combo box sorts them at construction time (width desc, height desc).
      */
     private static final Map<String, Dimension> RESOLUTIONS = new LinkedHashMap<>();
-    private static final Color PANEL_BG = new Color(18, 18, 18);
-    private static final Color ACCENT = new Color(0, 255, 255);
-    private static final Color CONTROL_BG = new Color(12, 12, 14);
-    private static final Color CONTROL_HOVER = new Color(25, 28, 32);
-    private static final Color BORDER_COLOR = new Color(0, 255, 255, 80);
+    private static final Color PANEL_BG = OverlayTheme.PANEL_BG;
+    private static final Color ACCENT = OverlayTheme.ACCENT;
+    private static final Color CONTROL_BG = OverlayTheme.CONTROL_BG;
+    private static final Color CONTROL_HOVER = OverlayTheme.CONTROL_HOVER;
+    private static final Color BORDER_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 24);
     private static final Font SECTION_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font BODY_FONT = new Font("Segoe UI", Font.PLAIN, 14);
@@ -236,10 +236,10 @@ public class SettingsOverlay extends JPanel {
                 int h = getHeight() - 1;
                 g2.setColor(CARD_BG);
                 g2.fillRoundRect(0, 0, w, h, R, R);
-                g2.setColor(new Color(0, 255, 255, 80));
+                g2.setColor(OverlayTheme.ACCENT_GLOW);
                 g2.setStroke(S3);
                 g2.drawRoundRect(0, 0, w, h, R, R);
-                g2.setColor(new Color(0, 255, 255));
+                g2.setColor(OverlayTheme.ACCENT);
                 g2.setStroke(S1);
                 g2.drawRoundRect(0, 0, w, h, R, R);
                 g2.dispose();

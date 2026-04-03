@@ -24,9 +24,9 @@ public class EnvironmentPanel extends JPanel {
     private static final int CONTENT_PADDING = 15;
 
     // ── Shared colours ────────────────────────────────────────────────────
-    private static final Color BG_COLOR = new Color(18, 18, 18, 240);
-    private static final Color ACCENT_COLOR = new Color(0, 255, 255);
-    private static final Color BORDER_GLOW_COLOR = new Color(0, 255, 255, 80);
+    private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
+    private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
+    private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
     /**
      * Separator and empty-bar background – matches the InspectorPanel grid colour.
      */

@@ -58,9 +58,9 @@ public class InspectorPanel extends JPanel {
     private static final int NO_SELECTION_HEIGHT = 150;
 
     // ── Frame colours ─────────────────────────────────────────────────────
-    private static final Color BG_COLOR = new Color(18, 18, 18, 240);
-    private static final Color ACCENT_COLOR = new Color(0, 255, 255);
-    private static final Color BORDER_GLOW_COLOR = new Color(0, 255, 255, 80);
+    private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
+    private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
+    private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Color NO_SELECTION_BG = new Color(18, 18, 18, 150);
     private static final Color NO_SELECTION_BORDER = new Color(40, 40, 50, 200);
     private static final Color NO_SELECTION_TEXT = new Color(220, 220, 220, 180);
@@ -206,7 +206,7 @@ public class InspectorPanel extends JPanel {
 
     private static class ContentCanvas extends JPanel {
         // ── Cached colours ──────────────────────────────────────────────
-        private static final Color ACCENT = new Color(0, 255, 255);
+        private static final Color ACCENT = OverlayTheme.ACCENT;
         private static final Color TEXT_COLOR = new Color(220, 220, 220);
         private static final Color GRID_COLOR = new Color(40, 40, 50);
         private static final Color CHART_BG = new Color(0, 0, 0, 100);

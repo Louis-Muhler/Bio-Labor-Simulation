@@ -17,8 +17,6 @@ public class SimulationEngine implements SimulationRuntime {
 
     private static final int MAX_QUEUED_COMMANDS = 4096;
 
-    private static final double COMBAT_DAMAGE = 7.0;
-
     private final List<Microbe> microbes;
     private final List<Microbe> newMicrobes;
     private final List<FoodPellet> foodPellets;
@@ -41,14 +39,6 @@ public class SimulationEngine implements SimulationRuntime {
      */
     private final AtomicBoolean debugMode = new AtomicBoolean(false);
     private static final int MAX_POPULATION = 20000;
-    private static final int MAX_REPRODUCTION_ATTEMPTS = 5;
-    private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
-    private static final double HUNT_STEER_STRENGTH = 0.12;
-    private static final double FLEE_STEER_STRENGTH = 0.18;
-    private static final double FORAGE_STEER_BASE = 0.10;
-    private static final double FORAGE_STEER_HUNGER_BOOST = 0.26;
-    private static final double MAX_STEER_DELTA = 1.2;
-    private static final long ATTACK_COOLDOWN_MS = 300;
     /**
      * Latest snapshot, published atomically (volatile pointer swap) at the end of
      * every {@code update()} call.  Readers (EDT) access it without
@@ -67,6 +57,8 @@ public class SimulationEngine implements SimulationRuntime {
     private final Object frameMutationLock = new Object();
     private final SpatialGrid spatialGrid;
     private final MicrobeGrid microbeGrid;
+    private final MicrobeBehaviorSystem behaviorSystem;
+    private final SimulationStateCoordinator stateCoordinator;
     private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
@@ -98,6 +90,17 @@ public class SimulationEngine implements SimulationRuntime {
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.spatialGrid = new SpatialGrid(width, height, SPATIAL_CELL_SIZE);
         this.microbeGrid = new MicrobeGrid(width, height, SPATIAL_CELL_SIZE);
+        this.behaviorSystem = new MicrobeBehaviorSystem(width, height, availableReproductionSlots, newMicrobes);
+        this.stateCoordinator = new SimulationStateCoordinator(
+                width,
+                height,
+                environment,
+                debugMode,
+                microbes,
+                newMicrobes,
+                foodPellets,
+                microbeById
+        );
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -196,7 +199,8 @@ public class SimulationEngine implements SimulationRuntime {
             for (int i = 0; i < microbeCount; i += chunkSize) {
                 final int start = i;
                 final int end = Math.min(i + chunkSize, microbeCount);
-                Future<?> future = executorService.submit(() -> processMicrobeChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
+                Future<?> future = executorService.submit(() ->
+                        behaviorSystem.processChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
                 futures.add(future);
             }
 
@@ -325,23 +329,7 @@ public class SimulationEngine implements SimulationRuntime {
     public SimulationState captureState() {
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                List<Microbe.PersistedState> microbesState = microbes.stream()
-                        .map(Microbe::toPersistedState)
-                        .toList();
-                List<SimulationState.FoodState> foodState = foodPellets.stream()
-                        .filter(food -> !food.isConsumed())
-                        .map(food -> new SimulationState.FoodState(food.getX(), food.getY()))
-                        .toList();
-                return new SimulationState(
-                        width,
-                        height,
-                        environment.getTemperature(),
-                        environment.getToxicity(),
-                        foodSpawnRate,
-                        microbesState,
-                        foodState,
-                        debugMode.get()
-                );
+                return stateCoordinator.captureState(foodSpawnRate);
             }
         }
     }
@@ -350,43 +338,9 @@ public class SimulationEngine implements SimulationRuntime {
      * Replaces the current world with a previously captured simulation state.
      */
     public void loadState(SimulationState state) {
-        if (state == null) {
-            throw new IllegalArgumentException("state must not be null");
-        }
-        if (state.worldWidth() != width || state.worldHeight() != height) {
-            throw new IllegalArgumentException("State dimensions "
-                    + state.worldWidth() + "x" + state.worldHeight()
-                    + " do not match runtime world " + width + "x" + height);
-        }
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                microbes.clear();
-                foodPellets.clear();
-                synchronized (newMicrobes) {
-                    newMicrobes.clear();
-                }
-
-                for (Microbe.PersistedState m : state.microbes()) {
-                    microbes.add(Microbe.fromPersistedState(m));
-                }
-                for (SimulationState.FoodState f : state.food()) {
-                    foodPellets.add(new FoodPellet(f.x(), f.y()));
-                }
-
-                environment.setTemperature(state.temperature());
-                environment.setToxicity(state.toxicity());
-                setFoodSpawnRate(state.foodSpawnRate());
-                debugMode.set(state.debugMode());
-
-                microbeById.clear();
-                for (Microbe microbe : microbes) {
-                    microbeById.put(microbe.getId(), microbe);
-                }
-
-                renderSnapshot = new SimulationSnapshot(
-                        microbes.stream().map(Microbe::toRenderState).toList(),
-                        List.copyOf(foodPellets)
-                );
+                renderSnapshot = stateCoordinator.loadState(state, this::setFoodSpawnRate);
             }
         }
     }
@@ -407,11 +361,7 @@ public class SimulationEngine implements SimulationRuntime {
     public void spawnMicrobe(Microbe microbe) {
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                microbes.add(microbe);
-                microbeById.put(microbe.getId(), microbe);
-                renderSnapshot = new SimulationSnapshot(
-                        microbes.stream().map(Microbe::toRenderState).toList(),
-                        List.copyOf(foodPellets));
+                renderSnapshot = stateCoordinator.spawnMicrobe(microbe);
             }
         }
     }
@@ -436,239 +386,6 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public boolean isRunning() {
         return !executorService.isShutdown();
-    }
-
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    /**
-     * Processes a chunk of microbes concurrently in a worker thread.
-     *
-     * <h3>Thread-safety notes</h3>
-     * <ul>
-     *   <li>Each microbe in [start,end) is <em>owned</em> by this thread for the
-     *       duration of the frame (chunk partitioning guarantees no two threads
-     *       write the same microbe's movement/age state).</li>
-     *   <li>Combat writes that cross chunk boundaries (damage, knockback, energy
-     *       transfer) are serialised via {@code stateLock} inside the Microbe
-     *       methods, so they are safe even when attacker and victim live in
-     *       different chunks.</li>
-     *   <li>{@code microbeGrid} and {@code foodGrid} are read-only during this
-     *       phase; they were fully built before any worker thread was submitted.</li>
-     * </ul>
-     */
-    private void processMicrobeChunk(List<Microbe> snapshot, SpatialGrid foodGrid,
-                                     MicrobeGrid microbeGrid,
-                                     int start, int end, double temperature, double toxicity) {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        List<Microbe> nearbyMicrobes = new ArrayList<>(64);
-        List<FoodPellet> nearbyFood = new ArrayList<>(64);
-
-        for (int i = start; i < end; i++) {
-            Microbe microbe = snapshot.get(i);
-            if (microbe.isDead()) continue;
-
-            // ── 1. Movement ───────────────────────────────────────────────
-            microbe.move(width, height);
-
-            // ── 2. Environmental damage (natural selection) ───────────────
-            microbe.updateHealth(temperature, toxicity);
-
-            // ── 3. Predator / Prey interaction ────────────────────────────
-            microbeGrid.fillNearbyMicrobes(microbe.getX(), microbe.getY(), nearbyMicrobes);
-            if (microbe.isCarnivore()) {
-                processCarnivoreBehaviour(microbe, nearbyMicrobes);
-            } else {
-                foodGrid.fillNearbyFood(microbe.getX(), microbe.getY(), nearbyFood);
-                processHerbivoreBehaviour(microbe, nearbyMicrobes, nearbyFood);
-            }
-
-            // ── 4. Reproduction ───────────────────────────────────────────
-            tryReproduce(microbe, random);
-        }
-    }
-
-    private void processCarnivoreBehaviour(Microbe microbe, List<Microbe> neighbours) {
-        TargetCandidate preyCandidate = findNearestPrey(microbe, neighbours);
-        Microbe prey = preyCandidate.target();
-        if (prey == null) {
-            microbe.setAiState(AiState.WANDER);
-            return;
-        }
-
-        double dx = prey.getX() - microbe.getX();
-        double dy = prey.getY() - microbe.getY();
-        double distSq = preyCandidate.distSq();
-        if (distSq <= 1e-12) {
-            microbe.setAiState(AiState.WANDER);
-            return;
-        }
-        double dist = Math.sqrt(distSq);
-
-        microbe.setAiState(AiState.HUNT);
-        microbe.setTargetX(prey.getX());
-        microbe.setTargetY(prey.getY());
-
-        double steerX = clamp((dx / dist) * microbe.getSpeed() * HUNT_STEER_STRENGTH,
-                -MAX_STEER_DELTA, MAX_STEER_DELTA);
-        double steerY = clamp((dy / dist) * microbe.getSpeed() * HUNT_STEER_STRENGTH,
-                -MAX_STEER_DELTA, MAX_STEER_DELTA);
-        microbe.applyKnockback(steerX, steerY);
-
-        double attackRange = (microbe.getSize() + prey.getSize()) * 1.5;
-        long now = System.currentTimeMillis();
-        if (dist >= attackRange || prey.isDead() || (now - microbe.getLastAttackTime()) < ATTACK_COOLDOWN_MS) {
-            return;
-        }
-
-        double sizeMultiplier = microbe.getSize() / (double) Math.max(1, prey.getSize());
-        sizeMultiplier = clamp(sizeMultiplier, 0.5, 2.5);
-        double scaledDamage = COMBAT_DAMAGE * sizeMultiplier;
-
-        double energyGain = prey.takeDamageAndTransferEnergy(scaledDamage);
-        microbe.eat(energyGain);
-        microbe.markAttack();
-
-        double kbDist = Math.max(0.1, Math.sqrt(dx * dx + dy * dy));
-        double kx = (dx / kbDist) * 5.0;
-        double ky = (dy / kbDist) * 5.0;
-        prey.applyKnockback(kx, ky);
-    }
-
-    private void processHerbivoreBehaviour(Microbe microbe, List<Microbe> neighbours, List<FoodPellet> nearbyFood) {
-
-        // Try immediate consumption first.
-        for (FoodPellet food : nearbyFood) {
-            if (food.checkCollision(microbe)) {
-                double energyGain = food.consume();
-                if (energyGain > 0) microbe.eat(energyGain);
-                break;
-            }
-        }
-
-        // Hunger-based food seeking keeps herbivores actively foraging.
-        FoodCandidate bestFood = findNearestFood(microbe, nearbyFood);
-        if (bestFood.food() != null) {
-            double hunger = 1.0 - microbe.getEnergyRatio();
-            double forageStrength = FORAGE_STEER_BASE + hunger * FORAGE_STEER_HUNGER_BOOST;
-            microbe.steerTowards(bestFood.food().getX(), bestFood.food().getY(), forageStrength);
-            microbe.setAiState(AiState.FORAGE);
-            microbe.setTargetX(bestFood.food().getX());
-            microbe.setTargetY(bestFood.food().getY());
-        }
-
-        TargetCandidate threatCandidate = findNearestThreat(microbe, neighbours);
-        Microbe threat = threatCandidate.target();
-        if (threat == null) {
-            if (bestFood.food() == null) {
-                microbe.setAiState(AiState.WANDER);
-            }
-            return;
-        }
-
-        double dx = microbe.getX() - threat.getX();
-        double dy = microbe.getY() - threat.getY();
-        double distSq = threatCandidate.distSq();
-        if (distSq <= 1e-12) {
-            microbe.setAiState(AiState.WANDER);
-            return;
-        }
-        double dist = Math.sqrt(distSq);
-
-        microbe.setAiState(AiState.FLEE);
-        microbe.setTargetX(threat.getX());
-        microbe.setTargetY(threat.getY());
-
-        double steerX = clamp((dx / dist) * microbe.getSpeed() * FLEE_STEER_STRENGTH,
-                -MAX_STEER_DELTA, MAX_STEER_DELTA);
-        double steerY = clamp((dy / dist) * microbe.getSpeed() * FLEE_STEER_STRENGTH,
-                -MAX_STEER_DELTA, MAX_STEER_DELTA);
-        microbe.applyKnockback(steerX, steerY);
-    }
-
-    private FoodCandidate findNearestFood(Microbe microbe, List<FoodPellet> nearbyFood) {
-        FoodPellet best = null;
-        double bestDistSq = Double.MAX_VALUE;
-        for (FoodPellet food : nearbyFood) {
-            if (food == null || food.isConsumed()) continue;
-            double dx = food.getX() - microbe.getX();
-            double dy = food.getY() - microbe.getY();
-            double dSq = dx * dx + dy * dy;
-            if (dSq < bestDistSq) {
-                bestDistSq = dSq;
-                best = food;
-            }
-        }
-        return new FoodCandidate(best, bestDistSq);
-    }
-
-    private void tryReproduce(Microbe microbe, ThreadLocalRandom random) {
-        if (!microbe.canReproduce()) return;
-
-        int retryCount = 0;
-        while (retryCount < MAX_REPRODUCTION_ATTEMPTS) {
-            int currentSlots = availableReproductionSlots.get();
-            if (currentSlots <= 0) break;
-
-            if (availableReproductionSlots.compareAndSet(currentSlots, currentSlots - 1)) {
-                double offsetX = (random.nextDouble() - 0.5) * 20;
-                double offsetY = (random.nextDouble() - 0.5) * 20;
-                Microbe child = new Microbe(
-                        microbe,
-                        microbe.getX() + offsetX,
-                        microbe.getY() + offsetY
-                );
-                synchronized (newMicrobes) {
-                    newMicrobes.add(child);
-                }
-                microbe.resetReproduction();
-                break;
-            }
-
-            retryCount++;
-            if (retryCount > MIN_RETRIES_BEFORE_BACKOFF) {
-                Thread.yield();
-            }
-        }
-    }
-
-    private TargetCandidate findNearestPrey(Microbe microbe, List<Microbe> neighbours) {
-        Microbe best = null;
-        double bestDistSq = Double.MAX_VALUE;
-        for (Microbe other : neighbours) {
-            if (other == microbe || other.isDead() || other.isCarnivore()) continue;
-            double dx = other.getX() - microbe.getX();
-            double dy = other.getY() - microbe.getY();
-            double dSq = dx * dx + dy * dy;
-            if (dSq < bestDistSq) {
-                bestDistSq = dSq;
-                best = other;
-            }
-        }
-        return new TargetCandidate(best, bestDistSq);
-    }
-
-    private TargetCandidate findNearestThreat(Microbe microbe, List<Microbe> neighbours) {
-        Microbe best = null;
-        double bestDistSq = Double.MAX_VALUE;
-        for (Microbe other : neighbours) {
-            if (other == microbe || other.isDead() || !other.isCarnivore()) continue;
-            double dx = other.getX() - microbe.getX();
-            double dy = other.getY() - microbe.getY();
-            double dSq = dx * dx + dy * dy;
-            if (dSq < bestDistSq) {
-                bestDistSq = dSq;
-                best = other;
-            }
-        }
-        return new TargetCandidate(best, bestDistSq);
-    }
-
-    private record TargetCandidate(Microbe target, double distSq) {
-    }
-
-    private record FoodCandidate(FoodPellet food, double distSq) {
     }
 
 
