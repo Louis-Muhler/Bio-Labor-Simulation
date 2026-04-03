@@ -24,28 +24,12 @@ public class SimulationCanvas extends JPanel {
     private static final Color GRID_LINE_COLOR = new Color(25, 25, 35, 100);
     private static final Color FOOD_OUTER_COLOR = new Color(100, 220, 100);
     private static final Color FOOD_CENTER_COLOR = new Color(200, 255, 200);
-    private static final Color SELECTION_GLOW_COLOR = new Color(0, 255, 255, 100);
-    private static final Color SELECTION_SOLID_COLOR = new Color(0, 255, 255);
     private static final Color[] FOOD_GLOW_COLORS = {
             new Color(50, 255, 100, 45),
             new Color(50, 255, 100, 35),
             new Color(50, 255, 100, 25)
     };
     private static final BasicStroke STROKE_1 = new BasicStroke(1);
-    private static final BasicStroke STROKE_2 = new BasicStroke(2);
-    private static final BasicStroke STROKE_3 = new BasicStroke(3);
-    // ── Predator / attack-flash rendering ────────────────────────────────
-    /**
-     * Extra radius added to carnivore body size so predators look visually larger.
-     */
-    private static final int CARNIVORE_SIZE_BONUS = 2;
-    /**
-     * Duration (ms) for which the red attack-flash ring is visible after a bite.
-     */
-    private static final long ATTACK_FLASH_DURATION_MS = 300;
-    private static final Color ATTACK_RING_COLOR = new Color(255, 30, 30);
-    private static final Color ATTACK_RING_GLOW = new Color(255, 60, 60, 120);
-    private static final BasicStroke STROKE_ATTACK = new BasicStroke(2.5f);
 
     // ── Debug / Developer Vision rendering ───────────────────────────────
     private static final Color DEBUG_HUNT_LINE_COLOR = new Color(255, 50, 50);
@@ -406,8 +390,7 @@ public class SimulationCanvas extends JPanel {
                         || my < visibleY1 - 20 || my > visibleY2 + 20) continue;
 
                 Color microbeColor = microbe.color();
-                // Carnivores are drawn slightly larger so they stand out visually
-                int size = microbe.size() + (microbe.carnivore() ? CARNIVORE_SIZE_BONUS : 0);
+                int size = MicrobeRenderStyle.sizeWithCarnivoreBonus(microbe.size(), microbe.carnivore());
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
@@ -422,73 +405,21 @@ public class SimulationCanvas extends JPanel {
                         defaultComposite
                 );
 
-                // Defense ring: high defense microbes get a thicker outer shell.
-                float defense = (float) Math.max(0.0, Math.min(1.0, microbe.defense()));
-                if (defense > 0.2f) {
-                    g2d.setColor(new Color(160, 230, 255, (int) (40 + defense * 100)));
-                    g2d.setStroke(new BasicStroke(1.0f + defense * 1.8f));
-                    g2d.drawOval(x - 2, y - 2, size + 4, size + 4);
-                    g2d.setStroke(STROKE_1);
-                }
-
-                // Strength spikes: offensive microbes show small spines.
-                float strength = (float) Math.max(0.0, Math.min(1.0, microbe.strength()));
-                if (strength > 0.45f) {
-                    int spikes = 4 + (int) Math.round(strength * 4.0);
-                    int outerR = (int) Math.round(size * 0.65 + 2 + strength * 3.0);
-                    int innerR = Math.max(2, outerR - 3);
-                    int cx = (int) mx;
-                    int cy = (int) my;
-                    g2d.setColor(new Color(255, 210, 120, 160));
-                    for (int s = 0; s < spikes; s++) {
-                        double angle = (Math.PI * 2.0 * s) / spikes;
-                        int x1 = cx + (int) Math.round(Math.cos(angle) * innerR);
-                        int y1 = cy + (int) Math.round(Math.sin(angle) * innerR);
-                        int x2 = cx + (int) Math.round(Math.cos(angle) * (outerR + 2));
-                        int y2 = cy + (int) Math.round(Math.sin(angle) * (outerR + 2));
-                        g2d.drawLine(x1, y1, x2, y2);
-                    }
-                }
-
-                // ── Attack-flash ring (carnivore recently bit something) ───
-                long msSinceAttack = nowMs - microbe.lastAttackTime();
-                if (microbe.carnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
-                    // Fade alpha linearly from full → 0 over the flash duration
-                    float flashAlpha = Math.max(0.0f, Math.min(1.0f, 1.0f - (float) msSinceAttack / ATTACK_FLASH_DURATION_MS));
-                    int ringPad = 5;
-                    int ringX = x - ringPad;
-                    int ringY = y - ringPad;
-                    int ringW = size + ringPad * 2;
-                    int ringH = size + ringPad * 2;
-
-                    // Outer glow ring
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, flashAlpha * 0.55f));
-                    g2d.setColor(ATTACK_RING_GLOW);
-                    g2d.setStroke(STROKE_3);
-                    g2d.drawOval(ringX - 2, ringY - 2, ringW + 4, ringH + 4);
-
-                    // Sharp inner ring
-                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, flashAlpha * 0.95f));
-                    g2d.setColor(ATTACK_RING_COLOR);
-                    g2d.setStroke(STROKE_ATTACK);
-                    g2d.drawOval(ringX, ringY, ringW, ringH);
-
-                    g2d.setComposite(defaultComposite);
-                    g2d.setStroke(STROKE_1);
-                }
-
-                if (microbe.selected()) {
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(SELECTION_GLOW_COLOR);
-                    g2d.setStroke(STROKE_3);
-                    g2d.drawOval(x - 5, y - 5, size + 10, size + 10);
-                    g2d.setColor(SELECTION_SOLID_COLOR);
-                    g2d.setStroke(STROKE_2);
-                    g2d.drawOval(x - 4, y - 4, size + 8, size + 8);
-                    g2d.setStroke(STROKE_1);
-                    g2d.drawOval(x - 3, y - 3, size + 6, size + 6);
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-                }
+                MicrobeRenderStyle.drawCombatAndSelectionOverlays(
+                        g2d,
+                        x,
+                        y,
+                        size,
+                        mx,
+                        my,
+                        microbe.defense(),
+                        microbe.strength(),
+                        microbe.carnivore(),
+                        microbe.lastAttackTime(),
+                        nowMs,
+                        microbe.selected(),
+                        defaultComposite
+                );
 
                 // ── Developer Vision (Debug) overlay ──────────────────────
                 if (debugOn) {

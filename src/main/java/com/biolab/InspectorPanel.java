@@ -654,8 +654,13 @@ public class InspectorPanel extends JPanel {
             drawCentered(g2, "SPECIMEN", CW / 2, y);
             y += 40;
 
-            // Scale factor so the on-canvas microbe (size=5 px) appears large here
-            int size = (int) (microbe.getSize() * PREVIEW_SCALE);
+            // Scale factor so the on-canvas microbe (size=5 px) appears large here.
+            int scaledCarnivoreBonus = (int) Math.max(1, Math.round(2.0 * PREVIEW_SCALE));
+            int size = MicrobeRenderStyle.sizeWithCarnivoreBonus(
+                    (int) (microbe.getSize() * PREVIEW_SCALE),
+                    microbe.isCarnivore(),
+                    scaledCarnivoreBonus
+            );
             int cx = CW / 2;
             int cy = y + size;  // leave room for glow above
             int x = cx - size / 2;
@@ -673,6 +678,22 @@ public class InspectorPanel extends JPanel {
                     mc,
                     microbe.getBrightColor(),
                     microbe.getHealthRatio(),
+                    orig
+            );
+
+            MicrobeRenderStyle.drawCombatAndSelectionOverlays(
+                    g2,
+                    x,
+                    baseY,
+                    size,
+                    cx,
+                    cy,
+                    microbe.getDefenseTrait(),
+                    microbe.getStrengthTrait(),
+                    microbe.isCarnivore(),
+                    microbe.getLastAttackTime(),
+                    System.currentTimeMillis(),
+                    microbe.isSelected(),
                     orig
             );
         }
