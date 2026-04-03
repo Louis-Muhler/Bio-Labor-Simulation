@@ -46,7 +46,7 @@ record SimulationEngineContext(
                 worldWidth,
                 worldHeight,
                 availableReproductionSlots,
-                worldState.newMicrobes()
+                worldState.population().newMicrobes()
         );
 
         PopulationCommitSystem populationCommitSystem = new PopulationCommitSystem(

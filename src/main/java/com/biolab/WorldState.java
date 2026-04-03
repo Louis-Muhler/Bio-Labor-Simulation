@@ -29,22 +29,6 @@ final class WorldState {
         return index;
     }
 
-    // Compatibility accessors for gradual migration
-    List<Microbe> microbes() {
-        return population.microbes();
-    }
-
-    List<Microbe> newMicrobes() {
-        return population.newMicrobes();
-    }
-
-    List<FoodPellet> foodPellets() {
-        return food.pellets();
-    }
-
-    ConcurrentHashMap<Long, Microbe> microbeById() {
-        return index.byId();
-    }
 
     static final class PopulationState {
         private final List<Microbe> microbes = new ArrayList<>();

@@ -19,8 +19,6 @@ public class SimulationEngine implements SimulationRuntime {
 
     private final WorldState worldState;
     private final Environment environment;
-    private final int width;
-    private final int height;
     private static final int THREAD_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors());
 
     private final AtomicInteger availableReproductionSlots;
@@ -68,8 +66,6 @@ public class SimulationEngine implements SimulationRuntime {
             throw new IllegalArgumentException("World dimensions must be positive, was: " + width + "x" + height);
         }
 
-        this.width = width;
-        this.height = height;
         this.worldState = new WorldState();
         this.environment = new Environment();
         this.availableReproductionSlots = new AtomicInteger(MAX_POPULATION);
