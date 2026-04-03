@@ -3,6 +3,7 @@ package com.biolab;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,7 +41,7 @@ public class SimulationEngine implements SimulationRuntime {
      * renders debug overlays (AI target lines, vision radii, IDs).
      * Toggle at runtime via the 'D' key in {@link SimulationCanvas}.
      */
-    private volatile boolean debugMode = false;
+    private final AtomicBoolean debugMode = new AtomicBoolean(false);
     private static final int MAX_POPULATION = 20000;
     private static final int MAX_REPRODUCTION_ATTEMPTS = 5;
     private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
@@ -121,13 +122,18 @@ public class SimulationEngine implements SimulationRuntime {
      */
     @Override
     public boolean toggleDebugModeFlag() {
-        debugMode = !debugMode;
-        return debugMode;
+        while (true) {
+            boolean current = debugMode.get();
+            boolean next = !current;
+            if (debugMode.compareAndSet(current, next)) {
+                return next;
+            }
+        }
     }
 
     @Override
     public boolean isDebugModeEnabled() {
-        return debugMode;
+        return debugMode.get();
     }
 
     /**
@@ -325,15 +331,6 @@ public class SimulationEngine implements SimulationRuntime {
         }
     }
 
-    /**
-     * Returns a defensive copy of current microbe entities.
-     * Intended for low-frequency operations (e.g. resolving hit-test IDs).
-     */
-    public List<Microbe> getMicrobes() {
-        synchronized (dataLock) {
-            return List.copyOf(microbes);
-        }
-    }
 
     /**
      * Returns the microbe instance with the given ID, or {@code null} if not found.
@@ -370,7 +367,7 @@ public class SimulationEngine implements SimulationRuntime {
                     foodSpawnRate,
                     microbesState,
                     foodState,
-                    debugMode
+                    debugMode.get()
             );
         }
     }
@@ -404,7 +401,7 @@ public class SimulationEngine implements SimulationRuntime {
             environment.setTemperature(state.temperature());
             environment.setToxicity(state.toxicity());
             setFoodSpawnRate(state.foodSpawnRate());
-            debugMode = state.debugMode();
+            debugMode.set(state.debugMode());
 
             microbeById.clear();
             for (Microbe microbe : microbes) {
@@ -696,10 +693,6 @@ public class SimulationEngine implements SimulationRuntime {
     private record FoodCandidate(FoodPellet food, double distSq) {
     }
 
-    /**
-     * Immutable snapshot of the simulation state published after each {@code update()}.
-     * The EDT reads this via a single volatile read — no lock, no entity mutation races.
-     */
 
     /**
      * Shuts down the thread pool gracefully.

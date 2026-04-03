@@ -52,7 +52,7 @@ public interface SimulationCommand {
     }
 
     static SimulationCommand toggleDebugMode() {
-        return runtime -> runtime.toggleDebugModeFlag();
+        return SimulationRuntime::toggleDebugModeFlag;
     }
 
     void apply(SimulationRuntime runtime);

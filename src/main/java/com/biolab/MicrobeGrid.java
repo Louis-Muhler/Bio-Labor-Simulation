@@ -49,7 +49,7 @@ public class MicrobeGrid {
      * Clears the grid and re-inserts all living microbes from the given snapshot.
      * Dead microbes ({@link Microbe#isDead()}) are silently skipped.
      *
-     * <p>Must be called once per frame, before any {@link #getNearbyMicrobes} queries,
+     * <p>Must be called once per frame, before any neighborhood queries,
      * and always from a single thread (the SimulationLoop thread).</p>
      *
      * @param snapshot immutable snapshot of microbes for this frame
@@ -70,22 +70,6 @@ public class MicrobeGrid {
             row = Math.max(0, row);
             cells.get(row * cols + col).add(microbe);
         }
-    }
-
-    /**
-     * Returns all microbes in the cell containing {@code (x, y)} and its 8 neighbors
-     * (3×3 neighborhood). The returned list is a temporary collection suitable for
-     * read-only iteration within the calling frame.
-     *
-     * @param x world x coordinate
-     * @param y world y coordinate
-     * @return list of nearby microbes (may include dead microbes inserted before death
-     * was processed; callers should guard with {@link Microbe#isDead()} if needed)
-     */
-    public List<Microbe> getNearbyMicrobes(double x, double y) {
-        List<Microbe> nearby = new ArrayList<>();
-        fillNearbyMicrobes(x, y, nearby);
-        return nearby;
     }
 
     /**
@@ -110,25 +94,5 @@ public class MicrobeGrid {
         }
     }
 
-    /**
-     * Returns the number of columns in the grid.
-     */
-    public int getCols() {
-        return cols;
-    }
-
-    /**
-     * Returns the number of rows in the grid.
-     */
-    public int getRows() {
-        return rows;
-    }
-
-    /**
-     * Returns the cell size used by this grid.
-     */
-    public int getCellSize() {
-        return cellSize;
-    }
 }
 
