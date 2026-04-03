@@ -7,16 +7,15 @@ import java.util.concurrent.ThreadLocalRandom;
  * Read-side microbe lookup operations over the shared world list.
  */
 final class MicrobeLookupService {
-    private final Object dataLock;
-    private final List<Microbe> microbes;
+    private final WorldState worldState;
 
-    MicrobeLookupService(Object dataLock, List<Microbe> microbes) {
-        this.dataLock = dataLock;
-        this.microbes = microbes;
+    MicrobeLookupService(WorldState worldState) {
+        this.worldState = worldState;
     }
 
     Microbe findLivingChild(long parentId) {
-        synchronized (dataLock) {
+        synchronized (worldState.dataLock()) {
+            List<Microbe> microbes = worldState.microbes();
             for (Microbe m : microbes) {
                 if (!m.isDead() && m.getParentId() == parentId) return m;
             }
@@ -25,7 +24,8 @@ final class MicrobeLookupService {
     }
 
     Microbe findRandomLivingMicrobe() {
-        synchronized (dataLock) {
+        synchronized (worldState.dataLock()) {
+            List<Microbe> microbes = worldState.microbes();
             if (microbes.isEmpty()) return null;
             int idx = ThreadLocalRandom.current().nextInt(microbes.size());
             return microbes.get(idx);

@@ -1,6 +1,5 @@
 package com.biolab;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -18,9 +17,7 @@ public class SimulationEngine implements SimulationRuntime {
 
     private static final int MAX_QUEUED_COMMANDS = 4096;
 
-    private final List<Microbe> microbes;
-    private final List<Microbe> newMicrobes;
-    private final List<FoodPellet> foodPellets;
+    private final WorldState worldState;
     private final Environment environment;
     private final int width;
     private final int height;
@@ -30,7 +27,6 @@ public class SimulationEngine implements SimulationRuntime {
     private final ExecutorService executorService;
     private static final int INITIAL_FOOD_COUNT = 1200;
     private static final int MAX_FOOD_PELLETS = 6000;
-    private final ConcurrentHashMap<Long, Microbe> microbeById = new ConcurrentHashMap<>();
     /**
      * When {@code true}, the engine logs combat events to stdout and the canvas
      * renders debug overlays (AI target lines, vision radii, IDs).
@@ -46,7 +42,6 @@ public class SimulationEngine implements SimulationRuntime {
      */
     private volatile SimulationSnapshot renderSnapshot;
     private static final int SPATIAL_CELL_SIZE = 30;
-    private final Object dataLock = new Object();
     /**
      * Serializes full-frame world mutation with state capture/load operations.
      * This guarantees that persistence never interleaves with worker-thread updates.
@@ -75,9 +70,7 @@ public class SimulationEngine implements SimulationRuntime {
 
         this.width = width;
         this.height = height;
-        this.microbes = new ArrayList<>();
-        this.newMicrobes = new ArrayList<>();
-        this.foodPellets = new ArrayList<>();
+        this.worldState = new WorldState();
         this.environment = new Environment();
         this.availableReproductionSlots = new AtomicInteger(MAX_POPULATION);
 
@@ -85,14 +78,10 @@ public class SimulationEngine implements SimulationRuntime {
         this.context = SimulationEngineContext.create(
                 MAX_QUEUED_COMMANDS,
                 frameMutationLock,
-                dataLock,
                 executorService,
                 environment,
                 debugModeService,
-                microbes,
-                newMicrobes,
-                foodPellets,
-                microbeById,
+                worldState,
                 availableReproductionSlots,
                 MAX_POPULATION,
                 THREAD_COUNT,
@@ -106,6 +95,8 @@ public class SimulationEngine implements SimulationRuntime {
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<Microbe> microbes = worldState.microbes();
+        ConcurrentHashMap<Long, Microbe> microbeById = worldState.microbeById();
         for (int i = 0; i < initialPopulation; i++) {
             double x = random.nextDouble() * width;
             double y = random.nextDouble() * height;
@@ -114,6 +105,7 @@ public class SimulationEngine implements SimulationRuntime {
             microbeById.put(seeded.getId(), seeded);
         }
 
+        List<FoodPellet> foodPellets = worldState.foodPellets();
         for (int i = 0; i < INITIAL_FOOD_COUNT; i++) {
             foodPellets.add(FoodPellet.createRandom(width, height));
         }
@@ -191,7 +183,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Used by EDT hit-testing that runs against immutable render snapshots.
      */
     public Microbe findMicrobeById(long id) {
-        return microbeById.get(id);
+        return worldState.microbeById().get(id);
     }
 
     /**
@@ -206,7 +198,7 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public SimulationState captureState() {
         synchronized (frameMutationLock) {
-            synchronized (dataLock) {
+            synchronized (worldState.dataLock()) {
                 return context.stateCoordinator().captureState(foodSpawnRate);
             }
         }
@@ -217,7 +209,7 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public void loadState(SimulationState state) {
         synchronized (frameMutationLock) {
-            synchronized (dataLock) {
+            synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
             }
         }
@@ -238,7 +230,7 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public void spawnMicrobe(Microbe microbe) {
         synchronized (frameMutationLock) {
-            synchronized (dataLock) {
+            synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().spawnMicrobe(microbe);
             }
         }

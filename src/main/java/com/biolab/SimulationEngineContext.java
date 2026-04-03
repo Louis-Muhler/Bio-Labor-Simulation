@@ -1,7 +1,5 @@
 package com.biolab;
 
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
@@ -19,14 +17,10 @@ record SimulationEngineContext(
     static SimulationEngineContext create(
             int maxQueuedCommands,
             Object frameMutationLock,
-            Object dataLock,
             ExecutorService executorService,
             Environment environment,
             DebugModeService debugModeService,
-            List<Microbe> microbes,
-            List<Microbe> newMicrobes,
-            List<FoodPellet> foodPellets,
-            ConcurrentHashMap<Long, Microbe> microbeById,
+            WorldState worldState,
             AtomicInteger availableReproductionSlots,
             int maxPopulation,
             int threadCount,
@@ -40,9 +34,7 @@ record SimulationEngineContext(
         SimulationCommandProcessor commandProcessor = new SimulationCommandProcessor(maxQueuedCommands);
 
         FramePreparationSystem framePreparationSystem = new FramePreparationSystem(
-                dataLock,
-                microbes,
-                foodPellets,
+                worldState,
                 availableReproductionSlots,
                 maxPopulation,
                 worldWidth,
@@ -54,15 +46,11 @@ record SimulationEngineContext(
                 worldWidth,
                 worldHeight,
                 availableReproductionSlots,
-                newMicrobes
+                worldState.newMicrobes()
         );
 
         PopulationCommitSystem populationCommitSystem = new PopulationCommitSystem(
-                dataLock,
-                microbes,
-                newMicrobes,
-                foodPellets,
-                microbeById,
+                worldState,
                 maxPopulation
         );
 
@@ -95,13 +83,10 @@ record SimulationEngineContext(
                 worldHeight,
                 environment,
                 debugModeService,
-                microbes,
-                newMicrobes,
-                foodPellets,
-                microbeById
+                worldState
         );
 
-        MicrobeLookupService microbeLookupService = new MicrobeLookupService(dataLock, microbes);
+        MicrobeLookupService microbeLookupService = new MicrobeLookupService(worldState);
         SimulationLifecycleService lifecycleService = new SimulationLifecycleService(executorService, logger);
 
         return new SimulationEngineContext(

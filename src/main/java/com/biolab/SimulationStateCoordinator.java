@@ -1,7 +1,6 @@
 package com.biolab;
 
 import java.util.List;
-import java.util.Map;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -13,30 +12,23 @@ final class SimulationStateCoordinator {
     private final int height;
     private final Environment environment;
     private final DebugModeService debugModeService;
-    private final List<Microbe> microbes;
-    private final List<Microbe> newMicrobes;
-    private final List<FoodPellet> foodPellets;
-    private final Map<Long, Microbe> microbeById;
+    private final WorldState worldState;
 
     SimulationStateCoordinator(int width,
                                int height,
                                Environment environment,
                                DebugModeService debugModeService,
-                               List<Microbe> microbes,
-                               List<Microbe> newMicrobes,
-                               List<FoodPellet> foodPellets,
-                               Map<Long, Microbe> microbeById) {
+                               WorldState worldState) {
         this.width = width;
         this.height = height;
         this.environment = environment;
         this.debugModeService = debugModeService;
-        this.microbes = microbes;
-        this.newMicrobes = newMicrobes;
-        this.foodPellets = foodPellets;
-        this.microbeById = microbeById;
+        this.worldState = worldState;
     }
 
     SimulationState captureState(double foodSpawnRate) {
+        List<Microbe> microbes = worldState.microbes();
+        List<FoodPellet> foodPellets = worldState.foodPellets();
         List<Microbe.PersistedState> microbesState = microbes.stream()
                 .map(Microbe::toPersistedState)
                 .toList();
@@ -67,6 +59,10 @@ final class SimulationStateCoordinator {
                     + " do not match runtime world " + width + "x" + height);
         }
 
+        List<Microbe> microbes = worldState.microbes();
+        List<Microbe> newMicrobes = worldState.newMicrobes();
+        List<FoodPellet> foodPellets = worldState.foodPellets();
+
         microbes.clear();
         foodPellets.clear();
         synchronized (newMicrobes) {
@@ -85,21 +81,25 @@ final class SimulationStateCoordinator {
         foodSpawnRateSetter.accept(state.foodSpawnRate());
         debugModeService.setEnabled(state.debugMode());
 
-        microbeById.clear();
+        worldState.microbeById().clear();
         for (Microbe microbe : microbes) {
-            microbeById.put(microbe.getId(), microbe);
+            worldState.microbeById().put(microbe.getId(), microbe);
         }
 
         return snapshotFromCurrentWorld();
     }
 
     SimulationSnapshot spawnMicrobe(Microbe microbe) {
+        List<Microbe> microbes = worldState.microbes();
+        List<FoodPellet> foodPellets = worldState.foodPellets();
         microbes.add(microbe);
-        microbeById.put(microbe.getId(), microbe);
+        worldState.microbeById().put(microbe.getId(), microbe);
         return snapshotFromCurrentWorld();
     }
 
     private SimulationSnapshot snapshotFromCurrentWorld() {
+        List<Microbe> microbes = worldState.microbes();
+        List<FoodPellet> foodPellets = worldState.foodPellets();
         return new SimulationSnapshot(
                 microbes.stream().map(Microbe::toRenderState).toList(),
                 List.copyOf(foodPellets)
