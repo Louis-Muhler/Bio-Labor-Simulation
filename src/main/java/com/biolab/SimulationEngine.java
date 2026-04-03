@@ -57,10 +57,12 @@ public class SimulationEngine implements SimulationRuntime {
     private final Object frameMutationLock = new Object();
     private final SpatialGrid spatialGrid;
     private final MicrobeGrid microbeGrid;
+    private final FramePreparationSystem framePreparationSystem;
     private final MicrobeBehaviorSystem behaviorSystem;
     private final PopulationCommitSystem populationCommitSystem;
     private final SimulationFrameOrchestrator frameOrchestrator;
     private final SimulationStateCoordinator stateCoordinator;
+    private final MicrobeLookupService microbeLookupService;
     private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
@@ -92,6 +94,16 @@ public class SimulationEngine implements SimulationRuntime {
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.spatialGrid = new SpatialGrid(width, height, SPATIAL_CELL_SIZE);
         this.microbeGrid = new MicrobeGrid(width, height, SPATIAL_CELL_SIZE);
+        this.framePreparationSystem = new FramePreparationSystem(
+                dataLock,
+                microbes,
+                foodPellets,
+                availableReproductionSlots,
+                MAX_POPULATION,
+                width,
+                height,
+                MAX_FOOD_PELLETS
+        );
         this.behaviorSystem = new MicrobeBehaviorSystem(width, height, availableReproductionSlots, newMicrobes);
         this.populationCommitSystem = new PopulationCommitSystem(
                 dataLock,
@@ -120,6 +132,7 @@ public class SimulationEngine implements SimulationRuntime {
                 foodPellets,
                 microbeById
         );
+        this.microbeLookupService = new MicrobeLookupService(dataLock, microbes);
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -175,7 +188,7 @@ public class SimulationEngine implements SimulationRuntime {
 
             final double temp = environment.getTemperature();
             final double tox = environment.getToxicity();
-            FrameData frameData = prepareFrameData(foodSpawnRate);
+            FramePreparationSystem.FrameBatch frameData = framePreparationSystem.prepare(foodSpawnRate);
             try {
                 renderSnapshot = frameOrchestrator.runFrame(
                         frameData.microbeSnapshot(),
@@ -188,24 +201,6 @@ public class SimulationEngine implements SimulationRuntime {
                 LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
             }
         }
-    }
-
-    private FrameData prepareFrameData(double currentFoodSpawnRate) {
-        synchronized (dataLock) {
-            int currentPop = microbes.size();
-            int availableSlots = Math.max(0, MAX_POPULATION - currentPop);
-            availableReproductionSlots.set(availableSlots);
-
-            ThreadLocalRandom random = ThreadLocalRandom.current();
-            if (random.nextDouble() < currentFoodSpawnRate && foodPellets.size() < MAX_FOOD_PELLETS) {
-                foodPellets.add(FoodPellet.createRandom(width, height));
-            }
-
-            return new FrameData(new ArrayList<>(microbes), new ArrayList<>(foodPellets));
-        }
-    }
-
-    private record FrameData(List<Microbe> microbeSnapshot, List<FoodPellet> foodSnapshot) {
     }
 
     /**
@@ -239,12 +234,7 @@ public class SimulationEngine implements SimulationRuntime {
      * or {@code null} if none exists. Used for auto-selection after a microbe dies.
      */
     public Microbe findLivingChild(long parentId) {
-        synchronized (dataLock) {
-            for (Microbe m : microbes) {
-                if (!m.isDead() && m.getParentId() == parentId) return m;
-            }
-        }
-        return null;
+        return microbeLookupService.findLivingChild(parentId);
     }
 
     /**
@@ -252,11 +242,7 @@ public class SimulationEngine implements SimulationRuntime {
      * or {@code null} if the population is empty.
      */
     public Microbe findRandomLivingMicrobe() {
-        synchronized (dataLock) {
-            if (microbes.isEmpty()) return null;
-            int idx = ThreadLocalRandom.current().nextInt(microbes.size());
-            return microbes.get(idx);
-        }
+        return microbeLookupService.findRandomLivingMicrobe();
     }
 
 
