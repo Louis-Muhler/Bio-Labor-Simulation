@@ -58,6 +58,8 @@ public class SimulationEngine implements SimulationRuntime {
     private final SpatialGrid spatialGrid;
     private final MicrobeGrid microbeGrid;
     private final MicrobeBehaviorSystem behaviorSystem;
+    private final PopulationCommitSystem populationCommitSystem;
+    private final SimulationFrameOrchestrator frameOrchestrator;
     private final SimulationStateCoordinator stateCoordinator;
     private volatile double foodSpawnRate = 0.75;
 
@@ -91,6 +93,23 @@ public class SimulationEngine implements SimulationRuntime {
         this.spatialGrid = new SpatialGrid(width, height, SPATIAL_CELL_SIZE);
         this.microbeGrid = new MicrobeGrid(width, height, SPATIAL_CELL_SIZE);
         this.behaviorSystem = new MicrobeBehaviorSystem(width, height, availableReproductionSlots, newMicrobes);
+        this.populationCommitSystem = new PopulationCommitSystem(
+                dataLock,
+                microbes,
+                newMicrobes,
+                foodPellets,
+                microbeById,
+                MAX_POPULATION
+        );
+        this.frameOrchestrator = new SimulationFrameOrchestrator(
+                executorService,
+                THREAD_COUNT,
+                spatialGrid,
+                microbeGrid,
+                behaviorSystem,
+                populationCommitSystem,
+                LOGGER
+        );
         this.stateCoordinator = new SimulationStateCoordinator(
                 width,
                 height,
@@ -154,106 +173,39 @@ public class SimulationEngine implements SimulationRuntime {
             // Apply queued UI-originated commands on the simulation thread.
             processPendingCommands();
 
-        // Get current environmental conditions (thread-safe)
             final double temp = environment.getTemperature();
             final double tox = environment.getToxicity();
+            FrameData frameData = prepareFrameData(foodSpawnRate);
+            try {
+                renderSnapshot = frameOrchestrator.runFrame(
+                        frameData.microbeSnapshot(),
+                        frameData.foodSnapshot(),
+                        temp,
+                        tox
+                );
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
+            }
+        }
+    }
 
-            final List<Microbe> snapshot;
-            final List<FoodPellet> foodSnapshot;
-
-        // Lock only for reading/modifying the shared lists
-            synchronized (dataLock) {
-            // Calculate available slots for reproduction this frame
+    private FrameData prepareFrameData(double currentFoodSpawnRate) {
+        synchronized (dataLock) {
             int currentPop = microbes.size();
             int availableSlots = Math.max(0, MAX_POPULATION - currentPop);
             availableReproductionSlots.set(availableSlots);
 
-            // Food spawning
             ThreadLocalRandom random = ThreadLocalRandom.current();
-            if (random.nextDouble() < foodSpawnRate && foodPellets.size() < MAX_FOOD_PELLETS) {
+            if (random.nextDouble() < currentFoodSpawnRate && foodPellets.size() < MAX_FOOD_PELLETS) {
                 foodPellets.add(FoodPellet.createRandom(width, height));
             }
 
-            // Create snapshots for safe chunk-based parallel processing
-            snapshot = new ArrayList<>(microbes);
-            foodSnapshot = new ArrayList<>(foodPellets);
-            }
-
-            final int microbeCount = snapshot.size();
-            if (microbeCount == 0) {
-                synchronized (dataLock) {
-                    foodPellets.removeIf(FoodPellet::isConsumed);
-                    renderSnapshot = new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
-                }
-                return;
-            }
-
-        // Rebuild spatial grid for O(1) food lookup
-            spatialGrid.rebuild(foodSnapshot);
-        // Rebuild microbe spatial index for O(1) neighbor lookup
-            microbeGrid.rebuild(snapshot);
-
-            int chunkSize = Math.max(1, microbeCount / THREAD_COUNT);
-            List<Future<?>> futures = new ArrayList<>();
-
-            for (int i = 0; i < microbeCount; i += chunkSize) {
-                final int start = i;
-                final int end = Math.min(i + chunkSize, microbeCount);
-                Future<?> future = executorService.submit(() ->
-                        behaviorSystem.processChunk(snapshot, spatialGrid, microbeGrid, start, end, temp, tox));
-                futures.add(future);
-            }
-
-        // Wait for all worker threads to complete
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
-                    return;
-                } catch (ExecutionException e) {
-                    LOGGER.log(Level.SEVERE, "Error during microbe chunk processing", e.getCause());
-                }
-            }
-
-        // Lock for list modifications (remove dead, add newborns)
-            synchronized (dataLock) {
-            microbes.removeIf(Microbe::isDead);
-            microbeById.entrySet().removeIf(e -> e.getValue().isDead());
-            foodPellets.removeIf(FoodPellet::isConsumed);
-
-            // Add newborns within population limit
-            int currentPopulation = microbes.size();
-            List<Microbe> newbornsCopy;
-            synchronized (newMicrobes) {
-                newbornsCopy = new ArrayList<>(newMicrobes);
-                newMicrobes.clear();
-            }
-            int newbornCount = newbornsCopy.size();
-
-            if (currentPopulation + newbornCount <= MAX_POPULATION) {
-                microbes.addAll(newbornsCopy);
-                for (Microbe newborn : newbornsCopy) {
-                    microbeById.put(newborn.getId(), newborn);
-                }
-            } else {
-                int allowedNewborns = Math.max(0, MAX_POPULATION - currentPopulation);
-                for (int i = 0; i < allowedNewborns && i < newbornCount; i++) {
-                    Microbe newborn = newbornsCopy.get(i);
-                    microbes.add(newborn);
-                    microbeById.put(newborn.getId(), newborn);
-                }
-            }
-
-            // Publish an immutable snapshot for lock-free EDT reading.
-            // Both lists are unmodifiable copies created while holding dataLock,
-            // guaranteeing happens-before visibility via the volatile write.
-                renderSnapshot = new SimulationSnapshot(
-                        microbes.stream().map(Microbe::toRenderState).toList(),
-                        List.copyOf(foodPellets));
-            }
+            return new FrameData(new ArrayList<>(microbes), new ArrayList<>(foodPellets));
         }
+    }
+
+    private record FrameData(List<Microbe> microbeSnapshot, List<FoodPellet> foodSnapshot) {
     }
 
     /**
