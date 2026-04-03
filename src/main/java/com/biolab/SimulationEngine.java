@@ -41,6 +41,8 @@ public class SimulationEngine implements SimulationRuntime {
     private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
     private static final double HUNT_STEER_STRENGTH = 0.12;
     private static final double FLEE_STEER_STRENGTH = 0.18;
+    private static final double FORAGE_STEER_BASE = 0.10;
+    private static final double FORAGE_STEER_HUNGER_BOOST = 0.26;
     private static final double MAX_STEER_DELTA = 1.2;
     private static final long ATTACK_COOLDOWN_MS = 300;
     /**
@@ -522,7 +524,10 @@ public class SimulationEngine implements SimulationRuntime {
     }
 
     private void processHerbivoreBehaviour(Microbe microbe, List<Microbe> neighbours, SpatialGrid foodGrid) {
-        for (FoodPellet food : foodGrid.getNearbyFood(microbe.getX(), microbe.getY())) {
+        List<FoodPellet> nearbyFood = foodGrid.getNearbyFood(microbe.getX(), microbe.getY());
+
+        // Try immediate consumption first.
+        for (FoodPellet food : nearbyFood) {
             if (food.checkCollision(microbe)) {
                 double energyGain = food.consume();
                 if (energyGain > 0) microbe.eat(energyGain);
@@ -530,10 +535,23 @@ public class SimulationEngine implements SimulationRuntime {
             }
         }
 
+        // Hunger-based food seeking keeps herbivores actively foraging.
+        FoodCandidate bestFood = findNearestFood(microbe, nearbyFood);
+        if (bestFood.food() != null) {
+            double hunger = 1.0 - microbe.getEnergyRatio();
+            double forageStrength = FORAGE_STEER_BASE + hunger * FORAGE_STEER_HUNGER_BOOST;
+            microbe.steerTowards(bestFood.food().getX(), bestFood.food().getY(), forageStrength);
+            microbe.setAiState(AiState.FORAGE);
+            microbe.setTargetX(bestFood.food().getX());
+            microbe.setTargetY(bestFood.food().getY());
+        }
+
         TargetCandidate threatCandidate = findNearestThreat(microbe, neighbours);
         Microbe threat = threatCandidate.target();
         if (threat == null) {
-            microbe.setAiState(AiState.WANDER);
+            if (bestFood.food() == null) {
+                microbe.setAiState(AiState.WANDER);
+            }
             return;
         }
 
@@ -555,6 +573,22 @@ public class SimulationEngine implements SimulationRuntime {
         double steerY = clamp((dy / dist) * microbe.getSpeed() * FLEE_STEER_STRENGTH,
                 -MAX_STEER_DELTA, MAX_STEER_DELTA);
         microbe.applyKnockback(steerX, steerY);
+    }
+
+    private FoodCandidate findNearestFood(Microbe microbe, List<FoodPellet> nearbyFood) {
+        FoodPellet best = null;
+        double bestDistSq = Double.MAX_VALUE;
+        for (FoodPellet food : nearbyFood) {
+            if (food == null || food.isConsumed()) continue;
+            double dx = food.getX() - microbe.getX();
+            double dy = food.getY() - microbe.getY();
+            double dSq = dx * dx + dy * dy;
+            if (dSq < bestDistSq) {
+                bestDistSq = dSq;
+                best = food;
+            }
+        }
+        return new FoodCandidate(best, bestDistSq);
     }
 
     private void tryReproduce(Microbe microbe, ThreadLocalRandom random) {
@@ -620,6 +654,9 @@ public class SimulationEngine implements SimulationRuntime {
     }
 
     private record TargetCandidate(Microbe target, double distSq) {
+    }
+
+    private record FoodCandidate(FoodPellet food, double distSq) {
     }
 
     /**

@@ -50,6 +50,7 @@ public class SimulationCanvas extends JPanel {
     // ── Debug / Developer Vision rendering ───────────────────────────────
     private static final Color DEBUG_HUNT_LINE_COLOR = new Color(255, 50, 50);
     private static final Color DEBUG_FLEE_LINE_COLOR = new Color(0, 230, 255);
+    private static final Color DEBUG_FORAGE_LINE_COLOR = new Color(120, 255, 120);
     private static final Color DEBUG_VISION_COLOR = new Color(255, 255, 255, 30);
     private static final Color DEBUG_ID_COLOR = new Color(220, 220, 220);
     private static final Font DEBUG_ID_FONT = new Font("Monospaced", Font.PLAIN, 9);
@@ -449,6 +450,34 @@ public class SimulationCanvas extends JPanel {
                 g2d.setColor(microbeColor);
                 g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
 
+                // Defense ring: high defense microbes get a thicker outer shell.
+                float defense = (float) Math.max(0.0, Math.min(1.0, microbe.defense()));
+                if (defense > 0.2f) {
+                    g2d.setColor(new Color(160, 230, 255, (int) (40 + defense * 100)));
+                    g2d.setStroke(new BasicStroke(1.0f + defense * 1.8f));
+                    g2d.drawOval(x - 2, y - 2, size + 4, size + 4);
+                    g2d.setStroke(STROKE_1);
+                }
+
+                // Strength spikes: offensive microbes show small spines.
+                float strength = (float) Math.max(0.0, Math.min(1.0, microbe.strength()));
+                if (strength > 0.45f) {
+                    int spikes = 4 + (int) Math.round(strength * 4.0);
+                    int outerR = (int) Math.round(size * 0.65 + 2 + strength * 3.0);
+                    int innerR = Math.max(2, outerR - 3);
+                    int cx = (int) mx;
+                    int cy = (int) my;
+                    g2d.setColor(new Color(255, 210, 120, 160));
+                    for (int s = 0; s < spikes; s++) {
+                        double angle = (Math.PI * 2.0 * s) / spikes;
+                        int x1 = cx + (int) Math.round(Math.cos(angle) * innerR);
+                        int y1 = cy + (int) Math.round(Math.sin(angle) * innerR);
+                        int x2 = cx + (int) Math.round(Math.cos(angle) * (outerR + 2));
+                        int y2 = cy + (int) Math.round(Math.sin(angle) * (outerR + 2));
+                        g2d.drawLine(x1, y1, x2, y2);
+                    }
+                }
+
                 // ── Attack-flash ring (carnivore recently bit something) ───
                 long msSinceAttack = nowMs - microbe.lastAttackTime();
                 if (microbe.carnivore() && msSinceAttack < ATTACK_FLASH_DURATION_MS) {
@@ -503,9 +532,15 @@ public class SimulationCanvas extends JPanel {
                     AiState aiState = microbe.aiState();
                     double tx = microbe.targetX();
                     double ty = microbe.targetY();
-                    if (tx >= 0 && (aiState == AiState.HUNT || aiState == AiState.FLEE)) {
+                    if (tx >= 0 && (aiState == AiState.HUNT || aiState == AiState.FLEE || aiState == AiState.FORAGE)) {
                         g2d.setComposite(AC_DEBUG_LINE);
-                        g2d.setColor(aiState == AiState.HUNT ? DEBUG_HUNT_LINE_COLOR : DEBUG_FLEE_LINE_COLOR);
+                        Color lineColor = switch (aiState) {
+                            case HUNT -> DEBUG_HUNT_LINE_COLOR;
+                            case FLEE -> DEBUG_FLEE_LINE_COLOR;
+                            case FORAGE -> DEBUG_FORAGE_LINE_COLOR;
+                            default -> DEBUG_ID_COLOR;
+                        };
+                        g2d.setColor(lineColor);
                         g2d.drawLine((int) mx, (int) my, (int) tx, (int) ty);
                     }
 

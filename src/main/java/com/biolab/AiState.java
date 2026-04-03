@@ -6,6 +6,7 @@ package com.biolab;
 public enum AiState {
     HUNT,
     FLEE,
+    FORAGE,
     WANDER
 }
 

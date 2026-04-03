@@ -148,10 +148,20 @@ public class Microbe {
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        this.heatResistance = random.nextDouble() * 0.3;
-        this.toxinResistance = random.nextDouble() * 0.3;
-        this.speed = random.nextDouble() * 0.3;
-        this.diet = random.nextDouble();
+        // Triangle-tradeoff: strong genes in one axis reduce headroom in others.
+        double offenseAxis = random.nextDouble();
+        double defenseAxis = random.nextDouble();
+        double agilityAxis = random.nextDouble();
+        double sum = offenseAxis + defenseAxis + agilityAxis + 1e-9;
+        offenseAxis /= sum;
+        defenseAxis /= sum;
+        agilityAxis /= sum;
+
+        this.diet = clamp01(0.10 + offenseAxis * 1.15 + (random.nextDouble() - 0.5) * 0.10);
+        this.speed = clamp01(0.12 + agilityAxis * 1.10 + (random.nextDouble() - 0.5) * 0.08);
+        double baseDefense = clamp01(0.15 + defenseAxis * 1.15);
+        this.heatResistance = clamp01(baseDefense + (random.nextDouble() - 0.5) * 0.18);
+        this.toxinResistance = clamp01(baseDefense + (random.nextDouble() - 0.5) * 0.18);
         this.health = MAX_HEALTH;
         this.energy = INITIAL_ENERGY;
         this.age = 0;
@@ -286,9 +296,9 @@ public class Microbe {
         this.x = x;
         this.y = y;
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        this.heatResistance = random.nextDouble() * 0.3;
-        this.toxinResistance = random.nextDouble() * 0.3;
-        this.speed = 0.3 + random.nextDouble() * 0.4; // slightly faster for sandbox visibility
+        this.heatResistance = 0.35 + random.nextDouble() * 0.45;
+        this.toxinResistance = 0.35 + random.nextDouble() * 0.45;
+        this.speed = 0.35 + random.nextDouble() * 0.45; // slightly faster for sandbox visibility
         this.diet = Math.max(0.0, Math.min(1.0, forcedDiet));
         this.health = MAX_HEALTH;
         this.energy = INITIAL_ENERGY;
@@ -309,13 +319,17 @@ public class Microbe {
         return Math.max(0.0, Math.min(1.0, newValue)); // Clamp to [0, 1]
     }
 
+    private static double clamp01(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
+    }
+
     /**
      * Sets random velocity based on speed gene.
      */
     private void randomizeVelocity() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         double angle = random.nextDouble() * 2 * Math.PI;
-        double magnitude = speed * 2.0; // Scale speed
+        double magnitude = 0.8 + speed * 2.8;
         this.velocityX = Math.cos(angle) * magnitude;
         this.velocityY = Math.sin(angle) * magnitude;
     }
@@ -340,8 +354,9 @@ public class Microbe {
         double appliedVY = hasAdrenaline ? velocityY * ADRENALINE_SPEED_MULT : velocityY;
 
         double vitality = getVitality();
-        x += appliedVX * vitality;
-        y += appliedVY * vitality;
+        double energySpeedFactor = 0.30 + getEnergyRatio() * 0.70;
+        x += appliedVX * vitality * energySpeedFactor;
+        y += appliedVY * vitality * energySpeedFactor;
 
         // Bounce off world boundaries
         if (x < 0 || x > width) {
@@ -354,7 +369,7 @@ public class Microbe {
         }
 
         // Random direction changes for more organic movement
-        if (ThreadLocalRandom.current().nextDouble() < 0.02) {
+        if (ThreadLocalRandom.current().nextDouble() < 0.02 && getEnergyRatio() > 0.30) {
             randomizeVelocity();
         }
     }
@@ -467,6 +482,10 @@ public class Microbe {
     public void eat(double energyGain) {
         synchronized (stateLock) {
             energy = Math.min(MAX_ENERGY, energy + energyGain);
+            // Food can slowly repair damage, enabling long-lived lineages when foraging succeeds.
+            if (energyGain > 0 && health > 0) {
+                health = Math.min(MAX_HEALTH, health + energyGain * 0.06);
+            }
         }
     }
 
@@ -625,7 +644,12 @@ public class Microbe {
      * Returns the visual radius of this microbe.
      */
     public int getSize() {
-        return 5 + (int) (diet * 7);
+        double defense = getDefenseTrait();
+        double strength = getStrengthTrait();
+        double bulk = 0.55 * defense + 0.45 * strength;
+        double agilityPenalty = speed * 0.35;
+        double sizeFactor = clamp01(0.18 + bulk - agilityPenalty);
+        return 5 + (int) Math.round(sizeFactor * 8.0);
     }
 
     /**
@@ -633,8 +657,23 @@ public class Microbe {
      * Young microbes are fully vital; old microbes become slower and more fragile.
      */
     public double getVitality() {
-        if (age < 1000) return 1.0;
-        return Math.max(0.1, 1.0 - ((age - 1000) / 1500.0));
+        if (age < 3000) return 1.0;
+        return Math.max(0.1, 1.0 - ((age - 3000) / 6000.0));
+    }
+
+    public double getEnergyRatio() {
+        synchronized (stateLock) {
+            return clamp01(energy / MAX_ENERGY);
+        }
+    }
+
+    public double getDefenseTrait() {
+        return clamp01((heatResistance + toxinResistance) * 0.5);
+    }
+
+    public double getStrengthTrait() {
+        // Carnivore tendency + body mass proxy produce striking power.
+        return clamp01(0.70 * diet + 0.30 * (1.0 - speed));
     }
 
     public boolean isDead() {
@@ -752,6 +791,31 @@ public class Microbe {
     }
 
     /**
+     * Smoothly steers velocity toward a world-space target.
+     *
+     * @param tx       target x
+     * @param ty       target y
+     * @param strength blend factor in [0,1], higher = snappier turn
+     */
+    public void steerTowards(double tx, double ty, double strength) {
+        double dx = tx - x;
+        double dy = ty - y;
+        double distSq = dx * dx + dy * dy;
+        if (distSq <= 1e-9) return;
+
+        double dist = Math.sqrt(distSq);
+        double desiredMag = 0.9 + speed * 2.6;
+        double desiredVX = (dx / dist) * desiredMag;
+        double desiredVY = (dy / dist) * desiredMag;
+        double s = clamp01(strength);
+
+        synchronized (stateLock) {
+            velocityX = velocityX * (1.0 - s) + desiredVX * s;
+            velocityY = velocityY * (1.0 - s) + desiredVY * s;
+        }
+    }
+
+    /**
      * Captures a single immutable snapshot of all render-relevant values.
      */
     public RenderState toRenderState() {
@@ -768,6 +832,8 @@ public class Microbe {
                 cachedBrightColor,
                 healthRatio,
                 isCarnivore(),
+                getStrengthTrait(),
+                getDefenseTrait(),
                 isSelected,
                 lastAttackTime,
                 aiState,
@@ -827,6 +893,8 @@ public class Microbe {
             Color brightColor,
             double healthRatio,
             boolean carnivore,
+            double strength,
+            double defense,
             boolean selected,
             long lastAttackTime,
             AiState aiState,
