@@ -40,8 +40,12 @@ Simulating thousands of agents calculating their behavior, movement, and interac
 - Adjustable environmental parameters (temperature and toxicity)
 - Natural selection mechanics where microbes evolve based on environmental pressures
 
-### Settings System
-- **Persistent Configuration**: Settings are automatically saved and loaded from `~/.biolabsim/settings.properties`
+### Settings and Saves
+
+- **Persistent Configuration**: Settings are stored under the app data root (`%LOCALAPPDATA%/BioLabSimulator/settings`
+  on Windows)
+- **Savegames**: Save files and metadata are stored alongside settings in `%LOCALAPPDATA%/BioLabSimulator/saves` on
+  Windows
 - **Settings Overlay**: Access via the gear button in the top-left overlay
   - Automatically pauses simulation when open
   - Semi-transparent overlay with blur effect

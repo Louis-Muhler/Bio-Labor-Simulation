@@ -1,6 +1,7 @@
 package com.biolab;
 
 import java.io.*;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -109,7 +110,13 @@ public class SimulationStateService {
             long lastAttackTime = in.readLong();
             double targetX = in.readDouble();
             double targetY = in.readDouble();
-            AiState aiState = AiState.valueOf(in.readUTF());
+            AiState aiState;
+            String aiStateRaw = in.readUTF();
+            try {
+                aiState = AiState.valueOf(aiStateRaw);
+            } catch (IllegalArgumentException ex) {
+                aiState = AiState.WANDER;
+            }
             long adrenalineTimer = in.readLong();
 
             int ancestryCount = in.readInt();
@@ -188,7 +195,11 @@ public class SimulationStateService {
         try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(tmp)))) {
             writeState(out, state);
         }
-        Files.move(tmp, normalized, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        try {
+            Files.move(tmp, normalized, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(tmp, normalized, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     public SimulationState load(Path file) throws IOException {

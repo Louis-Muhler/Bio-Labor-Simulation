@@ -31,7 +31,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Toggle at runtime via the 'D' key in {@link SimulationCanvas}.
      */
     private final DebugModeService debugModeService = new DebugModeService();
-    private static final int MAX_POPULATION = 20000;
+    private static final int DEFAULT_MAX_POPULATION = 20000;
     /**
      * Latest snapshot, published atomically (volatile pointer swap) at the end of
      * every {@code update()} call.  Readers (EDT) access it without
@@ -59,16 +59,26 @@ public class SimulationEngine implements SimulationRuntime {
      * @throws IllegalArgumentException if dimensions are non-positive or population is negative
      */
     public SimulationEngine(int width, int height, int initialPopulation) {
+        this(width, height, initialPopulation, DEFAULT_MAX_POPULATION);
+    }
+
+    /**
+     * Creates and initialises the simulation engine with a configurable population cap.
+     */
+    public SimulationEngine(int width, int height, int initialPopulation, int maxPopulation) {
         if (initialPopulation < 0) {
             throw new IllegalArgumentException("initialPopulation must be >= 0, was: " + initialPopulation);
         }
         if (width <= 0 || height <= 0) {
             throw new IllegalArgumentException("World dimensions must be positive, was: " + width + "x" + height);
         }
+        if (maxPopulation <= 0 || maxPopulation < initialPopulation) {
+            throw new IllegalArgumentException("maxPopulation must be >= initialPopulation and > 0, was: " + maxPopulation);
+        }
 
         this.worldState = new WorldState();
         this.environment = new Environment();
-        this.availableReproductionSlots = new AtomicInteger(MAX_POPULATION);
+        this.availableReproductionSlots = new AtomicInteger(maxPopulation);
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.context = SimulationEngineContext.create(
@@ -79,7 +89,7 @@ public class SimulationEngine implements SimulationRuntime {
                 debugModeService,
                 worldState,
                 availableReproductionSlots,
-                MAX_POPULATION,
+                maxPopulation,
                 THREAD_COUNT,
                 width,
                 height,

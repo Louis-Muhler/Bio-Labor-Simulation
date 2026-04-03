@@ -17,7 +17,7 @@ import java.util.logging.Logger;
 public class SettingsManager {
     private static final Logger LOGGER = Logger.getLogger(SettingsManager.class.getName());
 
-    private static final Path DEFAULT_CONFIG_DIR = Path.of(System.getProperty("user.home"), ".biolabsim");
+    private static final Path DEFAULT_CONFIG_DIR = AppPaths.getSettingsDir();
 
     private final Path configDir;
     private final Path configFile;
