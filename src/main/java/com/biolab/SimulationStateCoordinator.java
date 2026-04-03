@@ -2,7 +2,6 @@ package com.biolab;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -13,7 +12,7 @@ final class SimulationStateCoordinator {
     private final int width;
     private final int height;
     private final Environment environment;
-    private final AtomicBoolean debugMode;
+    private final DebugModeService debugModeService;
     private final List<Microbe> microbes;
     private final List<Microbe> newMicrobes;
     private final List<FoodPellet> foodPellets;
@@ -22,7 +21,7 @@ final class SimulationStateCoordinator {
     SimulationStateCoordinator(int width,
                                int height,
                                Environment environment,
-                               AtomicBoolean debugMode,
+                               DebugModeService debugModeService,
                                List<Microbe> microbes,
                                List<Microbe> newMicrobes,
                                List<FoodPellet> foodPellets,
@@ -30,7 +29,7 @@ final class SimulationStateCoordinator {
         this.width = width;
         this.height = height;
         this.environment = environment;
-        this.debugMode = debugMode;
+        this.debugModeService = debugModeService;
         this.microbes = microbes;
         this.newMicrobes = newMicrobes;
         this.foodPellets = foodPellets;
@@ -54,7 +53,7 @@ final class SimulationStateCoordinator {
                 foodSpawnRate,
                 microbesState,
                 foodState,
-                debugMode.get()
+                debugModeService.isEnabled()
         );
     }
 
@@ -84,7 +83,7 @@ final class SimulationStateCoordinator {
         environment.setTemperature(state.temperature());
         environment.setToxicity(state.toxicity());
         foodSpawnRateSetter.accept(state.foodSpawnRate());
-        debugMode.set(state.debugMode());
+        debugModeService.setEnabled(state.debugMode());
 
         microbeById.clear();
         for (Microbe microbe : microbes) {

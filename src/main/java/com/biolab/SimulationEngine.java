@@ -2,8 +2,10 @@ package com.biolab;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -37,7 +39,7 @@ public class SimulationEngine implements SimulationRuntime {
      * renders debug overlays (AI target lines, vision radii, IDs).
      * Toggle at runtime via the 'D' key in {@link SimulationCanvas}.
      */
-    private final AtomicBoolean debugMode = new AtomicBoolean(false);
+    private final DebugModeService debugModeService = new DebugModeService();
     private static final int MAX_POPULATION = 20000;
     /**
      * Latest snapshot, published atomically (volatile pointer swap) at the end of
@@ -63,6 +65,7 @@ public class SimulationEngine implements SimulationRuntime {
     private final SimulationFrameOrchestrator frameOrchestrator;
     private final SimulationStateCoordinator stateCoordinator;
     private final MicrobeLookupService microbeLookupService;
+    private final SimulationLifecycleService lifecycleService;
     private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
@@ -126,13 +129,14 @@ public class SimulationEngine implements SimulationRuntime {
                 width,
                 height,
                 environment,
-                debugMode,
+                debugModeService,
                 microbes,
                 newMicrobes,
                 foodPellets,
                 microbeById
         );
         this.microbeLookupService = new MicrobeLookupService(dataLock, microbes);
+        this.lifecycleService = new SimulationLifecycleService(executorService, LOGGER);
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -160,18 +164,12 @@ public class SimulationEngine implements SimulationRuntime {
      */
     @Override
     public boolean toggleDebugModeFlag() {
-        while (true) {
-            boolean current = debugMode.get();
-            boolean next = !current;
-            if (debugMode.compareAndSet(current, next)) {
-                return next;
-            }
-        }
+        return debugModeService.toggle();
     }
 
     @Override
     public boolean isDebugModeEnabled() {
-        return debugMode.get();
+        return debugModeService.isEnabled();
     }
 
     /**
@@ -331,23 +329,6 @@ public class SimulationEngine implements SimulationRuntime {
      * Shuts down the thread pool gracefully.
      */
     public void shutdown() {
-        LOGGER.info("Shutting down simulation engine...");
-        executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                LOGGER.warning("Executor did not terminate in time, forcing shutdown...");
-                executorService.shutdownNow();
-                // Wait a bit for tasks to respond to being canceled
-                if (!executorService.awaitTermination(SHUTDOWN_NOW_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                    LOGGER.severe("Executor did not terminate after forced shutdown");
-                }
-            }
-        } catch (InterruptedException e) {
-            LOGGER.log(Level.WARNING, "Shutdown interrupted, forcing immediate shutdown", e);
-            executorService.shutdownNow();
-            // Preserve interrupt status
-            Thread.currentThread().interrupt();
-        }
-        LOGGER.info("Simulation engine shutdown complete");
+        lifecycleService.shutdown();
     }
 }
