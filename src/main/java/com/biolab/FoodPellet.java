@@ -12,7 +12,7 @@ public class FoodPellet {
     private static final Color FOOD_COLOR = new Color(50, 255, 100);
     private final double x;
     private static final int SIZE = 6;
-    private static final double ENERGY_VALUE = 30.0;
+    private static final double ENERGY_VALUE = 50.0;
     private final double y;
     private final AtomicBoolean consumed = new AtomicBoolean(false);
 

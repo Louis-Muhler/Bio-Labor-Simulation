@@ -1,0 +1,23 @@
+package com.biolab;
+
+/**
+ * Runtime control surface for the simulation loop thread.
+ */
+public interface SimulationRuntime extends SimulationWorld {
+    void update();
+
+    void loadState(SimulationState state);
+
+    void spawnMicrobe(Microbe microbe);
+
+    void setFoodSpawnRate(double rate);
+
+    void enqueueCommand(SimulationCommand command);
+
+    boolean toggleDebugModeFlag();
+
+    boolean isRunning();
+
+    void shutdown();
+}
+

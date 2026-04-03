@@ -17,7 +17,7 @@ import java.awt.event.MouseEvent;
  * ({@code #121212}), 15 px corner radius, neon-cyan glow border.</p>
  */
 public class EnvironmentPanel extends JPanel {
-    private final SimulationEngine engine;
+    private final SimulationRuntime engine;
 
     private static final int PANEL_WIDTH = 300;
     private static final int MARGIN = 20;
@@ -95,7 +95,7 @@ public class EnvironmentPanel extends JPanel {
     /**
      * @param engine the simulation engine whose environment parameters are controlled
      */
-    public EnvironmentPanel(SimulationEngine engine) {
+    public EnvironmentPanel(SimulationRuntime engine) {
         this.engine = engine;
         setPreferredSize(new Dimension(PANEL_WIDTH, 310));
         setBackground(new Color(0, 0, 0, 0));
@@ -153,9 +153,9 @@ public class EnvironmentPanel extends JPanel {
         double value = Math.max(0.0, Math.min(1.0, (double) (mouseX - bar.x) / bar.width));
 
         switch (sliderIndex) {
-            case 0 -> engine.getEnvironment().setTemperature(value);
-            case 1 -> engine.getEnvironment().setToxicity(value);
-            case 2 -> engine.setFoodSpawnRate(value);
+            case 0 -> engine.enqueueCommand(SimulationCommand.setTemperature(value));
+            case 1 -> engine.enqueueCommand(SimulationCommand.setToxicity(value));
+            case 2 -> engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(value));
             default -> {}
         }
         repaint();

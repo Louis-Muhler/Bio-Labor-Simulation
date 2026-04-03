@@ -25,7 +25,7 @@ public class SimulationLoopController {
     private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
     private int currentSpeedIndex = 0;
 
-    private final SimulationEngine engine;
+    private final SimulationRuntime engine;
     private final SimulationCanvas canvas;
     private final Runnable onDeadMicrobeCheck;
     private final IntConsumer onPopulationUpdated;
@@ -45,7 +45,7 @@ public class SimulationLoopController {
     private long lastPopulationUpdateTime = System.nanoTime();
     private long lastRenderTime = System.nanoTime();
 
-    public SimulationLoopController(SimulationEngine engine, SimulationCanvas canvas,
+    public SimulationLoopController(SimulationRuntime engine, SimulationCanvas canvas,
                                     Runnable onDeadMicrobeCheck,
                                     IntConsumer onPopulationUpdated) {
         this.engine = engine;

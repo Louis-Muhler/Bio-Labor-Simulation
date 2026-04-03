@@ -26,7 +26,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private static final int WORLD_SIZE = 10_000;
 
     private final SettingsManager settingsManager;
-    private final SimulationEngine engine;
+    private final SimulationRuntime engine;
     private final SimulationCanvas canvas;
     private final OverlayManager overlayManager;
     private final SimulationLoopController loopController;

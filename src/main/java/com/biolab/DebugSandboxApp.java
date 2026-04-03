@@ -77,7 +77,7 @@ public class DebugSandboxApp {
 
     private static void launchSandbox() {
         // 1. Build an engine with a tiny world and zero initial population
-        SimulationEngine engine = new SimulationEngine(
+        SimulationRuntime engine = new SimulationEngine(
                 SANDBOX_WORLD_SIZE, SANDBOX_WORLD_SIZE, /* initialPopulation = */ 0);
 
         // 2. Manually spawn forced microbes
@@ -91,7 +91,7 @@ public class DebugSandboxApp {
      * Spawns {@value #CARNIVORE_COUNT} carnivores and {@value #HERBIVORE_COUNT} herbivores
      * spread evenly across the sandbox world using a grid with random jitter.
      */
-    private static void spawnSandboxMicrobes(SimulationEngine engine) {
+    private static void spawnSandboxMicrobes(SimulationRuntime engine) {
         ThreadLocalRandom rng = ThreadLocalRandom.current();
         int total = CARNIVORE_COUNT + HERBIVORE_COUNT;
 
@@ -122,7 +122,7 @@ public class DebugSandboxApp {
      * A minimal {@link SimulationCanvas.SelectionListener} wires selection
      * highlights and follow-camera without needing the full inspector panel.
      */
-    private static void buildWindow(SimulationEngine engine) {
+    private static void buildWindow(SimulationRuntime engine) {
         final int WIN_W = 900;
         final int WIN_H = 700;
 

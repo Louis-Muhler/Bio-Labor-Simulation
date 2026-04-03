@@ -11,7 +11,7 @@ import java.util.logging.Logger;
  * Manages the simulation logic using multithreading.
  * Handles concurrent updating of microbes and the food pellet system.
  */
-public class SimulationEngine {
+public class SimulationEngine implements SimulationRuntime {
     private static final Logger LOGGER = Logger.getLogger(SimulationEngine.class.getName());
 
     /**
@@ -21,7 +21,7 @@ public class SimulationEngine {
      */
     public static volatile boolean DEBUG_MODE = false;
 
-    private static final double COMBAT_DAMAGE = 9.0;
+    private static final double COMBAT_DAMAGE = 7.0;
 
     private final List<Microbe> microbes;
     private final List<Microbe> newMicrobes;
@@ -33,8 +33,9 @@ public class SimulationEngine {
 
     private final AtomicInteger availableReproductionSlots;
     private final ExecutorService executorService;
-    private static final int INITIAL_FOOD_COUNT = 200;
-    private static final int MAX_FOOD_PELLETS = 1000;
+    private static final int INITIAL_FOOD_COUNT = 1200;
+    private static final int MAX_FOOD_PELLETS = 6000;
+    private final ConcurrentLinkedQueue<SimulationCommand> commandQueue = new ConcurrentLinkedQueue<>();
     private static final int MAX_POPULATION = 20000;
     private static final int MAX_REPRODUCTION_ATTEMPTS = 5;
     private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
@@ -55,7 +56,7 @@ public class SimulationEngine {
     private final Object dataLock = new Object();
     private final SpatialGrid spatialGrid;
     private final MicrobeGrid microbeGrid;
-    private volatile double foodSpawnRate = 0.3;
+    private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
 
@@ -64,6 +65,16 @@ public class SimulationEngine {
      */
     public static synchronized boolean toggleDebugMode() {
         DEBUG_MODE = !DEBUG_MODE;
+        return DEBUG_MODE;
+    }
+
+    @Override
+    public boolean toggleDebugModeFlag() {
+        return toggleDebugMode();
+    }
+
+    @Override
+    public boolean isDebugModeEnabled() {
         return DEBUG_MODE;
     }
 
@@ -122,6 +133,9 @@ public class SimulationEngine {
     public void update() {
         if (executorService.isShutdown()) return;
 
+        // Apply queued UI-originated commands on the simulation thread.
+        processPendingCommands();
+
         // Get current environmental conditions (thread-safe)
         final double temp = environment.getTemperature();
         final double tox = environment.getToxicity();
@@ -148,7 +162,13 @@ public class SimulationEngine {
         }
 
         final int microbeCount = snapshot.size();
-        if (microbeCount == 0) return;
+        if (microbeCount == 0) {
+            synchronized (dataLock) {
+                foodPellets.removeIf(FoodPellet::isConsumed);
+                renderSnapshot = new RenderSnapshot(List.of(), List.copyOf(foodPellets));
+            }
+            return;
+        }
 
         // Rebuild spatial grid for O(1) food lookup
         spatialGrid.rebuild(foodSnapshot);
@@ -217,6 +237,23 @@ public class SimulationEngine {
      */
     public RenderSnapshot getRenderSnapshot() {
         return renderSnapshot;
+    }
+
+    @Override
+    public void enqueueCommand(SimulationCommand command) {
+        if (command == null) return;
+        commandQueue.offer(command);
+    }
+
+    private void processPendingCommands() {
+        SimulationCommand command;
+        while ((command = commandQueue.poll()) != null) {
+            try {
+                command.apply(this);
+            } catch (RuntimeException ex) {
+                LOGGER.log(Level.WARNING, "Failed to execute simulation command", ex);
+            }
+        }
     }
 
     /**
@@ -313,6 +350,11 @@ public class SimulationEngine {
     public void loadState(SimulationState state) {
         if (state == null) {
             throw new IllegalArgumentException("state must not be null");
+        }
+        if (state.worldWidth() != width || state.worldHeight() != height) {
+            throw new IllegalArgumentException("State dimensions "
+                    + state.worldWidth() + "x" + state.worldHeight()
+                    + " do not match runtime world " + width + "x" + height);
         }
         synchronized (dataLock) {
             microbes.clear();

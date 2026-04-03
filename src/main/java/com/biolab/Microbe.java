@@ -70,11 +70,11 @@ public class Microbe {
 
     private static final double MAX_HEALTH = 100.0;
     private static final double MAX_ENERGY = 100.0;
-    private static final double INITIAL_ENERGY = 80.0;
-    private static final int REPRODUCTION_AGE = 120;
-    private static final double MOVEMENT_ENERGY_COST = 0.02;
-    private static final double REPRODUCTION_ENERGY_COST = 50.0;
-    private static final double MIN_REPRODUCTION_ENERGY = 75.0;
+    private static final double INITIAL_ENERGY = 92.0;
+    private static final int REPRODUCTION_AGE = 80;
+    private static final double MOVEMENT_ENERGY_COST = 0.009;
+    private static final double REPRODUCTION_ENERGY_COST = 32.0;
+    private static final double MIN_REPRODUCTION_ENERGY = 62.0;
     /**
      * Absolute generation counter: 1 for seed microbes, parent.absoluteGeneration + 1
      * for every child born through reproduction.  Never changes after construction.

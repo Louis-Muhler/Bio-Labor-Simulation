@@ -70,6 +70,15 @@ public class SimulationCanvas extends JPanel {
      */
     private static final AlphaComposite[][] GLOW_COMPOSITES = buildGlowTable();
 
+    private final SimulationRuntime engine;
+    /**
+     * Exponential pull strength per timer tick (~16 ms).
+     * Each tick the camera closes this fraction of the remaining distance to
+     * the microbe, producing a fast initial pull that decelerates smoothly.
+     * Lower values = smoother/slower tracking; higher = snappier.
+     */
+    private static final double PULL_STRENGTH = 0.06;
+    private final int worldHeight;
     /**
      * @param worldWidth        width of the simulation world in world units
      * @param worldHeight       height of the simulation world in world units
@@ -79,7 +88,7 @@ public class SimulationCanvas extends JPanel {
      * @param selectionListener receives microbe click / deselect events
      */
     public SimulationCanvas(int worldWidth, int worldHeight, int canvasWidth, int canvasHeight,
-                            SimulationEngine engine, SelectionListener selectionListener) {
+                            SimulationRuntime engine, SelectionListener selectionListener) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.engine = engine;
@@ -99,15 +108,6 @@ public class SimulationCanvas extends JPanel {
         setupMouseListeners();
         setupKeyBindings();
     }
-    /**
-     * Exponential pull strength per timer tick (~16 ms).
-     * Each tick the camera closes this fraction of the remaining distance to
-     * the microbe, producing a fast initial pull that decelerates smoothly.
-     * Lower values = smoother/slower tracking; higher = snappier.
-     */
-    private static final double PULL_STRENGTH = 0.06;
-    private final int worldHeight;
-    private final SimulationEngine engine;
     private final SelectionListener selectionListener;
 
     // ── Camera – follow / lerp ────────────────────────────────────────────
@@ -228,7 +228,7 @@ public class SimulationCanvas extends JPanel {
      * Registers keyboard shortcuts using InputMap/ActionMap so they work even
      * when focus is on a child component.
      * <ul>
-     *   <li><b>D</b> – toggle {@link SimulationEngine#DEBUG_MODE} (Developer Vision)</li>
+     *   <li><b>D</b> – toggle debug overlay via simulation command queue</li>
      * </ul>
      */
     private void setupKeyBindings() {
@@ -240,7 +240,7 @@ public class SimulationCanvas extends JPanel {
         am.put("toggleDebug", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                SimulationEngine.toggleDebugMode();
+                engine.enqueueCommand(SimulationCommand.toggleDebugMode());
                 repaint();
             }
         });
@@ -419,7 +419,7 @@ public class SimulationCanvas extends JPanel {
             // ── Microbes ──────────────────────────────────────────────────
             long nowMs = System.currentTimeMillis();
             final Composite defaultComposite = g2d.getComposite();
-            final boolean debugOn = SimulationEngine.DEBUG_MODE;
+            final boolean debugOn = engine.isDebugModeEnabled();
 
             for (Microbe.RenderState microbe : snapshotMicrobes) {
                 if (microbe == null) continue;
