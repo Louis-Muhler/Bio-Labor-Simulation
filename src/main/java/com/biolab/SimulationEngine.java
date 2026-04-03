@@ -7,7 +7,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -48,8 +47,6 @@ public class SimulationEngine implements SimulationRuntime {
      * under {@code dataLock}.
      */
     private volatile SimulationSnapshot renderSnapshot;
-    private static final int SHUTDOWN_TIMEOUT_SECONDS = 2;
-    private static final int SHUTDOWN_NOW_TIMEOUT_SECONDS = 1;
     private static final int SPATIAL_CELL_SIZE = 30;
     private final Object dataLock = new Object();
     /**
@@ -63,6 +60,7 @@ public class SimulationEngine implements SimulationRuntime {
     private final MicrobeBehaviorSystem behaviorSystem;
     private final PopulationCommitSystem populationCommitSystem;
     private final SimulationFrameOrchestrator frameOrchestrator;
+    private final SimulationUpdateService updateService;
     private final SimulationStateCoordinator stateCoordinator;
     private final MicrobeLookupService microbeLookupService;
     private final SimulationLifecycleService lifecycleService;
@@ -125,6 +123,15 @@ public class SimulationEngine implements SimulationRuntime {
                 populationCommitSystem,
                 LOGGER
         );
+        this.updateService = new SimulationUpdateService(
+                frameMutationLock,
+                executorService,
+                this::processPendingCommands,
+                environment,
+                framePreparationSystem,
+                frameOrchestrator,
+                LOGGER
+        );
         this.stateCoordinator = new SimulationStateCoordinator(
                 width,
                 height,
@@ -178,27 +185,7 @@ public class SimulationEngine implements SimulationRuntime {
      * This method is always called from the SimulationLoop thread (single writer).
      */
     public void update() {
-        synchronized (frameMutationLock) {
-            if (executorService.isShutdown()) return;
-
-            // Apply queued UI-originated commands on the simulation thread.
-            processPendingCommands();
-
-            final double temp = environment.getTemperature();
-            final double tox = environment.getToxicity();
-            FramePreparationSystem.FrameBatch frameData = framePreparationSystem.prepare(foodSpawnRate);
-            try {
-                renderSnapshot = frameOrchestrator.runFrame(
-                        frameData.microbeSnapshot(),
-                        frameData.foodSnapshot(),
-                        temp,
-                        tox
-                );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOGGER.log(Level.WARNING, "Simulation thread interrupted during processing", e);
-            }
-        }
+        renderSnapshot = updateService.runUpdate(renderSnapshot, foodSpawnRate);
     }
 
     /**
