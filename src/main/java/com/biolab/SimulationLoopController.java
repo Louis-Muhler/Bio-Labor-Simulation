@@ -30,8 +30,9 @@ public class SimulationLoopController {
     private final Runnable onDeadMicrobeCheck;
     private final IntConsumer onPopulationUpdated;
 
-    private volatile boolean running = true;
+    private volatile boolean running = false;
     private volatile boolean paused = false;
+    private volatile Thread simulationThread;
 
     /**
      * Interval (ns) between engine.update() calls – the tick/simulation speed.
@@ -42,8 +43,8 @@ public class SimulationLoopController {
      */
     private volatile long renderIntervalNs;
 
-    private long lastPopulationUpdateTime = System.nanoTime();
-    private long lastRenderTime = System.nanoTime();
+    private long lastPopulationUpdateTime;
+    private long lastRenderTime;
 
     public SimulationLoopController(SimulationRuntime engine, SimulationCanvas canvas,
                                     Runnable onDeadMicrobeCheck,
@@ -86,8 +87,17 @@ public class SimulationLoopController {
     /**
      * Starts the simulation loop in a daemon thread.
      */
-    public void start() {
-        Thread simulationThread = new Thread(() -> {
+    public synchronized void start() {
+        if (simulationThread != null && simulationThread.isAlive()) {
+            return;
+        }
+
+        running = true;
+        paused = false;
+        lastPopulationUpdateTime = System.nanoTime();
+        lastRenderTime = lastPopulationUpdateTime;
+
+        simulationThread = new Thread(() -> {
             while (running) {
                 long startTime = System.nanoTime();
 
@@ -162,5 +172,11 @@ public class SimulationLoopController {
     }
 
     /** Signals the simulation loop thread to exit cleanly. */
-    public void stop()   { running = false; }
+    public synchronized void stop() {
+        running = false;
+        Thread thread = simulationThread;
+        if (thread != null) {
+            thread.interrupt();
+        }
+    }
 }

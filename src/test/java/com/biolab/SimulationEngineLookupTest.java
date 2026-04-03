@@ -1,0 +1,47 @@
+package com.biolab;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class SimulationEngineLookupTest {
+
+    @Test
+    void findRandomLivingMicrobeShouldNeverReturnDeadMicrobe() {
+        SimulationEngine engine = new SimulationEngine(300, 300, 0);
+
+        Microbe dead = new Microbe(100, 100, 0.0);
+        Microbe alive = new Microbe(120, 120, 0.0);
+
+        engine.spawnMicrobe(dead);
+        engine.spawnMicrobe(alive);
+
+        // Force a dead specimen that still exists in the world list until frame commit.
+        dead.takeDamageAndTransferEnergy(10_000.0);
+        assertTrue(dead.isDead());
+
+        for (int i = 0; i < 250; i++) {
+            Microbe picked = engine.findRandomLivingMicrobe();
+            assertNotNull(picked);
+            assertFalse(picked.isDead(), "Lookup returned a dead microbe");
+            assertEquals(alive.getId(), picked.getId(), "Only the living microbe should be selectable");
+        }
+
+        engine.shutdown();
+    }
+
+    @Test
+    void findRandomLivingMicrobeShouldReturnNullWhenNoLivingMicrobeExists() {
+        SimulationEngine engine = new SimulationEngine(300, 300, 0);
+
+        Microbe dead = new Microbe(100, 100, 0.0);
+        engine.spawnMicrobe(dead);
+        dead.takeDamageAndTransferEnergy(10_000.0);
+        assertTrue(dead.isDead());
+
+        assertNull(engine.findRandomLivingMicrobe());
+
+        engine.shutdown();
+    }
+}
+

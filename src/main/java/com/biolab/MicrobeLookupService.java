@@ -27,8 +27,19 @@ final class MicrobeLookupService {
         synchronized (worldState.dataLock()) {
             List<Microbe> microbes = worldState.population().microbes();
             if (microbes.isEmpty()) return null;
-            int idx = ThreadLocalRandom.current().nextInt(microbes.size());
-            return microbes.get(idx);
+
+            // Reservoir sampling: uniform random choice among living microbes without extra allocations.
+            Microbe chosen = null;
+            int livingCount = 0;
+            ThreadLocalRandom random = ThreadLocalRandom.current();
+            for (Microbe microbe : microbes) {
+                if (microbe == null || microbe.isDead()) continue;
+                livingCount++;
+                if (random.nextInt(livingCount) == 0) {
+                    chosen = microbe;
+                }
+            }
+            return chosen;
         }
     }
 }
