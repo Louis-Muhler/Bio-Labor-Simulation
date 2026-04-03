@@ -30,8 +30,6 @@ public class SimulationEngine implements SimulationRuntime {
     private final ExecutorService executorService;
     private static final int INITIAL_FOOD_COUNT = 1200;
     private static final int MAX_FOOD_PELLETS = 6000;
-    private final SimulationCommandProcessor commandProcessor =
-            new SimulationCommandProcessor(MAX_QUEUED_COMMANDS);
     private final ConcurrentHashMap<Long, Microbe> microbeById = new ConcurrentHashMap<>();
     /**
      * When {@code true}, the engine logs combat events to stdout and the canvas
@@ -54,16 +52,7 @@ public class SimulationEngine implements SimulationRuntime {
      * This guarantees that persistence never interleaves with worker-thread updates.
      */
     private final Object frameMutationLock = new Object();
-    private final SpatialGrid spatialGrid;
-    private final MicrobeGrid microbeGrid;
-    private final FramePreparationSystem framePreparationSystem;
-    private final MicrobeBehaviorSystem behaviorSystem;
-    private final PopulationCommitSystem populationCommitSystem;
-    private final SimulationFrameOrchestrator frameOrchestrator;
-    private final SimulationUpdateService updateService;
-    private final SimulationStateCoordinator stateCoordinator;
-    private final MicrobeLookupService microbeLookupService;
-    private final SimulationLifecycleService lifecycleService;
+    private final SimulationEngineContext context;
     private volatile double foodSpawnRate = 0.75;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
@@ -93,57 +82,27 @@ public class SimulationEngine implements SimulationRuntime {
         this.availableReproductionSlots = new AtomicInteger(MAX_POPULATION);
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
-        this.spatialGrid = new SpatialGrid(width, height, SPATIAL_CELL_SIZE);
-        this.microbeGrid = new MicrobeGrid(width, height, SPATIAL_CELL_SIZE);
-        this.framePreparationSystem = new FramePreparationSystem(
-                dataLock,
-                microbes,
-                foodPellets,
-                availableReproductionSlots,
-                MAX_POPULATION,
-                width,
-                height,
-                MAX_FOOD_PELLETS
-        );
-        this.behaviorSystem = new MicrobeBehaviorSystem(width, height, availableReproductionSlots, newMicrobes);
-        this.populationCommitSystem = new PopulationCommitSystem(
-                dataLock,
-                microbes,
-                newMicrobes,
-                foodPellets,
-                microbeById,
-                MAX_POPULATION
-        );
-        this.frameOrchestrator = new SimulationFrameOrchestrator(
-                executorService,
-                THREAD_COUNT,
-                spatialGrid,
-                microbeGrid,
-                behaviorSystem,
-                populationCommitSystem,
-                LOGGER
-        );
-        this.updateService = new SimulationUpdateService(
+        this.context = SimulationEngineContext.create(
+                MAX_QUEUED_COMMANDS,
                 frameMutationLock,
+                dataLock,
                 executorService,
-                this::processPendingCommands,
-                environment,
-                framePreparationSystem,
-                frameOrchestrator,
-                LOGGER
-        );
-        this.stateCoordinator = new SimulationStateCoordinator(
-                width,
-                height,
                 environment,
                 debugModeService,
                 microbes,
                 newMicrobes,
                 foodPellets,
-                microbeById
+                microbeById,
+                availableReproductionSlots,
+                MAX_POPULATION,
+                THREAD_COUNT,
+                width,
+                height,
+                SPATIAL_CELL_SIZE,
+                MAX_FOOD_PELLETS,
+                this,
+                LOGGER
         );
-        this.microbeLookupService = new MicrobeLookupService(dataLock, microbes);
-        this.lifecycleService = new SimulationLifecycleService(executorService, LOGGER);
         LOGGER.info("SimulationEngine initialized with " + THREAD_COUNT + " threads");
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
@@ -185,7 +144,7 @@ public class SimulationEngine implements SimulationRuntime {
      * This method is always called from the SimulationLoop thread (single writer).
      */
     public void update() {
-        renderSnapshot = updateService.runUpdate(renderSnapshot, foodSpawnRate);
+        renderSnapshot = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
     }
 
     /**
@@ -199,11 +158,7 @@ public class SimulationEngine implements SimulationRuntime {
 
     @Override
     public void enqueueCommand(SimulationCommand command) {
-        commandProcessor.enqueue(command);
-    }
-
-    private void processPendingCommands() {
-        commandProcessor.processPending(this, LOGGER);
+        context.commandProcessor().enqueue(command);
     }
 
     /**
@@ -219,7 +174,7 @@ public class SimulationEngine implements SimulationRuntime {
      * or {@code null} if none exists. Used for auto-selection after a microbe dies.
      */
     public Microbe findLivingChild(long parentId) {
-        return microbeLookupService.findLivingChild(parentId);
+        return context.microbeLookupService().findLivingChild(parentId);
     }
 
     /**
@@ -227,7 +182,7 @@ public class SimulationEngine implements SimulationRuntime {
      * or {@code null} if the population is empty.
      */
     public Microbe findRandomLivingMicrobe() {
-        return microbeLookupService.findRandomLivingMicrobe();
+        return context.microbeLookupService().findRandomLivingMicrobe();
     }
 
 
@@ -252,7 +207,7 @@ public class SimulationEngine implements SimulationRuntime {
     public SimulationState captureState() {
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                return stateCoordinator.captureState(foodSpawnRate);
+                return context.stateCoordinator().captureState(foodSpawnRate);
             }
         }
     }
@@ -263,7 +218,7 @@ public class SimulationEngine implements SimulationRuntime {
     public void loadState(SimulationState state) {
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                renderSnapshot = stateCoordinator.loadState(state, this::setFoodSpawnRate);
+                renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
             }
         }
     }
@@ -284,7 +239,7 @@ public class SimulationEngine implements SimulationRuntime {
     public void spawnMicrobe(Microbe microbe) {
         synchronized (frameMutationLock) {
             synchronized (dataLock) {
-                renderSnapshot = stateCoordinator.spawnMicrobe(microbe);
+                renderSnapshot = context.stateCoordinator().spawnMicrobe(microbe);
             }
         }
     }
@@ -316,6 +271,6 @@ public class SimulationEngine implements SimulationRuntime {
      * Shuts down the thread pool gracefully.
      */
     public void shutdown() {
-        lifecycleService.shutdown();
+        context.lifecycleService().shutdown();
     }
 }

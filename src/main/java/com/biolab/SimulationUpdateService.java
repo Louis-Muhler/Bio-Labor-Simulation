@@ -10,7 +10,8 @@ import java.util.logging.Logger;
 final class SimulationUpdateService {
     private final Object frameMutationLock;
     private final ExecutorService executorService;
-    private final Runnable processPendingCommands;
+    private final SimulationCommandProcessor commandProcessor;
+    private final SimulationRuntime runtime;
     private final Environment environment;
     private final FramePreparationSystem framePreparationSystem;
     private final SimulationFrameOrchestrator frameOrchestrator;
@@ -18,14 +19,16 @@ final class SimulationUpdateService {
 
     SimulationUpdateService(Object frameMutationLock,
                             ExecutorService executorService,
-                            Runnable processPendingCommands,
+                            SimulationCommandProcessor commandProcessor,
+                            SimulationRuntime runtime,
                             Environment environment,
                             FramePreparationSystem framePreparationSystem,
                             SimulationFrameOrchestrator frameOrchestrator,
                             Logger logger) {
         this.frameMutationLock = frameMutationLock;
         this.executorService = executorService;
-        this.processPendingCommands = processPendingCommands;
+        this.commandProcessor = commandProcessor;
+        this.runtime = runtime;
         this.environment = environment;
         this.framePreparationSystem = framePreparationSystem;
         this.frameOrchestrator = frameOrchestrator;
@@ -36,7 +39,7 @@ final class SimulationUpdateService {
         synchronized (frameMutationLock) {
             if (executorService.isShutdown()) return currentSnapshot;
 
-            processPendingCommands.run();
+            commandProcessor.processPending(runtime, logger);
 
             final double temp = environment.getTemperature();
             final double tox = environment.getToxicity();
