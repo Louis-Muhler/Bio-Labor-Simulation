@@ -15,10 +15,9 @@ public final class AppUiStateMachine {
         this.current = initial;
         transitions.put(AppUiState.BOOT, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.GAMEPLAY, AppUiState.SHUTDOWN));
         transitions.put(AppUiState.PREVIEW_MENU, EnumSet.of(AppUiState.SAVE_BROWSER, AppUiState.SETTINGS, AppUiState.GAMEPLAY, AppUiState.SHUTDOWN));
-        transitions.put(AppUiState.SAVE_BROWSER, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.WORLD_SETUP, AppUiState.GAMEPLAY, AppUiState.SETTINGS));
-        transitions.put(AppUiState.WORLD_SETUP, EnumSet.of(AppUiState.SAVE_BROWSER, AppUiState.GAMEPLAY, AppUiState.SETTINGS));
+        transitions.put(AppUiState.SAVE_BROWSER, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.GAMEPLAY, AppUiState.SETTINGS));
         transitions.put(AppUiState.GAMEPLAY, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.SAVE_BROWSER, AppUiState.SETTINGS, AppUiState.SHUTDOWN));
-        transitions.put(AppUiState.SETTINGS, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.SAVE_BROWSER, AppUiState.WORLD_SETUP, AppUiState.GAMEPLAY, AppUiState.SHUTDOWN));
+        transitions.put(AppUiState.SETTINGS, EnumSet.of(AppUiState.PREVIEW_MENU, AppUiState.SAVE_BROWSER, AppUiState.GAMEPLAY, AppUiState.SHUTDOWN));
         transitions.put(AppUiState.SHUTDOWN, EnumSet.noneOf(AppUiState.class));
     }
 

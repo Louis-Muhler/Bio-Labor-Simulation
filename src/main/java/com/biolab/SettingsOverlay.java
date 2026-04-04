@@ -187,44 +187,53 @@ public class SettingsOverlay extends JPanel {
 
     private static void installEventBlocker(JComponent component) {
         MouseAdapter adapter = new MouseAdapter() {
+            private boolean shouldConsume(MouseEvent e) {
+                JRootPane root = SwingUtilities.getRootPane(component);
+                if (root == null) {
+                    return true;
+                }
+                int topY = root.getContentPane().getY();
+                return e.getY() >= topY;
+            }
+
             @Override
             public void mousePressed(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                e.consume();
+                if (shouldConsume(e)) e.consume();
             }
         };
         component.addMouseListener(adapter);

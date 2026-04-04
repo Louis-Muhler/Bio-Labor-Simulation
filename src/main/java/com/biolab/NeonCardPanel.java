@@ -23,7 +23,7 @@ public class NeonCardPanel extends JPanel {
         int w = getWidth() - 1;
         int h = getHeight() - 1;
 
-        g2.setColor(OverlayTheme.PANEL_BG_ALPHA);
+        g2.setColor(OverlayTheme.PANEL_BG_SOFT_ALPHA);
         g2.fillRoundRect(0, 0, w, h, arc, arc);
 
         g2.setColor(OverlayTheme.ACCENT_GLOW);

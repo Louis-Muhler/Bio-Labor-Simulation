@@ -141,7 +141,9 @@ public class SimulationLoopController {
                             //noinspection BusyWait
                             Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
                         } catch (InterruptedException e) {
-                            LOGGER.log(Level.INFO, "Simulation loop interrupted, shutting down...", e);
+                            if (running) {
+                                LOGGER.log(Level.FINE, "Simulation loop interrupted while active", e);
+                            }
                             Thread.currentThread().interrupt();
                             break;
                         }
@@ -187,6 +189,12 @@ public class SimulationLoopController {
         Thread thread = simulationThread;
         if (thread != null) {
             thread.interrupt();
+            try {
+                thread.join(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
+        simulationThread = null;
     }
 }

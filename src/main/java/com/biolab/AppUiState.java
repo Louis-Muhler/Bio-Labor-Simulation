@@ -7,7 +7,6 @@ public enum AppUiState {
     BOOT,
     PREVIEW_MENU,
     SAVE_BROWSER,
-    WORLD_SETUP,
     GAMEPLAY,
     SETTINGS,
     SHUTDOWN

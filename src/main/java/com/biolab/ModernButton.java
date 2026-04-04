@@ -222,7 +222,7 @@ public class ModernButton extends JButton {
             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
         }
 
-        int cornerRadius = 6;
+        int cornerRadius = 10;
 
         // Background
         g2d.setColor(isHovered ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR);
@@ -257,7 +257,7 @@ public class ModernButton extends JButton {
                 g2d.setFont(getFont());
                 FontMetrics fm = g2d.getFontMetrics();
                 int textWidth = fm.stringWidth(displayText);
-                int textY = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                int textY = centeredTextBaseline(fm);
                 g2d.drawString(displayText, getWidth() - textWidth - 20, textY);
             } else {
                 // Icon only: centered
@@ -271,12 +271,16 @@ public class ModernButton extends JButton {
                 FontMetrics fm = g2d.getFontMetrics();
                 int textWidth = fm.stringWidth(displayText);
                 int textX = (getWidth() - textWidth) / 2;
-                int textY = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                int textY = centeredTextBaseline(fm);
                 g2d.drawString(displayText, textX, textY);
             }
         }
 
         g2d.dispose();
+    }
+
+    private int centeredTextBaseline(FontMetrics fm) {
+        return (getHeight() - fm.getHeight()) / 2 + fm.getAscent() - 1;
     }
 
     /**
