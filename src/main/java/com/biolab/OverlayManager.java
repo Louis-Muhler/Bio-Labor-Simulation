@@ -44,7 +44,6 @@ public class OverlayManager {
     private final InspectorPanel inspectorPanel;
     private final EnvironmentPanel environmentPanel;
     private final ModernButton envToggleButton;
-    private final ModernButton settingsButton;
     private final ModernButton speedButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
@@ -60,18 +59,16 @@ public class OverlayManager {
      * @param inspectorPanel      right-side microbe detail panel
      * @param environmentPanel    left-side environment slider panel
      * @param envToggleButton     button that shows / hides the environment panel
-     * @param settingsButton      button that opens the settings overlay
      * @param speedButton         simulation speed toggle in the bottom-right corner
      */
     public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
                           InspectorPanel inspectorPanel, EnvironmentPanel environmentPanel,
-                          ModernButton envToggleButton, ModernButton settingsButton,
+                          ModernButton envToggleButton,
                           ModernButton speedButton) {
         this.layeredPaneSupplier = layeredPaneSupplier;
         this.inspectorPanel = inspectorPanel;
         this.environmentPanel = environmentPanel;
         this.envToggleButton = envToggleButton;
-        this.settingsButton = settingsButton;
         this.speedButton = speedButton;
 
         // Transparent panel – no background box, only the label itself is visible
@@ -165,21 +162,6 @@ public class OverlayManager {
         environmentPanel.repaint();
     }
 
-    /**
-     * Places the settings (gear) button in the top-left corner.
-     */
-    public void positionSettingsButton() {
-        JLayeredPane lp = layeredPaneSupplier.get();
-        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
-
-        if (settingsButton.getParent() != lp) {
-            lp.add(settingsButton, JLayeredPane.PALETTE_LAYER);
-        }
-        settingsButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
-        settingsButton.revalidate();
-        settingsButton.repaint();
-    }
-
     /** Places the environment toggle button directly below the settings button. */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -240,7 +222,6 @@ public class OverlayManager {
      */
     public void repositionAllOverlays() {
         positionInspectorPanel();
-        positionSettingsButton();
         positionEnvToggleButton();
         positionFloatingControls();
         if (environmentPanel.isVisible()) {
@@ -297,7 +278,6 @@ public class OverlayManager {
             environmentPanel.setVisible(false);
         }
         envToggleButton.setVisible(visible);
-        settingsButton.setVisible(visible);
         speedButton.setVisible(visible);
         populationOverlay.setVisible(visible);
         if (!visible) {
@@ -316,7 +296,6 @@ public class OverlayManager {
         lp.remove(inspectorPanel);
         lp.remove(environmentPanel);
         lp.remove(envToggleButton);
-        lp.remove(settingsButton);
         lp.remove(speedButton);
         lp.remove(populationOverlay);
         lp.repaint();
