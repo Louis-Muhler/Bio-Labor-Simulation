@@ -9,34 +9,57 @@ import java.awt.*;
 public class MainMenuOverlay extends JPanel {
     private static final Color GLASS_BG = new Color(0, 0, 0, 95);
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 62);
+    private static final Font BUTTON_FONT = new Font("Segoe UI", Font.BOLD, 28);
 
-    public MainMenuOverlay(Runnable onStart) {
+    private final TitleLabel title;
+    private final ModernButton startButton;
+    private final ModernButton resumeButton;
+
+    public MainMenuOverlay(Runnable onStart, Runnable onResume) {
         setOpaque(false);
-        setLayout(new BorderLayout());
+        setLayout(null);
 
-        JPanel content = new JPanel(new BorderLayout());
-        content.setOpaque(false);
-
-        TitleLabel title = new TitleLabel("BIO-LAB EVOLUTION");
+        title = new TitleLabel("BIO-LAB EVOLUTION");
         title.setFont(TITLE_FONT);
+        add(title);
 
-        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        titlePanel.setOpaque(false);
-        titlePanel.add(title);
-        titlePanel.setBorder(BorderFactory.createEmptyBorder(54, 0, 0, 0));
+        resumeButton = new ModernButton("RESUME");
+        resumeButton.setFont(BUTTON_FONT);
+        resumeButton.addActionListener(e -> onResume.run());
+        add(resumeButton);
 
-        ModernButton start = new ModernButton("START");
-        start.setFont(new Font("Segoe UI", Font.BOLD, 30));
-        start.setPreferredSize(new Dimension(220, 66));
-        start.addActionListener(e -> onStart.run());
+        startButton = new ModernButton("START");
+        startButton.setFont(BUTTON_FONT);
+        startButton.addActionListener(e -> onStart.run());
+        add(startButton);
+    }
 
-        JPanel center = new JPanel(new GridBagLayout());
-        center.setOpaque(false);
-        center.add(start);
+    public void setResumeVisible(boolean visible) {
+        resumeButton.setVisible(visible);
+        revalidate();
+        repaint();
+    }
 
-        content.add(titlePanel, BorderLayout.NORTH);
-        content.add(center, BorderLayout.CENTER);
-        add(content, BorderLayout.CENTER);
+    @Override
+    public void doLayout() {
+        int topY = 0;
+        JRootPane root = SwingUtilities.getRootPane(this);
+        if (root != null) {
+            topY = root.getContentPane().getY();
+        }
+
+        int titleW = Math.min(980, getWidth() - 80);
+        title.setBounds((getWidth() - titleW) / 2, topY + 58, titleW, 88);
+
+        int startW = 240;
+        int startH = 66;
+        int startY = topY + (int) ((getHeight() - topY) * 0.80) - startH;
+        startButton.setBounds((getWidth() - startW) / 2, startY, startW, startH);
+
+        int resumeW = 240;
+        int resumeH = 58;
+        int resumeY = startY - resumeH - 14;
+        resumeButton.setBounds((getWidth() - resumeW) / 2, resumeY, resumeW, resumeH);
     }
 
     @Override

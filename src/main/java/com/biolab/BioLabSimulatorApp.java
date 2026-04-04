@@ -46,12 +46,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private WorldSetupOverlay worldSetupOverlay;
 
     private SaveGameMetadata currentSave;
-    private static final long AUTOSAVE_INTERVAL_SECONDS = 20L;
+    private static final long AUTOSAVE_INTERVAL_SECONDS = 8L;
+    private static final Integer SETTINGS_LAYER = JLayeredPane.DRAG_LAYER + 200;
     private long sessionStartMillis;
     private String currentWorldName;
     private boolean pausedForSaveBrowser;
     private boolean reopenMainMenuOnBrowserClose;
     private boolean pausedForSettings;
+    private boolean gameplayParkedInMenu;
     private ScheduledExecutorService autosaveExecutor;
     private ScheduledFuture<?> autosaveTask;
 
@@ -216,6 +218,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                if (isGameplaySession()) {
+                    saveCurrentWorld();
+                }
                 stopAutoSave();
                 if (loopController != null) loopController.stop();
                 if (engine != null && engine.isRunning()) engine.shutdown();
@@ -229,6 +234,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void startSimulationSession(WorldConfig config, boolean showGameOverlays) {
         teardownSession();
+        gameplayParkedInMenu = false;
 
         engine = new SimulationEngine(config.worldWidth(), config.worldHeight(),
                 config.initialPopulation(), config.maxPopulation());
@@ -268,6 +274,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void teardownSession() {
+        if (isGameplaySession()) {
+            saveCurrentWorld();
+        }
         stopAutoSave();
         if (overlayManager != null) {
             overlayManager.removeAllOverlays();
@@ -306,10 +315,12 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void showMainMenu() {
         if (mainMenuOverlay != null) return;
-        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu);
+        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu, this::resumeParkedGameplay);
+        mainMenuOverlay.setResumeVisible(gameplayParkedInMenu);
         getLayeredPane().add(mainMenuOverlay, JLayeredPane.POPUP_LAYER);
         mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
         mainMenuOverlay.setVisible(true);
+        getLayeredPane().moveToFront(globalSettingsButton);
         getLayeredPane().repaint();
     }
 
@@ -529,8 +540,13 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void returnToMainMenuFromGameplay() {
+        saveCurrentWorld();
         removeSettingsOverlay();
         stopAutoSave();
+        if (pausedForSettings && loopController != null) {
+            loopController.resume();
+        }
+        pausedForSettings = false;
         if (overlayManager != null) {
             overlayManager.setGameplayOverlaysVisible(false);
         }
@@ -538,13 +554,27 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (prev != null) prev.setSelected(false);
         selectedMicrobe = null;
         if (canvas != null) canvas.stopFollowing();
+        gameplayParkedInMenu = true;
         showMainMenu();
+    }
+
+    private void resumeParkedGameplay() {
+        if (!gameplayParkedInMenu || overlayManager == null) {
+            return;
+        }
+        removeMainMenu();
+        overlayManager.setGameplayOverlaysVisible(true);
+        startAutoSave();
+        gameplayParkedInMenu = false;
+        if (canvas != null) {
+            canvas.requestFocusInWindow();
+        }
     }
 
     private void showSettingsOverlay() {
         if (settingsOverlay != null) return;
         boolean mainMenuVisible = mainMenuOverlay != null;
-        pausedForSettings = !mainMenuVisible && isGameplaySession() && loopController != null;
+        pausedForSettings = loopController != null;
         if (pausedForSettings) {
             loopController.pause();
         }
@@ -553,9 +583,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 this::applySettingsAndClose,   // APPLY button
                 this::cancelSettingsAndClose,
                 closeAction);  // CLOSE
-        getLayeredPane().add(settingsOverlay, JLayeredPane.POPUP_LAYER);
+        getLayeredPane().add(settingsOverlay, SETTINGS_LAYER);
         settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
         settingsOverlay.setVisible(true);
+        getLayeredPane().moveToFront(settingsOverlay);
         settingsOverlay.requestFocusInWindow();
         revalidate();
         repaint();
@@ -593,6 +624,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         settingsOverlay = null;
     }
 
+    private boolean isSelectionBlockedByUi() {
+        return mainMenuOverlay != null
+                || saveBrowserOverlay != null
+                || worldSetupOverlay != null
+                || settingsOverlay != null
+                || gameplayParkedInMenu;
+    }
+
     // -------------------------------------------------------------------------
     // Selection callbacks from SimulationCanvas
     // -------------------------------------------------------------------------
@@ -602,6 +641,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
      */
     @Override
     public void onMicrobeSelected(Microbe microbe) {
+        if (isSelectionBlockedByUi()) return;
         Microbe prev = selectedMicrobe;
         if (prev != null) prev.setSelected(false);
         selectedMicrobe = microbe;
@@ -616,6 +656,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     /** Called by the canvas when the user clicks empty space to deselect. */
     @Override
     public void onSelectionCleared() {
+        if (isSelectionBlockedByUi()) return;
         Microbe prev = selectedMicrobe;
         if (prev != null) prev.setSelected(false);
         selectedMicrobe = null;
