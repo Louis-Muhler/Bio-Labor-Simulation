@@ -187,53 +187,44 @@ public class SettingsOverlay extends JPanel {
 
     private static void installEventBlocker(JComponent component) {
         MouseAdapter adapter = new MouseAdapter() {
-            private boolean shouldConsume(MouseEvent e) {
-                JRootPane root = SwingUtilities.getRootPane(component);
-                if (root == null) {
-                    return true;
-                }
-                int topY = root.getContentPane().getY();
-                return e.getY() >= topY;
-            }
-
             @Override
             public void mousePressed(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
         };
         component.addMouseListener(adapter);
@@ -274,12 +265,7 @@ public class SettingsOverlay extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setColor(OVERLAY_BG);
-                int topY = 0;
-                JRootPane root = SwingUtilities.getRootPane(this);
-                if (root != null) {
-                    topY = root.getContentPane().getY();
-                }
-                g2.fillRect(0, topY, getWidth(), getHeight() - topY);
+                g2.fillRect(0, 0, getWidth(), getHeight());
                 g2.dispose();
             }
         };

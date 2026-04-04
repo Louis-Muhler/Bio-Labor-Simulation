@@ -154,7 +154,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void refreshOverlayBounds() {
         if (settingsOverlay != null) {
-            settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
+            int topY = getContentTopY();
+            settingsOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
             settingsOverlay.revalidate();
         }
         if (mainMenuOverlay != null) {
@@ -191,6 +192,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
         globalSettingsButton.setBounds(15, top, 45, 45);
         globalSettingsButton.repaint();
+    }
+
+    private int getContentTopY() {
+        JRootPane root = getRootPane();
+        return root == null ? 0 : root.getContentPane().getY();
     }
 
 
@@ -367,13 +373,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (mainMenuOverlay == null) return;
         getLayeredPane().remove(mainMenuOverlay);
         mainMenuOverlay = null;
+        revalidate();
+        repaint();
     }
 
     private void showSaveBrowser(boolean reopenMainMenuOnClose) {
         if (saveBrowserOverlay != null) return;
         if (!transitionOrRecover(AppUiState.SAVE_BROWSER)) return;
+        // Defensive: avoid stale menu controls being visible under/over the browser.
+        removeMainMenu();
         reopenMainMenuOnBrowserClose = reopenMainMenuOnClose;
-        pausedForSaveBrowser = isGameplaySession() && loopController != null;
+        // Keep menu preview/gameplay running when browser is opened from main menu.
+        pausedForSaveBrowser = !reopenMainMenuOnClose && isGameplaySession() && loopController != null;
         if (pausedForSaveBrowser) {
             loopController.pause();
         }
@@ -712,7 +723,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 this::cancelSettingsAndClose,
                 closeAction);  // CLOSE
         getLayeredPane().add(settingsOverlay, SETTINGS_LAYER);
-        settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
+        int topY = getContentTopY();
+        settingsOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
         settingsOverlay.setVisible(true);
         getLayeredPane().moveToFront(settingsOverlay);
         settingsOverlay.requestFocusInWindow();

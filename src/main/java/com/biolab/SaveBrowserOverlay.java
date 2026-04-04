@@ -1,8 +1,13 @@
 package com.biolab;
 
 import javax.swing.*;
+import javax.swing.border.AbstractBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicScrollBarUI;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.util.List;
 
 /**
@@ -28,11 +33,14 @@ public class SaveBrowserOverlay extends JPanel {
     private final JSpinner tox = new JSpinner(new SpinnerNumberModel(0.3, 0.0, 1.0, 0.01));
     private final JSpinner food = new JSpinner(new SpinnerNumberModel(0.75, 0.0, 1.0, 0.01));
     private final JLabel title = new JLabel("SELECT GAME", SwingConstants.CENTER);
-    private final ModernButton createButton = new ModernButton("CREATE GAME");
+
+    private static final Font FORM_LABEL_FONT = new Font("Segoe UI", Font.BOLD, 16);
+    private static final Font FORM_VALUE_FONT = new Font("Segoe UI", Font.BOLD, 16);
 
     public SaveBrowserOverlay(Listener listener) {
         setOpaque(false);
         setLayout(new GridBagLayout());
+        installEventBlocker(this);
 
         NeonCardPanel card = new NeonCardPanel(OverlayTheme.CARD_ARC, new Insets(16, 16, 16, 16));
         card.setLayout(new BorderLayout(0, 12));
@@ -41,14 +49,9 @@ public class SaveBrowserOverlay extends JPanel {
         title.setForeground(OverlayTheme.ACCENT);
         title.setFont(new Font("Segoe UI", Font.BOLD, 28));
 
-        createButton.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        createButton.setPreferredSize(new Dimension(220, 44));
-        createButton.addActionListener(e -> showCreateForm());
-
         JPanel north = new JPanel(new BorderLayout(0, 10));
         north.setOpaque(false);
-        north.add(title, BorderLayout.NORTH);
-        north.add(createButton, BorderLayout.SOUTH);
+        north.add(title, BorderLayout.CENTER);
         card.add(north, BorderLayout.NORTH);
 
         cardContent.setOpaque(false);
@@ -57,6 +60,50 @@ public class SaveBrowserOverlay extends JPanel {
         card.add(cardContent, BorderLayout.CENTER);
 
         add(card);
+    }
+
+    private static void installEventBlocker(JComponent component) {
+        MouseAdapter adapter = new MouseAdapter() {
+            private boolean shouldConsume(MouseEvent e) {
+                JRootPane root = SwingUtilities.getRootPane(component);
+                if (root == null) return true;
+                int topY = root.getContentPane().getY();
+                return e.getY() >= topY;
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                if (shouldConsume(e)) e.consume();
+            }
+        };
+        component.addMouseListener(adapter);
+        component.addMouseMotionListener(adapter);
+        component.addMouseWheelListener(adapter);
     }
 
     @Override
@@ -78,7 +125,8 @@ public class SaveBrowserOverlay extends JPanel {
         panel.setOpaque(false);
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setBackground(new Color(10, 12, 16, 150));
+        list.setOpaque(false);
+        list.setBackground(new Color(0, 0, 0, 0));
         list.setForeground(OverlayTheme.ACCENT);
         list.setFixedCellHeight(64);
         list.setCellRenderer(renderer);
@@ -102,10 +150,35 @@ public class SaveBrowserOverlay extends JPanel {
         JScrollPane scrollPane = new JScrollPane(list);
         scrollPane.setOpaque(false);
         scrollPane.getViewport().setOpaque(false);
-        scrollPane.setBorder(BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1));
-        panel.add(scrollPane, BorderLayout.CENTER);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        vertical.setBackground(OverlayTheme.PANEL_BG);
+        vertical.setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
+        vertical.setUI(new RoundedScrollBarUI());
+
+        JPanel listShell = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth() - 1;
+                int h = getHeight() - 1;
+                g2.setColor(new Color(12, 12, 14, 190));
+                g2.fillRoundRect(0, 0, w, h, 10, 10);
+                g2.setColor(OverlayTheme.ACCENT_GLOW);
+                g2.setStroke(new BasicStroke(1.5f));
+                g2.drawRoundRect(0, 0, w, h, 10, 10);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        listShell.setOpaque(false);
+        listShell.setBorder(new EmptyBorder(4, 4, 4, 4));
+        listShell.add(scrollPane, BorderLayout.CENTER);
+        panel.add(listShell, BorderLayout.CENTER);
 
         ModernButton play = new ModernButton("PLAY");
+        ModernButton create = new ModernButton("CREATE");
         ModernButton delete = new ModernButton("DELETE");
         ModernButton back = new ModernButton("BACK");
 
@@ -117,13 +190,20 @@ public class SaveBrowserOverlay extends JPanel {
             SaveGameMetadata selected = list.getSelectedValue();
             if (selected != null) listener.onDeleteRequested(selected);
         });
+        create.addActionListener(e -> showCreateForm());
         back.addActionListener(e -> listener.onBackRequested());
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        JPanel actions = new JPanel(new BorderLayout());
         actions.setOpaque(false);
-        actions.add(play);
-        actions.add(delete);
-        actions.add(back);
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        left.setOpaque(false);
+        left.add(play);
+        left.add(Box.createHorizontalStrut(10));
+        left.add(create);
+        left.add(Box.createHorizontalStrut(10));
+        left.add(delete);
+        actions.add(left, BorderLayout.WEST);
+        actions.add(back, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
         return panel;
     }
@@ -156,7 +236,7 @@ public class SaveBrowserOverlay extends JPanel {
 
         panel.add(form, BorderLayout.CENTER);
 
-        ModernButton play = new ModernButton("PLAY", ModernButton.ButtonIcon.PLAY);
+        ModernButton play = new ModernButton("PLAY");
         ModernButton back = new ModernButton("BACK");
         play.addActionListener(e -> {
             try {
@@ -178,7 +258,10 @@ public class SaveBrowserOverlay extends JPanel {
 
         JPanel actions = new JPanel(new BorderLayout());
         actions.setOpaque(false);
-        actions.add(play, BorderLayout.WEST);
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        left.setOpaque(false);
+        left.add(play);
+        actions.add(left, BorderLayout.WEST);
         actions.add(back, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
 
@@ -188,40 +271,127 @@ public class SaveBrowserOverlay extends JPanel {
     private void addField(JPanel panel, String label, JComponent field) {
         JLabel lbl = new JLabel(label);
         lbl.setForeground(OverlayTheme.ACCENT);
+        lbl.setFont(FORM_LABEL_FONT);
         panel.add(lbl);
         panel.add(field);
     }
 
     private void styleField(JTextField field) {
+        field.setFont(FORM_VALUE_FONT);
         field.setForeground(OverlayTheme.ACCENT);
         field.setBackground(OverlayTheme.CONTROL_BG);
         field.setCaretColor(OverlayTheme.ACCENT);
+        field.setOpaque(true);
         field.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1),
-                BorderFactory.createEmptyBorder(5, 8, 5, 8)
+                new RoundedOutlineBorder(10),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)
         ));
     }
 
     private void styleSpinner(JSpinner spinner) {
-        spinner.setBorder(BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1));
+        spinner.setOpaque(false);
+        spinner.setBorder(new RoundedOutlineBorder(10));
+        spinner.setBackground(OverlayTheme.CONTROL_BG);
         JComponent editor = spinner.getEditor();
         if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
             JTextField tf = defaultEditor.getTextField();
             styleField(tf);
-            tf.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+            tf.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            tf.setHorizontalAlignment(SwingConstants.LEFT);
+            defaultEditor.setBorder(BorderFactory.createEmptyBorder());
         }
     }
 
     public void showCreateForm() {
         title.setText("CREATE GAME");
-        createButton.setVisible(false);
         cardLayout.show(cardContent, VIEW_CREATE);
     }
 
     public void showListView() {
         title.setText("SELECT GAME");
-        createButton.setVisible(true);
         cardLayout.show(cardContent, VIEW_LIST);
+    }
+
+    private static final class RoundedOutlineBorder extends AbstractBorder {
+        private final int arc;
+
+        private RoundedOutlineBorder(int arc) {
+            this.arc = arc;
+        }
+
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(OverlayTheme.ACCENT_GLOW);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(x, y, width - 1, height - 1, arc, arc);
+            g2.dispose();
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c) {
+            return new Insets(1, 1, 1, 1);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component c, Insets insets) {
+            insets.set(1, 1, 1, 1);
+            return insets;
+        }
+    }
+
+    private static final class RoundedScrollBarUI extends BasicScrollBarUI {
+        private static final Color THUMB_IDLE = new Color(0, 255, 255, 70);
+        private static final Color THUMB_ACTIVE = new Color(0, 255, 255, 180);
+
+        private static JButton zeroButton() {
+            JButton b = new JButton();
+            Dimension zero = new Dimension(0, 0);
+            b.setPreferredSize(zero);
+            b.setMinimumSize(zero);
+            b.setMaximumSize(zero);
+            b.setVisible(false);
+            return b;
+        }
+
+        @Override
+        protected void configureScrollBarColors() {
+            trackColor = OverlayTheme.PANEL_BG;
+            thumbColor = THUMB_IDLE;
+        }
+
+        @Override
+        protected JButton createDecreaseButton(int orientation) {
+            return zeroButton();
+        }
+
+        @Override
+        protected JButton createIncreaseButton(int orientation) {
+            return zeroButton();
+        }
+
+        @Override
+        protected void paintTrack(Graphics g, JComponent c, Rectangle trackBounds) {
+            g.setColor(OverlayTheme.PANEL_BG);
+            g.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+        }
+
+        @Override
+        protected void paintThumb(Graphics g, JComponent c, Rectangle thumbBounds) {
+            if (thumbBounds.isEmpty()) return;
+            Color thumbCol = (isDragging || isThumbRollover()) ? THUMB_ACTIVE : THUMB_IDLE;
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int inset = 2;
+            int x = thumbBounds.x + inset;
+            int y = thumbBounds.y + 2;
+            int w = thumbBounds.width - inset * 2;
+            int h = thumbBounds.height - 4;
+            g2.setColor(thumbCol);
+            g2.fillRoundRect(x, y, w, h, w, w);
+            g2.dispose();
+        }
     }
 
     public void setSaves(List<SaveGameMetadata> saves) {
