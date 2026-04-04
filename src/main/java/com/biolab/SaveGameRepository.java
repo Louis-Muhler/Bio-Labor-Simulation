@@ -50,6 +50,14 @@ public class SaveGameRepository {
         return result;
     }
 
+    public synchronized Optional<SaveGameMetadata> findMostRecentSave() throws IOException {
+        List<SaveGameMetadata> saves = listSaves();
+        if (saves.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(saves.get(0));
+    }
+
     public synchronized SaveGameMetadata createNewSave(WorldConfig config, SimulationState initialState) throws IOException {
         ensureRoot();
         String saveId = Instant.now().getEpochSecond() + "-" + UUID.randomUUID().toString().substring(0, 8);

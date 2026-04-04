@@ -34,8 +34,12 @@ public class MainMenuOverlay extends JPanel {
         add(startButton);
     }
 
-    public void setResumeVisible(boolean visible) {
-        resumeButton.setVisible(visible);
+    public void setResumeEnabled(boolean enabled) {
+        resumeButton.setEnabled(enabled);
+        resumeButton.setDimmed(!enabled);
+        resumeButton.setCursor(enabled
+                ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
         revalidate();
         repaint();
     }
@@ -56,8 +60,8 @@ public class MainMenuOverlay extends JPanel {
         int startY = topY + (int) ((getHeight() - topY) * 0.80) - startH;
         startButton.setBounds((getWidth() - startW) / 2, startY, startW, startH);
 
-        int resumeW = 240;
-        int resumeH = 58;
+        int resumeW = startW;
+        int resumeH = startH;
         int resumeY = startY - resumeH - 14;
         resumeButton.setBounds((getWidth() - resumeW) / 2, resumeY, resumeW, resumeH);
     }

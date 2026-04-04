@@ -74,6 +74,16 @@ public class SimulationLoopController {
     }
 
     /**
+     * Resets simulation tick speed to the default 1x preset.
+     */
+    public String resetSpeedToDefault() {
+        currentSpeedIndex = 0;
+        int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
+        frameIntervalNs = 1_000_000_000L / (BASE_TPS * multiplier);
+        return multiplier + "x";
+    }
+
+    /**
      * Sets the visual render FPS (i.e. how often the canvas is redrawn).
      * Called when the user applies Settings.  Safe to call from any thread.
      *
