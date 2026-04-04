@@ -136,29 +136,53 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                if (overlayManager != null) {
-                    overlayManager.repositionAllOverlays();
-                }
                 positionGlobalSettingsButton();
-                if (settingsOverlay != null) {
-                    settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
-                }
-                if (mainMenuOverlay != null) mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
-                if (saveBrowserOverlay != null) saveBrowserOverlay.setBounds(0, 0, getWidth(), getHeight());
-                if (worldSetupOverlay != null) worldSetupOverlay.setBounds(0, 0, getWidth(), getHeight());
+                syncGameplayOverlayVisibilityByState();
+                refreshOverlayBounds();
                 // Enforce min-zoom and clamp camera to prevent out-of-bounds view
                 if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
             }
 
             @Override
             public void componentShown(java.awt.event.ComponentEvent e) {
-                if (overlayManager != null) {
-                    overlayManager.repositionAllOverlays();
-                }
                 positionGlobalSettingsButton();
+                syncGameplayOverlayVisibilityByState();
+                refreshOverlayBounds();
                 if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
             }
         });
+    }
+
+    private void refreshOverlayBounds() {
+        if (settingsOverlay != null) {
+            settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
+            settingsOverlay.revalidate();
+        }
+        if (mainMenuOverlay != null) {
+            mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
+            mainMenuOverlay.revalidate();
+        }
+        if (saveBrowserOverlay != null) {
+            saveBrowserOverlay.setBounds(0, 0, getWidth(), getHeight());
+            saveBrowserOverlay.revalidate();
+        }
+        if (worldSetupOverlay != null) {
+            worldSetupOverlay.setBounds(0, 0, getWidth(), getHeight());
+            worldSetupOverlay.revalidate();
+        }
+    }
+
+    private void syncGameplayOverlayVisibilityByState() {
+        if (overlayManager == null) {
+            return;
+        }
+        boolean showGameplayOverlays = uiStateMachine.current() == AppUiState.GAMEPLAY;
+        if (showGameplayOverlays) {
+            overlayManager.repositionAllOverlays();
+            overlayManager.setGameplayOverlaysVisible(true);
+        } else {
+            overlayManager.setGameplayOverlaysVisible(false);
+        }
     }
 
     private void positionGlobalSettingsButton() {
@@ -208,10 +232,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         revalidate();
         repaint();
         SwingUtilities.invokeLater(() -> {
-            if (overlayManager != null) {
-                overlayManager.repositionAllOverlays();
-            }
             positionGlobalSettingsButton();
+            syncGameplayOverlayVisibilityByState();
+            refreshOverlayBounds();
             if (canvas != null) canvas.clampZoomAndCamera();
         });
     }

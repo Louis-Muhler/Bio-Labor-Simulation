@@ -6,8 +6,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
 import javax.swing.plaf.basic.BasicComboPopup;
 import javax.swing.plaf.basic.ComboPopup;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 
@@ -186,11 +185,60 @@ public class SettingsOverlay extends JPanel {
         }
     }
 
+    private static void installEventBlocker(JComponent component) {
+        MouseAdapter adapter = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                e.consume();
+            }
+
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                e.consume();
+            }
+        };
+        component.addMouseListener(adapter);
+        component.addMouseMotionListener(adapter);
+        component.addMouseWheelListener(adapter);
+    }
+
     private void setupUI() {
         setLayout(new GridBagLayout());
         setOpaque(false);
+        installEventBlocker(this);
 
         JPanel backdrop = createBackdrop();
+        installEventBlocker(backdrop);
         backdrop.add(createSettingsCard());
 
         GridBagConstraints gbc = new GridBagConstraints();

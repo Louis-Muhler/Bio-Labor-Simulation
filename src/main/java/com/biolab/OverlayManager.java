@@ -211,7 +211,6 @@ public class OverlayManager {
                 lp.add(speedButton, JLayeredPane.PALETTE_LAYER);
             }
             speedButton.setBounds(speedX, speedY, SPEED_BUTTON_WIDTH, SPEED_BUTTON_HEIGHT);
-            speedButton.setVisible(true);
             speedButton.revalidate();
             speedButton.repaint();
         }
@@ -224,7 +223,6 @@ public class OverlayManager {
             lp.add(populationOverlay, JLayeredPane.DEFAULT_LAYER);
         }
         populationOverlay.setBounds(popX, popY, POP_OVERLAY_WIDTH, POP_OVERLAY_HEIGHT);
-        populationOverlay.setVisible(true);
         populationOverlay.revalidate();
         populationOverlay.repaint();
     }
