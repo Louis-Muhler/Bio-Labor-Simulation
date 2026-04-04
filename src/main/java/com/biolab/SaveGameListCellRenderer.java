@@ -10,6 +10,7 @@ import java.awt.*;
 public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetadata> {
     private int hoveredIndex = -1;
     private final JPanel row = new JPanel(new BorderLayout(12, 4));
+    private final EmptyBorder basePadding = new EmptyBorder(8, 12, 8, 12);
     private final JLabel name = new JLabel();
     private final JPanel right = new JPanel(new GridLayout(2, 1, 0, 2));
     private final JLabel metaTop = new JLabel();
@@ -17,7 +18,7 @@ public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetada
 
     public SaveGameListCellRenderer() {
         row.setOpaque(true);
-        row.setBorder(new EmptyBorder(8, 12, 8, 12));
+        row.setBorder(basePadding);
 
         name.setFont(new Font("Segoe UI", Font.BOLD, 17));
         name.setForeground(OverlayTheme.ACCENT);
@@ -50,9 +51,12 @@ public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetada
                                                   boolean cellHasFocus) {
         boolean highlighted = isSelected || index == hoveredIndex;
 
-        row.setBackground(highlighted
-                ? new Color(OverlayTheme.CONTROL_HOVER.getRed(), OverlayTheme.CONTROL_HOVER.getGreen(), OverlayTheme.CONTROL_HOVER.getBlue(), 190)
-                : new Color(OverlayTheme.CONTROL_BG.getRed(), OverlayTheme.CONTROL_BG.getGreen(), OverlayTheme.CONTROL_BG.getBlue(), 190));
+        row.setBackground(new Color(0, 0, 0, 0));
+        row.setBorder(highlighted
+                ? BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1),
+                new EmptyBorder(7, 11, 7, 11))
+                : basePadding);
         name.setText(value.listName());
         metaTop.setText(value.listMetaPrimary());
         metaBottom.setText(value.listMetaSecondary());

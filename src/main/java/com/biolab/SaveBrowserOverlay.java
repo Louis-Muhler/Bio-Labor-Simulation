@@ -433,12 +433,14 @@ public class SaveBrowserOverlay extends JPanel {
 
         private JButton createArrowButton(boolean up) {
             JButton btn = new JButton() {
+                private boolean hovered;
+
                 @Override
                 protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(OverlayTheme.ACCENT);
-                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.setColor(hovered ? new Color(0, 255, 255, 230) : OverlayTheme.ACCENT);
+                    g2.setStroke(new BasicStroke(hovered ? 3f : 2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     int cx = getWidth() / 2;
                     int cy = getHeight() / 2;
                     int aw = 4;
@@ -451,6 +453,23 @@ public class SaveBrowserOverlay extends JPanel {
                         g2.drawLine(cx, cy + ah, cx + aw, cy - ah);
                     }
                     g2.dispose();
+                }
+
+                @Override
+                protected void processMouseEvent(MouseEvent e) {
+                    super.processMouseEvent(e);
+                    switch (e.getID()) {
+                        case MouseEvent.MOUSE_ENTERED -> {
+                            hovered = true;
+                            repaint();
+                        }
+                        case MouseEvent.MOUSE_EXITED -> {
+                            hovered = false;
+                            repaint();
+                        }
+                        default -> {
+                        }
+                    }
                 }
             };
             btn.setOpaque(false);

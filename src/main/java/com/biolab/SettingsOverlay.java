@@ -41,6 +41,10 @@ public class SettingsOverlay extends JPanel {
     private static final Color CONTROL_BG = OverlayTheme.CONTROL_BG;
     private static final Color CONTROL_HOVER = OverlayTheme.CONTROL_HOVER;
     private static final Color BORDER_COLOR = OverlayTheme.ACCENT_GLOW;
+    private static final int CARD_BASE_WIDTH = 700;
+    private static final int CARD_MIN_WIDTH = 560;
+    private static final int CARD_MAX_WIDTH = 740;
+    private static final int CARD_MAX_HEIGHT = 560;
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 24);
     private static final Font SECTION_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font BODY_FONT = new Font("Segoe UI", Font.PLAIN, 14);
@@ -299,14 +303,25 @@ public class SettingsOverlay extends JPanel {
                 g2.drawRoundRect(0, 0, w, h, R, R);
                 g2.dispose();
             }
+
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension content = super.getPreferredSize();
+                Container parent = getParent();
+                int width = CARD_BASE_WIDTH;
+                if (parent != null) {
+                    width = Math.max(CARD_MIN_WIDTH, Math.min(CARD_MAX_WIDTH, parent.getWidth() - 80));
+                }
+                int height = Math.min(CARD_MAX_HEIGHT, content.height);
+                return new Dimension(width, height);
+            }
         };
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(24, 36, 24, 36));
-        card.setPreferredSize(new Dimension(780, 560));
 
         ModernButton closeIcon = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
         closeIcon.setPreferredSize(new Dimension(45, 45));
-        closeIcon.setToolTipText("Schliessen / Beenden");
+        closeIcon.setToolTipText("Exit Game");
         closeIcon.addActionListener(e -> triggerCloseAction());
 
         JPanel header = new JPanel(new BorderLayout(12, 0));
@@ -368,7 +383,8 @@ public class SettingsOverlay extends JPanel {
         card.add(fpsCombo, c);
 
         c.gridy++;
-        c.fill = GridBagConstraints.NONE;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1.0;
         c.anchor = GridBagConstraints.WEST;
         c.insets = new Insets(0, 0, 0, 0);
 
