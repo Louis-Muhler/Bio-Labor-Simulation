@@ -48,6 +48,8 @@ public class OverlayManager {
     private final ModernButton speedButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
+    private boolean inspectorVisibleBeforeHide;
+    private boolean environmentVisibleBeforeHide;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -285,15 +287,21 @@ public class OverlayManager {
      * Shows or hides all gameplay overlays/buttons managed by this instance.
      */
     public void setGameplayOverlaysVisible(boolean visible) {
-        inspectorPanel.setVisible(visible && inspectorPanel.isVisible());
-        environmentPanel.setVisible(visible && environmentPanel.isVisible());
+        if (visible) {
+            inspectorPanel.setVisible(inspectorVisibleBeforeHide);
+            environmentPanel.setVisible(environmentVisibleBeforeHide);
+        } else {
+            inspectorVisibleBeforeHide = inspectorPanel.isVisible();
+            environmentVisibleBeforeHide = environmentPanel.isVisible();
+            inspectorPanel.setVisible(false);
+            environmentPanel.setVisible(false);
+        }
         envToggleButton.setVisible(visible);
         settingsButton.setVisible(visible);
         speedButton.setVisible(visible);
         populationOverlay.setVisible(visible);
         if (!visible) {
             envToggleButton.setDimmed(false);
-            environmentPanel.setVisible(false);
             inspectorPanel.hidePanel();
         }
         JLayeredPane lp = layeredPaneSupplier.get();

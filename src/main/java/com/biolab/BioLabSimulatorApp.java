@@ -176,7 +176,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (overlayManager == null) {
             return;
         }
-        boolean showGameplayOverlays = uiStateMachine.current() == AppUiState.GAMEPLAY;
+        AppUiState current = uiStateMachine.current();
+        boolean settingsOverGameplay = current == AppUiState.SETTINGS && stateBeforeSettings == AppUiState.GAMEPLAY;
+        boolean showGameplayOverlays = current == AppUiState.GAMEPLAY || settingsOverGameplay;
         if (showGameplayOverlays) {
             overlayManager.repositionAllOverlays();
             overlayManager.setGameplayOverlaysVisible(true);
