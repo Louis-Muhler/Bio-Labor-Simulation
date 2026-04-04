@@ -163,7 +163,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             mainMenuOverlay.revalidate();
         }
         if (saveBrowserOverlay != null) {
-            saveBrowserOverlay.setBounds(0, 0, getWidth(), getHeight());
+            int topY = getContentTopY();
+            saveBrowserOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
             saveBrowserOverlay.revalidate();
         }
     }
@@ -410,7 +411,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             }
         });
         getLayeredPane().add(saveBrowserOverlay, JLayeredPane.POPUP_LAYER);
-        saveBrowserOverlay.setBounds(0, 0, getWidth(), getHeight());
+        int topY = getContentTopY();
+        saveBrowserOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
         getLayeredPane().moveToFront(globalSettingsButton);
         refreshSaveBrowserAsync();
         revalidate();

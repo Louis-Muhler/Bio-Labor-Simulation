@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.border.AbstractBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.plaf.basic.BasicSpinnerUI;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -64,41 +65,34 @@ public class SaveBrowserOverlay extends JPanel {
 
     private static void installEventBlocker(JComponent component) {
         MouseAdapter adapter = new MouseAdapter() {
-            private boolean shouldConsume(MouseEvent e) {
-                JRootPane root = SwingUtilities.getRootPane(component);
-                if (root == null) return true;
-                int topY = root.getContentPane().getY();
-                return e.getY() >= topY;
-            }
-
             @Override
             public void mousePressed(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                if (shouldConsume(e)) e.consume();
+                e.consume();
             }
         };
         component.addMouseListener(adapter);
@@ -110,13 +104,8 @@ public class SaveBrowserOverlay extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
-        int topY = 0;
-        JRootPane root = SwingUtilities.getRootPane(this);
-        if (root != null) {
-            topY = root.getContentPane().getY();
-        }
         g2.setColor(OVERLAY_BG);
-        g2.fillRect(0, topY, getWidth(), getHeight() - topY);
+        g2.fillRect(0, 0, getWidth(), getHeight());
         g2.dispose();
     }
 
@@ -289,8 +278,9 @@ public class SaveBrowserOverlay extends JPanel {
     }
 
     private void styleSpinner(JSpinner spinner) {
+        spinner.setUI(new NeonSpinnerUI());
         spinner.setOpaque(false);
-        spinner.setBorder(new RoundedOutlineBorder(10));
+        spinner.setBorder(BorderFactory.createEmptyBorder());
         spinner.setBackground(OverlayTheme.CONTROL_BG);
         JComponent editor = spinner.getEditor();
         if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
@@ -299,6 +289,7 @@ public class SaveBrowserOverlay extends JPanel {
             tf.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
             tf.setHorizontalAlignment(SwingConstants.LEFT);
             defaultEditor.setBorder(BorderFactory.createEmptyBorder());
+            defaultEditor.setOpaque(false);
         }
     }
 
@@ -391,6 +382,69 @@ public class SaveBrowserOverlay extends JPanel {
             g2.setColor(thumbCol);
             g2.fillRoundRect(x, y, w, h, w, w);
             g2.dispose();
+        }
+    }
+
+    private static final class NeonSpinnerUI extends BasicSpinnerUI {
+        @Override
+        public void installUI(JComponent c) {
+            super.installUI(c);
+            c.setOpaque(false);
+        }
+
+        @Override
+        protected Component createNextButton() {
+            return createArrowButton(true);
+        }
+
+        @Override
+        protected Component createPreviousButton() {
+            return createArrowButton(false);
+        }
+
+        @Override
+        public void paint(Graphics g, JComponent c) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = c.getWidth();
+            int h = c.getHeight();
+            g2.setColor(OverlayTheme.CONTROL_BG);
+            g2.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.setColor(OverlayTheme.ACCENT_GLOW);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.dispose();
+            super.paint(g, c);
+        }
+
+        private JButton createArrowButton(boolean up) {
+            JButton btn = new JButton() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(OverlayTheme.ACCENT);
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+                    int aw = 4;
+                    int ah = 3;
+                    if (up) {
+                        g2.drawLine(cx - aw, cy + ah, cx, cy - ah);
+                        g2.drawLine(cx, cy - ah, cx + aw, cy + ah);
+                    } else {
+                        g2.drawLine(cx - aw, cy - ah, cx, cy + ah);
+                        g2.drawLine(cx, cy + ah, cx + aw, cy - ah);
+                    }
+                    g2.dispose();
+                }
+            };
+            btn.setOpaque(false);
+            btn.setContentAreaFilled(false);
+            btn.setBorderPainted(false);
+            btn.setFocusPainted(false);
+            btn.setPreferredSize(new Dimension(24, 14));
+            return btn;
         }
     }
 

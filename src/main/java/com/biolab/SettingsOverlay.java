@@ -303,9 +303,23 @@ public class SettingsOverlay extends JPanel {
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(24, 36, 24, 36));
 
+        ModernButton closeIcon = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
+        closeIcon.setPreferredSize(new Dimension(45, 45));
+        closeIcon.setToolTipText("Schliessen / Beenden");
+        closeIcon.addActionListener(e -> triggerCloseAction());
+
         GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
+        c.gridx = 1;
         c.gridy = 0;
+        c.anchor = GridBagConstraints.NORTHEAST;
+        c.insets = new Insets(0, 0, 10, 0);
+        c.fill = GridBagConstraints.NONE;
+        c.weightx = 0;
+        card.add(closeIcon, c);
+
+        c.gridx = 0;
+        c.gridx = 0;
+        c.gridy = 1;
         c.gridwidth = 2;
         c.anchor = GridBagConstraints.CENTER;
         c.insets = new Insets(0, 0, 20, 0);
@@ -357,10 +371,10 @@ public class SettingsOverlay extends JPanel {
 
         c.gridy++;
         c.fill = GridBagConstraints.NONE;
-        c.anchor = GridBagConstraints.CENTER;
+        c.anchor = GridBagConstraints.WEST;
         c.insets = new Insets(0, 0, 0, 0);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
+        JPanel buttons = new JPanel(new BorderLayout());
         buttons.setOpaque(false);
         ModernButton apply = new ModernButton("APPLY");
         apply.setPreferredSize(new Dimension(120, 40));
@@ -368,12 +382,16 @@ public class SettingsOverlay extends JPanel {
         ModernButton cancel = new ModernButton("CANCEL");
         cancel.setPreferredSize(new Dimension(120, 40));
         cancel.addActionListener(e -> closeOverlay());
-        ModernButton close = new ModernButton("CLOSE");
-        close.setPreferredSize(new Dimension(120, 40));
-        close.addActionListener(e -> triggerCloseAction());
-        buttons.add(apply);
-        buttons.add(cancel);
-        buttons.add(close);
+
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        left.setOpaque(false);
+        left.add(cancel);
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        right.setOpaque(false);
+        right.add(apply);
+
+        buttons.add(left, BorderLayout.WEST);
+        buttons.add(right, BorderLayout.EAST);
         card.add(buttons, c);
 
         return card;

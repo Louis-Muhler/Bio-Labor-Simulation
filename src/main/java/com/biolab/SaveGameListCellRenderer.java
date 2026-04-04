@@ -50,7 +50,9 @@ public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetada
                                                   boolean cellHasFocus) {
         boolean highlighted = isSelected || index == hoveredIndex;
 
-        row.setBackground(highlighted ? OverlayTheme.CONTROL_HOVER : OverlayTheme.CONTROL_BG);
+        row.setBackground(highlighted
+                ? new Color(OverlayTheme.CONTROL_HOVER.getRed(), OverlayTheme.CONTROL_HOVER.getGreen(), OverlayTheme.CONTROL_HOVER.getBlue(), 220)
+                : new Color(OverlayTheme.CONTROL_BG.getRed(), OverlayTheme.CONTROL_BG.getGreen(), OverlayTheme.CONTROL_BG.getBlue(), 175));
         name.setText(value.listName());
         metaTop.setText(value.listMetaPrimary());
         metaBottom.setText(value.listMetaSecondary());
