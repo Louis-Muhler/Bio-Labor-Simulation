@@ -302,32 +302,30 @@ public class SettingsOverlay extends JPanel {
         };
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(24, 36, 24, 36));
+        card.setPreferredSize(new Dimension(780, 560));
 
         ModernButton closeIcon = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
         closeIcon.setPreferredSize(new Dimension(45, 45));
         closeIcon.setToolTipText("Schliessen / Beenden");
         closeIcon.addActionListener(e -> triggerCloseAction());
 
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 1;
-        c.gridy = 0;
-        c.anchor = GridBagConstraints.NORTHEAST;
-        c.insets = new Insets(0, 0, 10, 0);
-        c.fill = GridBagConstraints.NONE;
-        c.weightx = 0;
-        card.add(closeIcon, c);
-
-        c.gridx = 0;
-        c.gridx = 0;
-        c.gridy = 1;
-        c.gridwidth = 2;
-        c.anchor = GridBagConstraints.CENTER;
-        c.insets = new Insets(0, 0, 20, 0);
-
+        JPanel header = new JPanel(new BorderLayout(12, 0));
+        header.setOpaque(false);
         JLabel title = new JLabel("SYSTEM SETTINGS");
         title.setFont(TITLE_FONT);
         title.setForeground(ACCENT);
-        card.add(title, c);
+        header.add(title, BorderLayout.WEST);
+        header.add(closeIcon, BorderLayout.EAST);
+
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.gridy = 0;
+        c.gridwidth = 2;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1.0;
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, 0, 20, 0);
+        card.add(header, c);
 
         c.gridy++;
         c.anchor = GridBagConstraints.WEST;
@@ -390,6 +388,7 @@ public class SettingsOverlay extends JPanel {
         right.setOpaque(false);
         right.add(apply);
 
+        buttons.setBorder(new EmptyBorder(0, 0, 0, 0));
         buttons.add(left, BorderLayout.WEST);
         buttons.add(right, BorderLayout.EAST);
         card.add(buttons, c);

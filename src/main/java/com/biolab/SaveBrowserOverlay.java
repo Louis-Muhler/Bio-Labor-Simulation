@@ -145,24 +145,7 @@ public class SaveBrowserOverlay extends JPanel {
         vertical.setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
         vertical.setUI(new RoundedScrollBarUI());
 
-        JPanel listShell = new JPanel(new BorderLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int w = getWidth() - 1;
-                int h = getHeight() - 1;
-                g2.setColor(new Color(12, 12, 14, 190));
-                g2.fillRoundRect(0, 0, w, h, 10, 10);
-                g2.setColor(OverlayTheme.ACCENT_GLOW);
-                g2.setStroke(new BasicStroke(1.5f));
-                g2.drawRoundRect(0, 0, w, h, 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        listShell.setOpaque(false);
-        listShell.setBorder(new EmptyBorder(4, 4, 4, 4));
+        JPanel listShell = createInnerFrame();
         listShell.add(scrollPane, BorderLayout.CENTER);
         panel.add(listShell, BorderLayout.CENTER);
 
@@ -223,7 +206,9 @@ public class SaveBrowserOverlay extends JPanel {
         addField(form, "Toxicity", tox);
         addField(form, "Food Spawn Rate", food);
 
-        panel.add(form, BorderLayout.CENTER);
+        JPanel formShell = createInnerFrame();
+        formShell.add(form, BorderLayout.CENTER);
+        panel.add(formShell, BorderLayout.CENTER);
 
         ModernButton play = new ModernButton("PLAY");
         ModernButton back = new ModernButton("BACK");
@@ -287,10 +272,33 @@ public class SaveBrowserOverlay extends JPanel {
             JTextField tf = defaultEditor.getTextField();
             styleField(tf);
             tf.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            tf.setOpaque(false);
             tf.setHorizontalAlignment(SwingConstants.LEFT);
             defaultEditor.setBorder(BorderFactory.createEmptyBorder());
             defaultEditor.setOpaque(false);
         }
+    }
+
+    private JPanel createInnerFrame() {
+        JPanel shell = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth() - 1;
+                int h = getHeight() - 1;
+                g2.setColor(new Color(12, 12, 14, 190));
+                g2.fillRoundRect(0, 0, w, h, 10, 10);
+                g2.setColor(OverlayTheme.ACCENT_GLOW);
+                g2.setStroke(new BasicStroke(1.5f));
+                g2.drawRoundRect(0, 0, w, h, 10, 10);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        shell.setOpaque(false);
+        shell.setBorder(new EmptyBorder(4, 4, 4, 4));
+        return shell;
     }
 
     public void showCreateForm() {
@@ -394,12 +402,18 @@ public class SaveBrowserOverlay extends JPanel {
 
         @Override
         protected Component createNextButton() {
-            return createArrowButton(true);
+            JButton button = createArrowButton(true);
+            button.setName("Spinner.nextButton");
+            installNextButtonListeners(button);
+            return button;
         }
 
         @Override
         protected Component createPreviousButton() {
-            return createArrowButton(false);
+            JButton button = createArrowButton(false);
+            button.setName("Spinner.previousButton");
+            installPreviousButtonListeners(button);
+            return button;
         }
 
         @Override
