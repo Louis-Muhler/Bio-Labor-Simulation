@@ -395,13 +395,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
             @Override
             public void onDeleteRequested(SaveGameMetadata metadata) {
-                try {
-                    saveRepository.deleteSave(metadata.saveId());
-                    refreshSaveBrowser();
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
-                            "Delete failed: " + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
-                }
+                deleteSaveAsync(metadata);
             }
 
             @Override
@@ -412,20 +406,56 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         getLayeredPane().add(saveBrowserOverlay, JLayeredPane.POPUP_LAYER);
         saveBrowserOverlay.setBounds(0, 0, getWidth(), getHeight());
         getLayeredPane().moveToFront(globalSettingsButton);
-        refreshSaveBrowser();
+        refreshSaveBrowserAsync();
         revalidate();
         repaint();
     }
 
-    private void refreshSaveBrowser() {
+    private void refreshSaveBrowserAsync() {
         if (saveBrowserOverlay == null) return;
-        try {
-            saveBrowserOverlay.setSaves(saveRepository.listSaves());
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Failed to list saves: " + ex.getMessage(),
-                    "Save Error", JOptionPane.ERROR_MESSAGE);
-        }
+        SwingWorker<java.util.List<SaveGameMetadata>, Void> worker = new SwingWorker<>() {
+            @Override
+            protected java.util.List<SaveGameMetadata> doInBackground() throws Exception {
+                return saveRepository.listSaves();
+            }
+
+            @Override
+            protected void done() {
+                if (saveBrowserOverlay == null) return;
+                try {
+                    saveBrowserOverlay.setSaves(get());
+                    updateResumeAvailability();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
+                            "Failed to list saves: " + ex.getMessage(),
+                            "Save Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void deleteSaveAsync(SaveGameMetadata metadata) {
+        if (metadata == null) return;
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                saveRepository.deleteSave(metadata.saveId());
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    refreshSaveBrowserAsync();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
+                            "Delete failed: " + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void removeSaveBrowser() {

@@ -1,7 +1,6 @@
 package com.biolab;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 
@@ -12,6 +11,7 @@ public class SaveBrowserOverlay extends JPanel {
     private static final Color OVERLAY_BG = new Color(0, 0, 0, 95);
     private final DefaultListModel<SaveGameMetadata> model = new DefaultListModel<>();
     private final JList<SaveGameMetadata> list = new JList<>(model);
+    private final SaveGameListCellRenderer renderer = new SaveGameListCellRenderer();
 
     public SaveBrowserOverlay(Listener listener) {
         setOpaque(false);
@@ -34,26 +34,8 @@ public class SaveBrowserOverlay extends JPanel {
         };
         backdrop.setOpaque(false);
 
-        JPanel card = new JPanel(new BorderLayout(0, 12)) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int w = getWidth() - 1;
-                int h = getHeight() - 1;
-                g2.setColor(OverlayTheme.PANEL_BG_ALPHA);
-                g2.fillRoundRect(0, 0, w, h, 16, 16);
-                g2.setColor(OverlayTheme.ACCENT_GLOW);
-                g2.setStroke(new BasicStroke(3f));
-                g2.drawRoundRect(0, 0, w, h, 16, 16);
-                g2.setColor(OverlayTheme.ACCENT);
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, w, h, 16, 16);
-                g2.dispose();
-            }
-        };
-        card.setOpaque(false);
-        card.setBorder(new EmptyBorder(16, 16, 16, 16));
+        NeonCardPanel card = new NeonCardPanel(16, new Insets(16, 16, 16, 16));
+        card.setLayout(new BorderLayout(0, 12));
         card.setPreferredSize(new Dimension(850, 520));
 
         JLabel title = new JLabel("SELECT GAME", SwingConstants.CENTER);
@@ -73,15 +55,29 @@ public class SaveBrowserOverlay extends JPanel {
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setBackground(new Color(10, 12, 16, 200));
         list.setForeground(OverlayTheme.ACCENT);
-        list.setCellRenderer((jList, value, index, isSelected, cellHasFocus) -> {
-            JLabel label = new JLabel(value.toDisplayLine());
-            label.setOpaque(true);
-            label.setBorder(new EmptyBorder(10, 12, 10, 12));
-            label.setForeground(OverlayTheme.ACCENT);
-            label.setBackground(isSelected ? OverlayTheme.CONTROL_HOVER : new Color(10, 12, 16, 200));
-            return label;
+        list.setFixedCellHeight(64);
+        list.setCellRenderer(renderer);
+        list.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                int idx = list.locationToIndex(e.getPoint());
+                renderer.setHoveredIndex(idx);
+                list.repaint();
+            }
         });
-        card.add(new JScrollPane(list), BorderLayout.CENTER);
+        list.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                renderer.setHoveredIndex(-1);
+                list.repaint();
+            }
+        });
+
+        JScrollPane scrollPane = new JScrollPane(list);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setBorder(BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1));
+        card.add(scrollPane, BorderLayout.CENTER);
 
         ModernButton play = new ModernButton("PLAY");
         ModernButton delete = new ModernButton("DELETE");

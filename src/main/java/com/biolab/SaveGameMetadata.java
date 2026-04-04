@@ -91,6 +91,18 @@ public record SaveGameMetadata(
                 + "  |  Playtime " + formatPlaytime(playtimeSeconds);
     }
 
+    public String listName() {
+        return mapName;
+    }
+
+    public String listMetaPrimary() {
+        return String.format("Map %dx%d  |  Pop %,d", worldWidth, worldHeight, population);
+    }
+
+    public String listMetaSecondary() {
+        return "Playtime " + formatPlaytime(playtimeSeconds);
+    }
+
     public Properties toProperties() {
         Properties props = new Properties();
         props.setProperty("save.id", saveId);
