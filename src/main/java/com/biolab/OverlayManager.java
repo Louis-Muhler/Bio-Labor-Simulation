@@ -282,4 +282,37 @@ public class OverlayManager {
     public InspectorPanel getInspectorPanel() {
         return inspectorPanel;
     }
+
+    /**
+     * Shows or hides all gameplay overlays/buttons managed by this instance.
+     */
+    public void setGameplayOverlaysVisible(boolean visible) {
+        inspectorPanel.setVisible(visible && inspectorPanel.isVisible());
+        environmentPanel.setVisible(visible && environmentPanel.isVisible());
+        envToggleButton.setVisible(visible);
+        settingsButton.setVisible(visible);
+        speedButton.setVisible(visible);
+        populationOverlay.setVisible(visible);
+        if (!visible) {
+            envToggleButton.setDimmed(false);
+            environmentPanel.setVisible(false);
+            inspectorPanel.hidePanel();
+        }
+        JLayeredPane lp = layeredPaneSupplier.get();
+        lp.repaint();
+    }
+
+    /**
+     * Removes all managed components from the current layered pane.
+     */
+    public void removeAllOverlays() {
+        JLayeredPane lp = layeredPaneSupplier.get();
+        lp.remove(inspectorPanel);
+        lp.remove(environmentPanel);
+        lp.remove(envToggleButton);
+        lp.remove(settingsButton);
+        lp.remove(speedButton);
+        lp.remove(populationOverlay);
+        lp.repaint();
+    }
 }

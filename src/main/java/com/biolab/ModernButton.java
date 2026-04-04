@@ -257,7 +257,8 @@ public class ModernButton extends JButton {
                 g2d.setFont(getFont());
                 FontMetrics fm = g2d.getFontMetrics();
                 int textWidth = fm.stringWidth(displayText);
-                g2d.drawString(displayText, getWidth() - textWidth - 20, getHeight() / 2 + 6);
+                int textY = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2d.drawString(displayText, getWidth() - textWidth - 20, textY);
             } else {
                 // Icon only: centered
                 Point iconPos = new Point(getWidth() / 2, getHeight() / 2);
@@ -269,7 +270,9 @@ public class ModernButton extends JButton {
                 g2d.setFont(getFont());
                 FontMetrics fm = g2d.getFontMetrics();
                 int textWidth = fm.stringWidth(displayText);
-                g2d.drawString(displayText, (getWidth() - textWidth) / 2, getHeight() / 2 + 6);
+                int textX = (getWidth() - textWidth) / 2;
+                int textY = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2d.drawString(displayText, textX, textY);
             }
         }
 

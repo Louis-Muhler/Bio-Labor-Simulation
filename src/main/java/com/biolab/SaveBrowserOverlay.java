@@ -9,7 +9,7 @@ import java.util.List;
  * Overlay that lists all save games and exposes create/play/delete actions.
  */
 public class SaveBrowserOverlay extends JPanel {
-    private static final Color OVERLAY_BG = new Color(8, 10, 14, 105);
+    private static final Color OVERLAY_BG = new Color(0, 0, 0, 95);
     private final DefaultListModel<SaveGameMetadata> model = new DefaultListModel<>();
     private final JList<SaveGameMetadata> list = new JList<>(model);
 
@@ -21,8 +21,13 @@ public class SaveBrowserOverlay extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
+                int topY = 0;
+                JRootPane root = SwingUtilities.getRootPane(this);
+                if (root != null) {
+                    topY = root.getContentPane().getY();
+                }
                 g2.setColor(OVERLAY_BG);
-                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.fillRect(0, topY, getWidth(), getHeight() - topY);
                 g2.dispose();
                 super.paintComponent(g);
             }

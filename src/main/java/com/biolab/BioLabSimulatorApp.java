@@ -37,6 +37,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private SimulationCanvas canvas;
     private OverlayManager overlayManager;
     private SimulationLoopController loopController;
+    private ModernButton globalSettingsButton;
 
     private volatile Microbe selectedMicrobe;
     private SettingsOverlay settingsOverlay;
@@ -113,6 +114,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
         setContentPane(content);
 
+        globalSettingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
+        globalSettingsButton.addActionListener(e -> showSettingsOverlay());
+        getLayeredPane().add(globalSettingsButton, JLayeredPane.DRAG_LAYER);
+        positionGlobalSettingsButton();
+
         setLocationRelativeTo(null);
         if (overlayManager != null) {
             overlayManager.repositionAllOverlays();
@@ -124,6 +130,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 if (overlayManager != null) {
                     overlayManager.repositionAllOverlays();
                 }
+                positionGlobalSettingsButton();
                 if (settingsOverlay != null) {
                     settingsOverlay.setBounds(0, 0, getWidth(), getHeight());
                 }
@@ -139,9 +146,21 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 if (overlayManager != null) {
                     overlayManager.repositionAllOverlays();
                 }
+                positionGlobalSettingsButton();
                 if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
             }
         });
+    }
+
+    private void positionGlobalSettingsButton() {
+        if (globalSettingsButton == null) return;
+        int top = 15;
+        JRootPane root = getRootPane();
+        if (root != null) {
+            top += root.getContentPane().getY();
+        }
+        globalSettingsButton.setBounds(15, top, 45, 45);
+        globalSettingsButton.repaint();
     }
 
 
@@ -183,6 +202,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             if (overlayManager != null) {
                 overlayManager.repositionAllOverlays();
             }
+            positionGlobalSettingsButton();
             if (canvas != null) canvas.clampZoomAndCamera();
         });
     }
@@ -249,6 +269,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void teardownSession() {
         stopAutoSave();
+        if (overlayManager != null) {
+            overlayManager.removeAllOverlays();
+        }
         if (loopController != null) {
             loopController.stop();
             loopController = null;
@@ -273,7 +296,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 inspectorPanel, environmentPanel, envToggleButton, settingsButton, speedButton);
 
         envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
-        settingsButton.addActionListener(e -> showSettingsOverlay());
+        settingsButton.setVisible(false);
         speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
 
         inspectorPanel.setVisible(false);
@@ -283,7 +306,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void showMainMenu() {
         if (mainMenuOverlay != null) return;
-        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu, this::showSettingsOverlay);
+        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu);
         getLayeredPane().add(mainMenuOverlay, JLayeredPane.POPUP_LAYER);
         mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
         mainMenuOverlay.setVisible(true);
@@ -435,7 +458,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
     }
 
-    private synchronized void saveCurrentWorld(boolean showFeedback) {
+    private synchronized void saveCurrentWorld() {
         if (engine == null || !isGameplaySession()) return;
         SimulationState state = engine.captureState();
         long playedSeconds = elapsedSessionSeconds();
@@ -461,17 +484,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 currentSave = saveRepository.loadMetadata(currentSave.saveId());
             }
             sessionStartMillis = System.currentTimeMillis();
-
-            if (showFeedback) {
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-                        this, "Game saved.", "Save", JOptionPane.INFORMATION_MESSAGE));
-            }
         } catch (IOException ex) {
             LOGGER.log(Level.WARNING, "Autosave failed", ex);
-            if (showFeedback) {
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-                        this, "Save failed: " + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE));
-            }
         }
     }
 
@@ -488,7 +502,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             return t;
         });
         autosaveTask = autosaveExecutor.scheduleAtFixedRate(
-                () -> saveCurrentWorld(false),
+                this::saveCurrentWorld,
                 AUTOSAVE_INTERVAL_SECONDS,
                 AUTOSAVE_INTERVAL_SECONDS,
                 TimeUnit.SECONDS
@@ -515,21 +529,26 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void returnToMainMenuFromGameplay() {
-        saveCurrentWorld(false);
         removeSettingsOverlay();
-        currentSave = null;
-        currentWorldName = null;
-        startPreviewSession();
+        stopAutoSave();
+        if (overlayManager != null) {
+            overlayManager.setGameplayOverlaysVisible(false);
+        }
+        Microbe prev = selectedMicrobe;
+        if (prev != null) prev.setSelected(false);
+        selectedMicrobe = null;
+        if (canvas != null) canvas.stopFollowing();
         showMainMenu();
     }
 
     private void showSettingsOverlay() {
         if (settingsOverlay != null) return;
-        pausedForSettings = isGameplaySession() && loopController != null;
+        boolean mainMenuVisible = mainMenuOverlay != null;
+        pausedForSettings = !mainMenuVisible && isGameplaySession() && loopController != null;
         if (pausedForSettings) {
             loopController.pause();
         }
-        Runnable closeAction = isGameplaySession() ? this::returnToMainMenuFromGameplay : this::closeApplication;
+        Runnable closeAction = mainMenuVisible ? this::closeApplication : this::returnToMainMenuFromGameplay;
         settingsOverlay = new SettingsOverlay(settingsManager,
                 this::applySettingsAndClose,   // APPLY button
                 this::cancelSettingsAndClose,
