@@ -27,7 +27,7 @@ import java.util.List;
 public class SettingsOverlay extends JPanel {
     private final SettingsManager settingsManager;
     // ── Theme constants ──────────────────────────────────────────────────
-    private static final Color OVERLAY_BG = new Color(0, 0, 0, 160);
+    private static final Color OVERLAY_BG = new Color(0, 0, 0, 105);
     /**
      * Matches the dark panel background used by InspectorPanel and EnvironmentPanel.
      */
@@ -71,6 +71,10 @@ public class SettingsOverlay extends JPanel {
      * Invoked when the user clicks CANCEL or presses ESC without saving.
      */
     private final Runnable onCancel;
+    /**
+     * Optional contextual close action (e.g., return to menu or exit app).
+     */
+    private final Runnable onCloseAction;
     // ── Stateful UI controls ─────────────────────────────────────────────
     private JCheckBox fullscreenCheck;
     private JComboBox<String> resolutionCombo;
@@ -90,9 +94,17 @@ public class SettingsOverlay extends JPanel {
      * @param onCancel        callback invoked on dismiss without saving
      */
     public SettingsOverlay(SettingsManager settingsManager, Runnable onApply, Runnable onCancel) {
+        this(settingsManager, onApply, onCancel, null);
+    }
+
+    /**
+     * @param onCloseAction optional contextual close action shown as CLOSE button
+     */
+    public SettingsOverlay(SettingsManager settingsManager, Runnable onApply, Runnable onCancel, Runnable onCloseAction) {
         this.settingsManager = settingsManager;
         this.onApply = onApply;
         this.onCancel = onCancel;
+        this.onCloseAction = onCloseAction;
         setupUI();
         loadCurrentSettings();
     }
@@ -313,8 +325,12 @@ public class SettingsOverlay extends JPanel {
         ModernButton cancel = new ModernButton("CANCEL");
         cancel.setPreferredSize(new Dimension(120, 40));
         cancel.addActionListener(e -> closeOverlay());
+        ModernButton close = new ModernButton("CLOSE");
+        close.setPreferredSize(new Dimension(120, 40));
+        close.addActionListener(e -> triggerCloseAction());
         buttons.add(apply);
         buttons.add(cancel);
+        buttons.add(close);
         card.add(buttons, c);
 
         return card;
@@ -405,6 +421,14 @@ public class SettingsOverlay extends JPanel {
      */
     private void closeOverlay() {
         if (onCancel != null) onCancel.run();
+    }
+
+    private void triggerCloseAction() {
+        if (onCloseAction != null) {
+            onCloseAction.run();
+        } else {
+            closeOverlay();
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────

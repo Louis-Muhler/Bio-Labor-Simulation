@@ -15,8 +15,8 @@ import java.util.function.BiConsumer;
  * - new ModernButton("Text", customIconDrawer)         // Custom icon function
  */
 public class ModernButton extends JButton {
-    private static final Color BACKGROUND_COLOR = OverlayTheme.CONTROL_BG;
-    private static final Color BACKGROUND_HOVER_COLOR = OverlayTheme.CONTROL_HOVER;
+    private static final Color BACKGROUND_COLOR = new Color(18, 18, 18, 220);
+    private static final Color BACKGROUND_HOVER_COLOR = new Color(28, 32, 36, 235);
     private static final Color BORDER_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Color BORDER_HOVER_COLOR = new Color(0, 255, 255, 200);
     private static final Color TEXT_COLOR = OverlayTheme.ACCENT;

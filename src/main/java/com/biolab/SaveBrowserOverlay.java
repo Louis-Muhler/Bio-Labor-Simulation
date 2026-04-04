@@ -9,6 +9,7 @@ import java.util.List;
  * Overlay that lists all save games and exposes create/play/delete actions.
  */
 public class SaveBrowserOverlay extends JPanel {
+    private static final Color OVERLAY_BG = new Color(8, 10, 14, 105);
     private final DefaultListModel<SaveGameMetadata> model = new DefaultListModel<>();
     private final JList<SaveGameMetadata> list = new JList<>(model);
 
@@ -20,7 +21,7 @@ public class SaveBrowserOverlay extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setColor(new Color(0, 0, 0, 160));
+                g2.setColor(OVERLAY_BG);
                 g2.fillRect(0, 0, getWidth(), getHeight());
                 g2.dispose();
                 super.paintComponent(g);
@@ -28,15 +29,34 @@ public class SaveBrowserOverlay extends JPanel {
         };
         backdrop.setOpaque(false);
 
-        JPanel card = new JPanel(new BorderLayout(0, 12));
+        JPanel card = new JPanel(new BorderLayout(0, 12)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int w = getWidth() - 1;
+                int h = getHeight() - 1;
+                g2.setColor(OverlayTheme.PANEL_BG_ALPHA);
+                g2.fillRoundRect(0, 0, w, h, 16, 16);
+                g2.setColor(OverlayTheme.ACCENT_GLOW);
+                g2.setStroke(new BasicStroke(3f));
+                g2.drawRoundRect(0, 0, w, h, 16, 16);
+                g2.setColor(OverlayTheme.ACCENT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, w, h, 16, 16);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
         card.setBorder(new EmptyBorder(16, 16, 16, 16));
-        card.setBackground(OverlayTheme.PANEL_BG_ALPHA);
         card.setPreferredSize(new Dimension(850, 520));
 
         JLabel title = new JLabel("SELECT GAME", SwingConstants.CENTER);
         title.setForeground(OverlayTheme.ACCENT);
         title.setFont(new Font("Segoe UI", Font.BOLD, 28));
-        ModernButton create = new ModernButton("CREATE GAME", ModernButton.ButtonIcon.PLAY);
+        ModernButton create = new ModernButton("CREATE GAME");
+        create.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        create.setPreferredSize(new Dimension(220, 44));
         create.addActionListener(e -> listener.onCreateRequested());
 
         JPanel north = new JPanel(new BorderLayout(0, 10));
@@ -46,20 +66,20 @@ public class SaveBrowserOverlay extends JPanel {
         card.add(north, BorderLayout.NORTH);
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setBackground(OverlayTheme.CONTROL_BG);
+        list.setBackground(new Color(10, 12, 16, 200));
         list.setForeground(OverlayTheme.ACCENT);
         list.setCellRenderer((jList, value, index, isSelected, cellHasFocus) -> {
             JLabel label = new JLabel(value.toDisplayLine());
             label.setOpaque(true);
-            label.setBorder(new EmptyBorder(8, 8, 8, 8));
+            label.setBorder(new EmptyBorder(10, 12, 10, 12));
             label.setForeground(OverlayTheme.ACCENT);
-            label.setBackground(isSelected ? OverlayTheme.CONTROL_HOVER : OverlayTheme.CONTROL_BG);
+            label.setBackground(isSelected ? OverlayTheme.CONTROL_HOVER : new Color(10, 12, 16, 200));
             return label;
         });
         card.add(new JScrollPane(list), BorderLayout.CENTER);
 
-        ModernButton play = new ModernButton("PLAY", ModernButton.ButtonIcon.PLAY);
-        ModernButton delete = new ModernButton("DELETE", ModernButton.ButtonIcon.CLOSE);
+        ModernButton play = new ModernButton("PLAY");
+        ModernButton delete = new ModernButton("DELETE");
         ModernButton back = new ModernButton("BACK");
 
         play.addActionListener(e -> {
