@@ -328,9 +328,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void showMainMenu() {
         if (mainMenuOverlay != null) return;
-        if (!uiStateMachine.transitionTo(AppUiState.PREVIEW_MENU)) return;
-        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu, this::resumeParkedGameplay);
-        mainMenuOverlay.setResumeEnabled(hasResumeTarget());
+        if (!transitionOrRecover(AppUiState.PREVIEW_MENU)) return;
+        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu, this::resumeLatestSave);
+        updateResumeAvailability();
         getLayeredPane().add(mainMenuOverlay, JLayeredPane.POPUP_LAYER);
         mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
         mainMenuOverlay.setVisible(true);
@@ -352,7 +352,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void showSaveBrowser() {
         if (saveBrowserOverlay != null) return;
-        if (!uiStateMachine.transitionTo(AppUiState.SAVE_BROWSER)) return;
+        if (!transitionOrRecover(AppUiState.SAVE_BROWSER)) return;
         pausedForSaveBrowser = isGameplaySession() && loopController != null;
         if (pausedForSaveBrowser) {
             loopController.pause();
@@ -413,7 +413,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             loopController.resume();
         }
         pausedForSaveBrowser = false;
-        if (reopenMainMenuOnBrowserClose && !isGameplaySession()) {
+        if (reopenMainMenuOnBrowserClose) {
             showMainMenu();
         } else if (isGameplaySession()) {
             uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
@@ -425,7 +425,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void showWorldSetup() {
         if (worldSetupOverlay != null) return;
-        if (!uiStateMachine.transitionTo(AppUiState.WORLD_SETUP)) return;
+        if (!transitionOrRecover(AppUiState.WORLD_SETUP)) return;
         worldSetupOverlay = new WorldSetupOverlay(this::createWorldAndStart, this::removeWorldSetup);
         getLayeredPane().add(worldSetupOverlay, JLayeredPane.DRAG_LAYER);
         worldSetupOverlay.setBounds(0, 0, getWidth(), getHeight());
@@ -446,7 +446,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void createWorldAndStart(WorldConfig config) {
         startSimulationSession(config, true);
-        uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
+        transitionOrRecover(AppUiState.GAMEPLAY);
         removeMainMenu();
         removeSaveBrowser();
         currentWorldName = config.mapName();
@@ -477,7 +477,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                     state.foodSpawnRate()
             );
             startSimulationSession(config, true);
-            uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
+            transitionOrRecover(AppUiState.GAMEPLAY);
             engine.loadState(state);
             currentSave = metadata;
             currentWorldName = metadata.mapName();
@@ -572,14 +572,17 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private boolean hasResumeTarget() {
-        if (gameplayParkedInMenu) {
-            return true;
-        }
         try {
             return saveRepository.findMostRecentSave().isPresent();
         } catch (IOException ex) {
             LOGGER.log(Level.WARNING, "Failed to query latest save", ex);
             return false;
+        }
+    }
+
+    private void updateResumeAvailability() {
+        if (mainMenuOverlay != null) {
+            mainMenuOverlay.setResumeEnabled(hasResumeTarget());
         }
     }
 
@@ -610,23 +613,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         showMainMenu();
     }
 
-    private void resumeParkedGameplay() {
-        if (gameplayParkedInMenu && overlayManager != null) {
-            removeMainMenu();
-            overlayManager.setGameplayOverlaysVisible(true);
-            startAutoSave();
-            gameplayParkedInMenu = false;
-            uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
-            if (canvas != null) {
-                canvas.requestFocusInWindow();
-            }
-            return;
-        }
-
+    private void resumeLatestSave() {
         try {
             SaveGameMetadata latest = saveRepository.findMostRecentSave().orElse(null);
             if (latest != null) {
+                gameplayParkedInMenu = false;
                 loadSaveAndStart(latest);
+            } else {
+                updateResumeAvailability();
             }
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this,
@@ -635,10 +629,47 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
     }
 
+    private boolean transitionOrRecover(AppUiState target) {
+        if (uiStateMachine.transitionTo(target)) {
+            return true;
+        }
+        recoverToMainMenu();
+        return false;
+    }
+
+    private void recoverToMainMenu() {
+        if (uiStateMachine.current() == AppUiState.SHUTDOWN) {
+            return;
+        }
+        if (settingsOverlay != null) removeSettingsOverlay();
+        if (saveBrowserOverlay != null) {
+            getLayeredPane().remove(saveBrowserOverlay);
+            saveBrowserOverlay = null;
+        }
+        if (worldSetupOverlay != null) {
+            getLayeredPane().remove(worldSetupOverlay);
+            worldSetupOverlay = null;
+        }
+        if (engine == null || canvas == null) {
+            startPreviewSession();
+        }
+        if (overlayManager != null) {
+            overlayManager.setGameplayOverlaysVisible(false);
+        }
+        uiStateMachine.forceState(AppUiState.PREVIEW_MENU);
+        if (mainMenuOverlay == null) {
+            showMainMenu();
+        } else {
+            updateResumeAvailability();
+        }
+        revalidate();
+        repaint();
+    }
+
     private void showSettingsOverlay() {
         if (settingsOverlay != null) return;
         stateBeforeSettings = uiStateMachine.current();
-        if (!uiStateMachine.transitionTo(AppUiState.SETTINGS)) return;
+        if (!transitionOrRecover(AppUiState.SETTINGS)) return;
         boolean mainMenuVisible = mainMenuOverlay != null;
         pausedForSettings = loopController != null;
         if (pausedForSettings) {

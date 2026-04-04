@@ -40,5 +40,13 @@ public final class AppUiStateMachine {
         current = next;
         return true;
     }
+
+    /**
+     * Forces a state value without transition validation.
+     * Used only by fail-safe recovery paths.
+     */
+    public synchronized void forceState(AppUiState next) {
+        current = next;
+    }
 }
 
