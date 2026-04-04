@@ -630,10 +630,6 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
     }
 
-    private void closeApplication() {
-        dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
-    }
-
     private void returnToMainMenuFromGameplay() {
         saveCurrentWorld();
         flushPendingSaves();
@@ -714,12 +710,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
         stateBeforeSettings = uiStateMachine.current();
         if (!transitionOrRecover(AppUiState.SETTINGS)) return;
-        boolean mainMenuVisible = mainMenuOverlay != null;
         pausedForSettings = loopController != null;
         if (pausedForSettings) {
             loopController.pause();
         }
-        Runnable closeAction = mainMenuVisible ? this::closeApplication : this::returnToMainMenuFromGameplay;
+        Runnable closeAction = this::returnToMainMenuFromGameplay;
         settingsOverlay = new SettingsOverlay(settingsManager,
                 this::applySettingsAndClose,   // APPLY button
                 this::cancelSettingsAndClose,

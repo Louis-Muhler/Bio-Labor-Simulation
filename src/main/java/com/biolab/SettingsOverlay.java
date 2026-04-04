@@ -41,9 +41,9 @@ public class SettingsOverlay extends JPanel {
     private static final Color CONTROL_BG = OverlayTheme.CONTROL_BG;
     private static final Color CONTROL_HOVER = OverlayTheme.CONTROL_HOVER;
     private static final Color BORDER_COLOR = OverlayTheme.ACCENT_GLOW;
-    private static final int CARD_BASE_WIDTH = 700;
-    private static final int CARD_MIN_WIDTH = 560;
-    private static final int CARD_MAX_WIDTH = 740;
+    private static final int CARD_BASE_WIDTH = 560;
+    private static final int CARD_MIN_WIDTH = 450;
+    private static final int CARD_MAX_WIDTH = 600;
     private static final int CARD_MAX_HEIGHT = 560;
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 24);
     private static final Font SECTION_FONT = new Font("Segoe UI", Font.BOLD, 16);
@@ -321,7 +321,7 @@ public class SettingsOverlay extends JPanel {
 
         ModernButton closeIcon = new ModernButton("", ModernButton.ButtonIcon.CLOSE);
         closeIcon.setPreferredSize(new Dimension(45, 45));
-        closeIcon.setToolTipText("Exit Game");
+        closeIcon.setToolTipText("Zurueck zum Hauptmenue");
         closeIcon.addActionListener(e -> triggerCloseAction());
 
         JPanel header = new JPanel(new BorderLayout(12, 0));
