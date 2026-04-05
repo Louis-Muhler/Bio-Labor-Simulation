@@ -46,7 +46,14 @@ public class SimulationEngine implements SimulationRuntime {
      */
     private final Object frameMutationLock = new Object();
     private final SimulationEngineContext context;
+    private final WorldStatsStore worldStatsStore;
     private volatile double foodSpawnRate = 0.75;
+    private long simulationTick;
+    private volatile double foodSpawnedPerSecond;
+    private volatile double foodConsumedPerSecond;
+    private long rateWindowStartMillis;
+    private int spawnedWithinWindow;
+    private int consumedWithinWindow;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
 
@@ -81,6 +88,7 @@ public class SimulationEngine implements SimulationRuntime {
         this.availableReproductionSlots = new AtomicInteger(maxPopulation);
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+        this.worldStatsStore = new WorldStatsStore();
         this.context = SimulationEngineContext.create(
                 MAX_QUEUED_COMMANDS,
                 frameMutationLock,
@@ -121,6 +129,8 @@ public class SimulationEngine implements SimulationRuntime {
                 .map(Microbe::toRenderState)
                 .toList();
         renderSnapshot = new SimulationSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
+        rateWindowStartMillis = System.currentTimeMillis();
+        appendWorldStatsSample(rateWindowStartMillis);
     }
 
     /**
@@ -142,7 +152,13 @@ public class SimulationEngine implements SimulationRuntime {
      * This method is always called from the SimulationLoop thread (single writer).
      */
     public void update() {
-        renderSnapshot = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
+        SimulationFrameResult frameResult = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
+        renderSnapshot = frameResult.snapshot();
+        simulationTick++;
+
+        long nowMillis = System.currentTimeMillis();
+        updateFoodRates(nowMillis, frameResult.spawnedFoodCount(), frameResult.consumedFoodCount());
+        appendWorldStatsSample(nowMillis);
     }
 
     /**
@@ -249,12 +265,81 @@ public class SimulationEngine implements SimulationRuntime {
         return foodSpawnRate;
     }
 
+    @Override
+    public WorldStatsStore getWorldStatsStore() {
+        return worldStatsStore;
+    }
+
     /**
      * Sets the food spawn probability per frame, clamped to [0.0, 1.0].
      * May be called from any thread (volatile write).
      */
     public void setFoodSpawnRate(double rate) {
         this.foodSpawnRate = Math.max(0.0, Math.min(1.0, rate));
+    }
+
+    private void updateFoodRates(long nowMillis, int spawned, int consumed) {
+        spawnedWithinWindow += Math.max(0, spawned);
+        consumedWithinWindow += Math.max(0, consumed);
+
+        long elapsed = Math.max(1L, nowMillis - rateWindowStartMillis);
+        if (elapsed >= 1_000L) {
+            foodSpawnedPerSecond = spawnedWithinWindow * 1000.0 / elapsed;
+            foodConsumedPerSecond = consumedWithinWindow * 1000.0 / elapsed;
+            spawnedWithinWindow = 0;
+            consumedWithinWindow = 0;
+            rateWindowStartMillis = nowMillis;
+        }
+    }
+
+    private void appendWorldStatsSample(long timestampMillis) {
+        WorldMetricContext contextSnapshot;
+        synchronized (worldState.dataLock()) {
+            List<Microbe> microbes = worldState.population().microbes();
+            int population = microbes.size();
+
+            double heatSum = 0.0;
+            double toxinSum = 0.0;
+            double speedSum = 0.0;
+            double dietSum = 0.0;
+            double ageSum = 0.0;
+            double energyPercentSum = 0.0;
+            double healthPercentSum = 0.0;
+
+            for (Microbe microbe : microbes) {
+                heatSum += microbe.getHeatResistance();
+                toxinSum += microbe.getToxinResistance();
+                speedSum += microbe.getSpeed();
+                dietSum += microbe.getDiet();
+                ageSum += microbe.getAge();
+                energyPercentSum += microbe.getEnergyRatio() * 100.0;
+                healthPercentSum += microbe.getHealthRatio() * 100.0;
+            }
+
+            double divisor = Math.max(1, population);
+            contextSnapshot = new WorldMetricContext(
+                    population,
+                    worldState.food().pellets().size(),
+                    foodSpawnedPerSecond,
+                    foodConsumedPerSecond,
+                    environment.getTemperature(),
+                    environment.getToxicity(),
+                    foodSpawnRate,
+                    heatSum / divisor,
+                    toxinSum / divisor,
+                    speedSum / divisor,
+                    dietSum / divisor,
+                    ageSum / divisor,
+                    energyPercentSum / divisor,
+                    healthPercentSum / divisor
+            );
+        }
+
+        double[] values = new double[WorldMetricId.values().length];
+        for (WorldMetricDefinition definition : WorldMetricRegistry.definitions()) {
+            values[definition.id().ordinal()] = definition.extractor().applyAsDouble(contextSnapshot);
+        }
+        worldStatsStore.append(timestampMillis, simulationTick, values);
     }
 
     /**

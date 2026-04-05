@@ -36,13 +36,14 @@ final class SimulationFrameOrchestrator {
         this.logger = logger;
     }
 
-    SimulationSnapshot runFrame(List<Microbe> microbeSnapshot,
+    SimulationFrameResult runFrame(List<Microbe> microbeSnapshot,
                                 List<FoodPellet> foodSnapshot,
+                                   int spawnedFoodCount,
                                 double temperature,
                                 double toxicity) throws InterruptedException {
         int microbeCount = microbeSnapshot.size();
         if (microbeCount == 0) {
-            return populationCommitSystem.finalizeEmptyFrame();
+            return populationCommitSystem.finalizeEmptyFrame(spawnedFoodCount);
         }
 
         spatialGrid.rebuild(foodSnapshot);
@@ -67,7 +68,7 @@ final class SimulationFrameOrchestrator {
             }
         }
 
-        return populationCommitSystem.finalizeFrame();
+        return populationCommitSystem.finalizeFrame(spawnedFoodCount);
     }
 }
 

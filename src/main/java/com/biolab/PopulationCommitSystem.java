@@ -16,13 +16,14 @@ final class PopulationCommitSystem {
         this.maxPopulation = maxPopulation;
     }
 
-    SimulationSnapshot finalizeFrame() {
+    SimulationFrameResult finalizeFrame(int spawnedFoodCount) {
         synchronized (worldState.dataLock()) {
             List<Microbe> microbes = worldState.population().microbes();
             List<Microbe> newMicrobes = worldState.population().newMicrobes();
             List<FoodPellet> foodPellets = worldState.food().pellets();
             microbes.removeIf(Microbe::isDead);
             worldState.index().byId().entrySet().removeIf(e -> e.getValue().isDead());
+            int consumedFoodCount = (int) foodPellets.stream().filter(FoodPellet::isConsumed).count();
             foodPellets.removeIf(FoodPellet::isConsumed);
 
             int currentPopulation = microbes.size();
@@ -46,18 +47,24 @@ final class PopulationCommitSystem {
                 }
             }
 
-            return new SimulationSnapshot(
+            SimulationSnapshot snapshot = new SimulationSnapshot(
                     microbes.stream().map(Microbe::toRenderState).toList(),
                     List.copyOf(foodPellets)
             );
+            return new SimulationFrameResult(snapshot, spawnedFoodCount, consumedFoodCount);
         }
     }
 
-    SimulationSnapshot finalizeEmptyFrame() {
+    SimulationFrameResult finalizeEmptyFrame(int spawnedFoodCount) {
         synchronized (worldState.dataLock()) {
             List<FoodPellet> foodPellets = worldState.food().pellets();
+            int consumedFoodCount = (int) foodPellets.stream().filter(FoodPellet::isConsumed).count();
             foodPellets.removeIf(FoodPellet::isConsumed);
-            return new SimulationSnapshot(List.of(), List.copyOf(foodPellets));
+            return new SimulationFrameResult(
+                    new SimulationSnapshot(List.of(), List.copyOf(foodPellets)),
+                    spawnedFoodCount,
+                    consumedFoodCount
+            );
         }
     }
 }

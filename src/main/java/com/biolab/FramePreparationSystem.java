@@ -39,15 +39,17 @@ final class FramePreparationSystem {
             availableReproductionSlots.set(availableSlots);
 
             ThreadLocalRandom random = ThreadLocalRandom.current();
+            int spawnedFoodCount = 0;
             if (random.nextDouble() < foodSpawnRate && foodPellets.size() < maxFoodPellets) {
                 foodPellets.add(FoodPellet.createRandom(worldWidth, worldHeight));
+                spawnedFoodCount = 1;
             }
 
-            return new FrameBatch(new ArrayList<>(microbes), new ArrayList<>(foodPellets));
+            return new FrameBatch(new ArrayList<>(microbes), new ArrayList<>(foodPellets), spawnedFoodCount);
         }
     }
 
-    record FrameBatch(List<Microbe> microbeSnapshot, List<FoodPellet> foodSnapshot) {
+    record FrameBatch(List<Microbe> microbeSnapshot, List<FoodPellet> foodSnapshot, int spawnedFoodCount) {
     }
 }
 

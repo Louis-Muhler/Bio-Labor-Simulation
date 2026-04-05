@@ -18,6 +18,8 @@ public interface SimulationRuntime {
 
     double getFoodSpawnRate();
 
+    WorldStatsStore getWorldStatsStore();
+
     SimulationState captureState();
 
     boolean isDebugModeEnabled();

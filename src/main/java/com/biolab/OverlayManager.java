@@ -34,6 +34,7 @@ public class OverlayManager {
      * Vertical gap between the settings button and the environment toggle button.
      */
     private static final int SETTINGS_ENV_GAP = 12;
+    private static final int ENV_STATS_GAP = 8;
     /**
      * Fixed height of the environment panel (content does not change).
      */
@@ -43,12 +44,15 @@ public class OverlayManager {
 
     private final InspectorPanel inspectorPanel;
     private final EnvironmentPanel environmentPanel;
+    private final WorldStatsPanel worldStatsPanel;
     private final ModernButton envToggleButton;
+    private final ModernButton statsToggleButton;
     private final ModernButton speedButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
     private boolean inspectorVisibleBeforeHide;
     private boolean environmentVisibleBeforeHide;
+    private boolean statsVisibleBeforeHide;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -58,17 +62,23 @@ public class OverlayManager {
      * @param layeredPaneSupplier supplies the current {@link JLayeredPane}; evaluated lazily
      * @param inspectorPanel      right-side microbe detail panel
      * @param environmentPanel    left-side environment slider panel
+     * @param worldStatsPanel     left-side world statistics panel
      * @param envToggleButton     button that shows / hides the environment panel
+     * @param statsToggleButton   button that shows / hides the world stats panel
      * @param speedButton         simulation speed toggle in the bottom-right corner
      */
     public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
                           InspectorPanel inspectorPanel, EnvironmentPanel environmentPanel,
+                          WorldStatsPanel worldStatsPanel,
                           ModernButton envToggleButton,
+                          ModernButton statsToggleButton,
                           ModernButton speedButton) {
         this.layeredPaneSupplier = layeredPaneSupplier;
         this.inspectorPanel = inspectorPanel;
         this.environmentPanel = environmentPanel;
+        this.worldStatsPanel = worldStatsPanel;
         this.envToggleButton = envToggleButton;
+        this.statsToggleButton = statsToggleButton;
         this.speedButton = speedButton;
 
         // Transparent panel – no background box, only the label itself is visible
@@ -162,6 +172,19 @@ public class OverlayManager {
         environmentPanel.repaint();
     }
 
+    public void positionWorldStatsPanel() {
+        JLayeredPane lp = layeredPaneSupplier.get();
+        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
+        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + 4;
+
+        if (worldStatsPanel.getParent() != lp) {
+            lp.add(worldStatsPanel, JLayeredPane.PALETTE_LAYER);
+        }
+        worldStatsPanel.setBounds(panelX, topY, WorldStatsPanel.PANEL_WIDTH, WorldStatsPanel.PANEL_HEIGHT);
+        worldStatsPanel.revalidate();
+        worldStatsPanel.repaint();
+    }
+
     /** Places the environment toggle button directly below the settings button. */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -173,6 +196,18 @@ public class OverlayManager {
         envToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
         envToggleButton.revalidate();
         envToggleButton.repaint();
+    }
+
+    public void positionStatsToggleButton() {
+        JLayeredPane lp = layeredPaneSupplier.get();
+        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN + (BTN_SIZE * 2) + SETTINGS_ENV_GAP + ENV_STATS_GAP;
+
+        if (statsToggleButton.getParent() != lp) {
+            lp.add(statsToggleButton, JLayeredPane.PALETTE_LAYER);
+        }
+        statsToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
+        statsToggleButton.revalidate();
+        statsToggleButton.repaint();
     }
 
     /**
@@ -223,9 +258,13 @@ public class OverlayManager {
     public void repositionAllOverlays() {
         positionInspectorPanel();
         positionEnvToggleButton();
+        positionStatsToggleButton();
         positionFloatingControls();
         if (environmentPanel.isVisible()) {
             positionEnvironmentPanel();
+        }
+        if (worldStatsPanel.isVisible()) {
+            positionWorldStatsPanel();
         }
     }
 
@@ -242,6 +281,19 @@ public class OverlayManager {
             environmentPanel.setVisible(true);
             positionEnvironmentPanel();
             envToggleButton.setDimmed(true);
+        }
+        lp.repaint();
+    }
+
+    public void toggleWorldStatsPanel() {
+        JLayeredPane lp = layeredPaneSupplier.get();
+        if (worldStatsPanel.isVisible()) {
+            worldStatsPanel.hidePanel();
+            statsToggleButton.setDimmed(false);
+        } else {
+            worldStatsPanel.showPanel();
+            positionWorldStatsPanel();
+            statsToggleButton.setDimmed(true);
         }
         lp.repaint();
     }
@@ -271,17 +323,26 @@ public class OverlayManager {
         if (visible) {
             inspectorPanel.setVisible(inspectorVisibleBeforeHide);
             environmentPanel.setVisible(environmentVisibleBeforeHide);
+            if (statsVisibleBeforeHide) {
+                worldStatsPanel.showPanel();
+            } else {
+                worldStatsPanel.hidePanel();
+            }
         } else {
             inspectorVisibleBeforeHide = inspectorPanel.isVisible();
             environmentVisibleBeforeHide = environmentPanel.isVisible();
+            statsVisibleBeforeHide = worldStatsPanel.isVisible();
             inspectorPanel.setVisible(false);
             environmentPanel.setVisible(false);
+            worldStatsPanel.hidePanel();
         }
         envToggleButton.setVisible(visible);
+        statsToggleButton.setVisible(visible);
         speedButton.setVisible(visible);
         populationOverlay.setVisible(visible);
         if (!visible) {
             envToggleButton.setDimmed(false);
+            statsToggleButton.setDimmed(false);
             inspectorPanel.hidePanel();
         }
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -295,7 +356,9 @@ public class OverlayManager {
         JLayeredPane lp = layeredPaneSupplier.get();
         lp.remove(inspectorPanel);
         lp.remove(environmentPanel);
+        lp.remove(worldStatsPanel);
         lp.remove(envToggleButton);
+        lp.remove(statsToggleButton);
         lp.remove(speedButton);
         lp.remove(populationOverlay);
         lp.repaint();

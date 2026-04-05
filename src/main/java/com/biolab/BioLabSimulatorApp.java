@@ -334,18 +334,22 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private void createRuntimeOverlays() {
         InspectorPanel inspectorPanel = new InspectorPanel();
         EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
+        WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine);
         ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
+        ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
         runtimeSpeedButton = speedButton;
 
         overlayManager = new OverlayManager(this::getLayeredPane,
-                inspectorPanel, environmentPanel, envToggleButton, speedButton);
+                inspectorPanel, environmentPanel, worldStatsPanel, envToggleButton, statsToggleButton, speedButton);
 
         envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
+        statsToggleButton.addActionListener(e -> overlayManager.toggleWorldStatsPanel());
         speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
 
         inspectorPanel.setVisible(false);
         environmentPanel.setVisible(false);
+        worldStatsPanel.hidePanel();
         overlayManager.repositionAllOverlays();
     }
 

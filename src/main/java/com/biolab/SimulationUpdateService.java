@@ -35,9 +35,9 @@ final class SimulationUpdateService {
         this.logger = logger;
     }
 
-    SimulationSnapshot runUpdate(SimulationSnapshot currentSnapshot, double foodSpawnRate) {
+    SimulationFrameResult runUpdate(SimulationSnapshot currentSnapshot, double foodSpawnRate) {
         synchronized (frameMutationLock) {
-            if (executorService.isShutdown()) return currentSnapshot;
+            if (executorService.isShutdown()) return new SimulationFrameResult(currentSnapshot, 0, 0);
 
             commandProcessor.processPending(runtime, logger);
 
@@ -49,13 +49,14 @@ final class SimulationUpdateService {
                 return frameOrchestrator.runFrame(
                         frameData.microbeSnapshot(),
                         frameData.foodSnapshot(),
+                        frameData.spawnedFoodCount(),
                         temp,
                         tox
                 );
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 logger.log(Level.WARNING, "Simulation thread interrupted during processing", e);
-                return currentSnapshot;
+                return new SimulationFrameResult(currentSnapshot, 0, 0);
             }
         }
     }
