@@ -24,6 +24,9 @@ public class WorldStatsPanel extends JPanel {
     private static final int MIN_WIDTH = 500;
     private static final int MIN_HEIGHT = 320;
     private static final int EDGE_DRAG = 8;
+    private static final int FRAME_MARGIN = 20;
+    private static final int FRAME_ARC = 15;
+    private static final int LEFT_VIEWER_TO_SPECIMEN_GAP = 12;
 
     private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
     private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
@@ -78,7 +81,7 @@ public class WorldStatsPanel extends JPanel {
         setPreferredSize(new Dimension(panelWidth, panelHeight));
         setVisible(false);
         setLayout(new BorderLayout(10, 8));
-        setBorder(new EmptyBorder(12, 12, 12, 12));
+        setBorder(new EmptyBorder(35, 35, 35, 35));
 
         add(buildHeader(), BorderLayout.NORTH);
         add(buildContent(), BorderLayout.CENTER);
@@ -109,6 +112,14 @@ public class WorldStatsPanel extends JPanel {
 
     int getPanelHeightSetting() {
         return panelHeight;
+    }
+
+    Dimension clampToAvailableArea(int maxWidth, int maxHeight) {
+        int clampedWidth = clampLength(panelWidth, maxWidth, MIN_WIDTH);
+        int clampedHeight = clampLength(panelHeight, maxHeight, MIN_HEIGHT);
+        panelWidth = clampedWidth;
+        panelHeight = clampedHeight;
+        return new Dimension(clampedWidth, clampedHeight);
     }
 
     int getRenderedMetricOptionCountForTest() {
@@ -515,10 +526,20 @@ public class WorldStatsPanel extends JPanel {
         int maxW = w;
         int maxH = h;
         if (getParent() != null) {
-            maxW = Math.max(MIN_WIDTH, getParent().getWidth() - getX() - 15);
-            maxH = Math.max(MIN_HEIGHT, getParent().getHeight() - getY() - 15);
+            int rightReserved = InspectorPanel.PANEL_WIDTH + 15 + LEFT_VIEWER_TO_SPECIMEN_GAP;
+            maxW = getParent().getWidth() - getX() - rightReserved;
+            maxH = getParent().getHeight() - getY() - 15;
         }
-        return new Dimension(Math.max(MIN_WIDTH, Math.min(w, maxW)), Math.max(MIN_HEIGHT, Math.min(h, maxH)));
+        return new Dimension(
+                clampLength(w, maxW, MIN_WIDTH),
+                clampLength(h, maxH, MIN_HEIGHT)
+        );
+    }
+
+    private int clampLength(int desired, int maxAllowed, int preferredMin) {
+        int safeMax = Math.max(120, maxAllowed);
+        int effectiveMin = Math.min(preferredMin, safeMax);
+        return Math.max(effectiveMin, Math.min(desired, safeMax));
     }
 
     @Override
@@ -527,14 +548,19 @@ public class WorldStatsPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int x = FRAME_MARGIN;
+            int y = FRAME_MARGIN;
+            int w = Math.max(0, getWidth() - 2 * FRAME_MARGIN);
+            int h = Math.max(0, getHeight() - 2 * FRAME_MARGIN);
+
             g2.setColor(BG_COLOR);
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+            g2.fillRoundRect(x, y, w, h, FRAME_ARC, FRAME_ARC);
             g2.setColor(BORDER_GLOW_COLOR);
             g2.setStroke(new BasicStroke(3f));
-            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 15, 15);
+            g2.drawRoundRect(x, y, w, h, FRAME_ARC, FRAME_ARC);
             g2.setColor(ACCENT_COLOR);
             g2.setStroke(new BasicStroke(1f));
-            g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 15, 15);
+            g2.drawRoundRect(x, y, w, h, FRAME_ARC, FRAME_ARC);
         } finally {
             g2.dispose();
         }

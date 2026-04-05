@@ -35,6 +35,7 @@ public class OverlayManager {
      */
     private static final int SETTINGS_ENV_GAP = 12;
     private static final int ENV_STATS_GAP = 8;
+    private static final int LEFT_VIEWER_TO_SPECIMEN_GAP = 12;
     /**
      * Fixed height of the environment panel (content does not change).
      */
@@ -142,10 +143,8 @@ public class OverlayManager {
         int lpH = lp.getHeight();
         if (lpW <= 0 || lpH <= 0) return;
 
-        int contentTop = getContentTopY(lp);
-        int topY = contentTop + OVERLAY_EDGE_MARGIN;
-        int bottomMargin = SPEED_BUTTON_HEIGHT + 2 * OVERLAY_EDGE_MARGIN;
-        int panelHeight = lpH - topY - bottomMargin;
+        int topY = overlayTopY(lp);
+        int panelHeight = viewerAvailableHeight(lp);
         int panelX = lpW - InspectorPanel.PANEL_WIDTH - OVERLAY_EDGE_MARGIN;
 
         if (inspectorPanel.getParent() != lp) {
@@ -161,31 +160,31 @@ public class OverlayManager {
      */
     public void positionEnvironmentPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
-        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
-        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + 4;
+        int topY = overlayTopY(lp);
+        int panelX = leftViewerX();
+        int panelHeight = Math.min(ENV_PANEL_HEIGHT, viewerAvailableHeight(lp));
+        panelHeight = Math.max(220, panelHeight);
 
         if (environmentPanel.getParent() != lp) {
             lp.add(environmentPanel, JLayeredPane.PALETTE_LAYER);
         }
-        environmentPanel.setBounds(panelX, topY, 300, ENV_PANEL_HEIGHT);
+        environmentPanel.setBounds(panelX, topY, 300, panelHeight);
         environmentPanel.revalidate();
         environmentPanel.repaint();
     }
 
     public void positionWorldStatsPanel() {
         JLayeredPane lp = layeredPaneSupplier.get();
-        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
-        int panelX = OVERLAY_EDGE_MARGIN + BTN_SIZE + 4;
+        int topY = overlayTopY(lp);
+        int panelX = leftViewerX();
+        int maxWidth = maxLeftViewerWidth(lp);
+        int maxHeight = viewerAvailableHeight(lp);
 
         if (worldStatsPanel.getParent() != lp) {
             lp.add(worldStatsPanel, JLayeredPane.PALETTE_LAYER);
         }
-        worldStatsPanel.setBounds(
-                panelX,
-                topY,
-                worldStatsPanel.getPanelWidthSetting(),
-                worldStatsPanel.getPanelHeightSetting()
-        );
+        Dimension clamped = worldStatsPanel.clampToAvailableArea(maxWidth, maxHeight);
+        worldStatsPanel.setBounds(panelX, topY, clamped.width, clamped.height);
         worldStatsPanel.revalidate();
         worldStatsPanel.repaint();
     }
@@ -193,7 +192,7 @@ public class OverlayManager {
     /** Places the environment toggle button directly below the settings button. */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
-        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN + BTN_SIZE + SETTINGS_ENV_GAP;
+        int topY = overlayTopY(lp) + BTN_SIZE + SETTINGS_ENV_GAP;
 
         if (envToggleButton.getParent() != lp) {
             lp.add(envToggleButton, JLayeredPane.PALETTE_LAYER);
@@ -205,7 +204,7 @@ public class OverlayManager {
 
     public void positionStatsToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
-        int topY = getContentTopY(lp) + OVERLAY_EDGE_MARGIN + (BTN_SIZE * 2) + SETTINGS_ENV_GAP + ENV_STATS_GAP;
+        int topY = overlayTopY(lp) + (BTN_SIZE * 2) + SETTINGS_ENV_GAP + ENV_STATS_GAP;
 
         if (statsToggleButton.getParent() != lp) {
             lp.add(statsToggleButton, JLayeredPane.PALETTE_LAYER);
@@ -271,6 +270,31 @@ public class OverlayManager {
         if (worldStatsPanel.isVisible()) {
             positionWorldStatsPanel();
         }
+    }
+
+    private int overlayTopY(JLayeredPane lp) {
+        return getContentTopY(lp) + OVERLAY_EDGE_MARGIN;
+    }
+
+    private int overlayBottomMargin() {
+        return SPEED_BUTTON_HEIGHT + 2 * OVERLAY_EDGE_MARGIN;
+    }
+
+    private int viewerAvailableHeight(JLayeredPane lp) {
+        return Math.max(220, lp.getHeight() - overlayTopY(lp) - overlayBottomMargin());
+    }
+
+    private int leftViewerX() {
+        return OVERLAY_EDGE_MARGIN + BTN_SIZE + 4;
+    }
+
+    private int inspectorLeftX(JLayeredPane lp) {
+        return lp.getWidth() - InspectorPanel.PANEL_WIDTH - OVERLAY_EDGE_MARGIN;
+    }
+
+    private int maxLeftViewerWidth(JLayeredPane lp) {
+        int maxWidth = inspectorLeftX(lp) - leftViewerX() - LEFT_VIEWER_TO_SPECIMEN_GAP;
+        return Math.max(260, maxWidth);
     }
 
     /**
