@@ -27,12 +27,31 @@ public class SettingsManager {
     private static final int DEFAULT_HEIGHT = 1080;
     private static final boolean DEFAULT_FULLSCREEN = false;
     private static final int DEFAULT_SIMULATION_FPS = 60;
+    private static final int DEFAULT_WORLD_STATS_WIDTH = 640;
+    private static final int DEFAULT_WORLD_STATS_HEIGHT = 420;
+    private static final String DEFAULT_WORLD_STATS_METRICS =
+            WorldMetricId.POPULATION_ALIVE.name() + "," + WorldMetricId.FOOD_PELLETS_AVAILABLE.name();
+    private static final String DEFAULT_WORLD_STATS_PRESET = WorldStatsRangePreset.SINCE_BEGINNING.name();
+    private static final String DEFAULT_WORLD_STATS_Y_AXIS_MODE = WorldStatsYAxisMode.RELATIV_PRO_SERIE.name();
+    private static final long DEFAULT_WORLD_STATS_CUSTOM_START_VALUE = 10;
+    private static final String DEFAULT_WORLD_STATS_CUSTOM_START_UNIT = WorldStatsTimeUnit.MIN.name();
+    private static final long DEFAULT_WORLD_STATS_CUSTOM_END_VALUE = 0;
+    private static final String DEFAULT_WORLD_STATS_CUSTOM_END_UNIT = WorldStatsTimeUnit.MIN.name();
 
     // Settings
     private int windowWidth;
     private int windowHeight;
     private boolean fullscreen;
     private int simulationFps;
+    private int worldStatsViewerWidth;
+    private int worldStatsViewerHeight;
+    private String worldStatsSelectedMetrics;
+    private String worldStatsRangePreset;
+    private String worldStatsYAxisMode;
+    private long worldStatsCustomStartValue;
+    private String worldStatsCustomStartUnit;
+    private long worldStatsCustomEndValue;
+    private String worldStatsCustomEndUnit;
 
     /**
      * Creates a SettingsManager and immediately loads persisted settings (or defaults).
@@ -67,6 +86,15 @@ public class SettingsManager {
                 windowHeight = parseIntOrDefault(props.getProperty("window.height"), DEFAULT_HEIGHT);
                 fullscreen = Boolean.parseBoolean(props.getProperty("window.fullscreen", String.valueOf(DEFAULT_FULLSCREEN)));
                 simulationFps = parseIntOrDefault(props.getProperty("simulation.fps"), DEFAULT_SIMULATION_FPS);
+                worldStatsViewerWidth = parseIntOrDefault(props.getProperty("worldstats.viewer.width"), DEFAULT_WORLD_STATS_WIDTH);
+                worldStatsViewerHeight = parseIntOrDefault(props.getProperty("worldstats.viewer.height"), DEFAULT_WORLD_STATS_HEIGHT);
+                worldStatsSelectedMetrics = props.getProperty("worldstats.metrics", DEFAULT_WORLD_STATS_METRICS);
+                worldStatsRangePreset = props.getProperty("worldstats.range.preset", DEFAULT_WORLD_STATS_PRESET);
+                worldStatsYAxisMode = props.getProperty("worldstats.yaxis.mode", DEFAULT_WORLD_STATS_Y_AXIS_MODE);
+                worldStatsCustomStartValue = parseLongOrDefault(props.getProperty("worldstats.custom.start.value"), DEFAULT_WORLD_STATS_CUSTOM_START_VALUE);
+                worldStatsCustomStartUnit = props.getProperty("worldstats.custom.start.unit", DEFAULT_WORLD_STATS_CUSTOM_START_UNIT);
+                worldStatsCustomEndValue = parseLongOrDefault(props.getProperty("worldstats.custom.end.value"), DEFAULT_WORLD_STATS_CUSTOM_END_VALUE);
+                worldStatsCustomEndUnit = props.getProperty("worldstats.custom.end.unit", DEFAULT_WORLD_STATS_CUSTOM_END_UNIT);
 
                 // Validate settings
                 validateSettings();
@@ -92,6 +120,15 @@ public class SettingsManager {
         props.setProperty("window.height", String.valueOf(windowHeight));
         props.setProperty("window.fullscreen", String.valueOf(fullscreen));
         props.setProperty("simulation.fps", String.valueOf(simulationFps));
+        props.setProperty("worldstats.viewer.width", String.valueOf(worldStatsViewerWidth));
+        props.setProperty("worldstats.viewer.height", String.valueOf(worldStatsViewerHeight));
+        props.setProperty("worldstats.metrics", worldStatsSelectedMetrics == null ? DEFAULT_WORLD_STATS_METRICS : worldStatsSelectedMetrics);
+        props.setProperty("worldstats.range.preset", worldStatsRangePreset == null ? DEFAULT_WORLD_STATS_PRESET : worldStatsRangePreset);
+        props.setProperty("worldstats.yaxis.mode", worldStatsYAxisMode == null ? DEFAULT_WORLD_STATS_Y_AXIS_MODE : worldStatsYAxisMode);
+        props.setProperty("worldstats.custom.start.value", String.valueOf(worldStatsCustomStartValue));
+        props.setProperty("worldstats.custom.start.unit", worldStatsCustomStartUnit == null ? DEFAULT_WORLD_STATS_CUSTOM_START_UNIT : worldStatsCustomStartUnit);
+        props.setProperty("worldstats.custom.end.value", String.valueOf(worldStatsCustomEndValue));
+        props.setProperty("worldstats.custom.end.unit", worldStatsCustomEndUnit == null ? DEFAULT_WORLD_STATS_CUSTOM_END_UNIT : worldStatsCustomEndUnit);
 
         try {
             // Create config directory if it doesn't exist
@@ -118,6 +155,15 @@ public class SettingsManager {
         windowHeight = DEFAULT_HEIGHT;
         fullscreen = DEFAULT_FULLSCREEN;
         simulationFps = DEFAULT_SIMULATION_FPS;
+        worldStatsViewerWidth = DEFAULT_WORLD_STATS_WIDTH;
+        worldStatsViewerHeight = DEFAULT_WORLD_STATS_HEIGHT;
+        worldStatsSelectedMetrics = DEFAULT_WORLD_STATS_METRICS;
+        worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
+        worldStatsYAxisMode = DEFAULT_WORLD_STATS_Y_AXIS_MODE;
+        worldStatsCustomStartValue = DEFAULT_WORLD_STATS_CUSTOM_START_VALUE;
+        worldStatsCustomStartUnit = DEFAULT_WORLD_STATS_CUSTOM_START_UNIT;
+        worldStatsCustomEndValue = DEFAULT_WORLD_STATS_CUSTOM_END_VALUE;
+        worldStatsCustomEndUnit = DEFAULT_WORLD_STATS_CUSTOM_END_UNIT;
     }
 
     /**
@@ -137,6 +183,30 @@ public class SettingsManager {
             LOGGER.warning("Invalid simulationFps " + simulationFps + ", resetting to default");
             simulationFps = DEFAULT_SIMULATION_FPS;
         }
+        if (worldStatsViewerWidth < 420 || worldStatsViewerWidth > 5000) {
+            worldStatsViewerWidth = DEFAULT_WORLD_STATS_WIDTH;
+        }
+        if (worldStatsViewerHeight < 280 || worldStatsViewerHeight > 3000) {
+            worldStatsViewerHeight = DEFAULT_WORLD_STATS_HEIGHT;
+        }
+        if (!isValidEnum(WorldStatsRangePreset.class, worldStatsRangePreset)) {
+            worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
+        }
+        if (!isValidEnum(WorldStatsYAxisMode.class, worldStatsYAxisMode)) {
+            worldStatsYAxisMode = DEFAULT_WORLD_STATS_Y_AXIS_MODE;
+        }
+        if (!isValidEnum(WorldStatsTimeUnit.class, worldStatsCustomStartUnit)) {
+            worldStatsCustomStartUnit = DEFAULT_WORLD_STATS_CUSTOM_START_UNIT;
+        }
+        if (!isValidEnum(WorldStatsTimeUnit.class, worldStatsCustomEndUnit)) {
+            worldStatsCustomEndUnit = DEFAULT_WORLD_STATS_CUSTOM_END_UNIT;
+        }
+        if (worldStatsCustomStartValue < 0) {
+            worldStatsCustomStartValue = DEFAULT_WORLD_STATS_CUSTOM_START_VALUE;
+        }
+        if (worldStatsCustomEndValue < 0) {
+            worldStatsCustomEndValue = DEFAULT_WORLD_STATS_CUSTOM_END_VALUE;
+        }
     }
     
     /**
@@ -151,6 +221,30 @@ public class SettingsManager {
         } catch (NumberFormatException e) {
             LOGGER.warning("Invalid integer value: " + value + ", using default: " + defaultValue);
             return defaultValue;
+        }
+    }
+
+    private long parseLongOrDefault(String value, long defaultValue) {
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            LOGGER.warning("Invalid long value: " + value + ", using default: " + defaultValue);
+            return defaultValue;
+        }
+    }
+
+    private <E extends Enum<E>> boolean isValidEnum(Class<E> enumClass, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return false;
+        }
+        try {
+            Enum.valueOf(enumClass, raw);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
         }
     }
 
@@ -214,5 +308,77 @@ public class SettingsManager {
      */
     public synchronized void setSimulationFps(int fps) {
         this.simulationFps = Math.max(10, Math.min(240, fps));
+    }
+
+    public synchronized int getWorldStatsViewerWidth() {
+        return worldStatsViewerWidth;
+    }
+
+    public synchronized void setWorldStatsViewerWidth(int width) {
+        this.worldStatsViewerWidth = width;
+    }
+
+    public synchronized int getWorldStatsViewerHeight() {
+        return worldStatsViewerHeight;
+    }
+
+    public synchronized void setWorldStatsViewerHeight(int height) {
+        this.worldStatsViewerHeight = height;
+    }
+
+    public synchronized String getWorldStatsSelectedMetrics() {
+        return worldStatsSelectedMetrics;
+    }
+
+    public synchronized void setWorldStatsSelectedMetrics(String csvMetricIds) {
+        this.worldStatsSelectedMetrics = csvMetricIds;
+    }
+
+    public synchronized String getWorldStatsRangePreset() {
+        return worldStatsRangePreset;
+    }
+
+    public synchronized void setWorldStatsRangePreset(String rangePreset) {
+        this.worldStatsRangePreset = rangePreset;
+    }
+
+    public synchronized String getWorldStatsYAxisMode() {
+        return worldStatsYAxisMode;
+    }
+
+    public synchronized void setWorldStatsYAxisMode(String yAxisMode) {
+        this.worldStatsYAxisMode = yAxisMode;
+    }
+
+    public synchronized long getWorldStatsCustomStartValue() {
+        return worldStatsCustomStartValue;
+    }
+
+    public synchronized void setWorldStatsCustomStartValue(long value) {
+        this.worldStatsCustomStartValue = value;
+    }
+
+    public synchronized String getWorldStatsCustomStartUnit() {
+        return worldStatsCustomStartUnit;
+    }
+
+    public synchronized void setWorldStatsCustomStartUnit(String unit) {
+        this.worldStatsCustomStartUnit = unit;
+    }
+
+    public synchronized long getWorldStatsCustomEndValue() {
+        return worldStatsCustomEndValue;
+    }
+
+    public synchronized void setWorldStatsCustomEndValue(long value) {
+        this.worldStatsCustomEndValue = value;
+    }
+
+    public synchronized String getWorldStatsCustomEndUnit() {
+        return worldStatsCustomEndUnit;
+    }
+
+    public synchronized void setWorldStatsCustomEndUnit(String unit) {
+        this.worldStatsCustomEndUnit = unit;
     }
 }

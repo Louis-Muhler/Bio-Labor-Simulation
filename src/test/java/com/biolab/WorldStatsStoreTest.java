@@ -20,17 +20,17 @@ class WorldStatsStoreTest {
             store.append(1_000L + i * 100L, i, values);
         }
 
-        List<WorldStatsSample> result = store.queryRange(
+        List<WorldStatsSample> result = store.queryRangeByTick(
                 EnumSet.of(WorldMetricId.POPULATION_ALIVE),
-                1_000L,
-                2_000L,
+                0L,
+                9L,
                 100
         );
 
         assertEquals(10, result.size());
         for (int i = 0; i < result.size(); i++) {
             WorldStatsSample sample = result.get(i);
-            assertEquals(1_000L + i * 100L, sample.timestampMillis());
+            assertEquals(i, sample.tick());
             assertEquals(i, sample.tick());
             assertTrue(sample.metricValues().containsKey(WorldMetricId.POPULATION_ALIVE));
             assertFalse(sample.metricValues().containsKey(WorldMetricId.TEMPERATURE));
@@ -47,20 +47,20 @@ class WorldStatsStoreTest {
             store.append(10_000L + i * 100L, i, values);
         }
 
-        List<WorldStatsSample> result = store.queryRange(
+        List<WorldStatsSample> result = store.queryRangeByTick(
                 EnumSet.of(WorldMetricId.POPULATION_ALIVE),
-                10_000L,
-                30_000L,
+                0L,
+                119L,
                 40
         );
 
         assertTrue(result.size() <= 40, "Downsampling darf maxPoints nicht ueberschreiten");
-        assertEquals(10_000L, result.get(0).timestampMillis());
-        assertEquals(21_900L, result.get(result.size() - 1).timestampMillis());
+        assertEquals(0L, result.get(0).tick());
+        assertEquals(119L, result.get(result.size() - 1).tick());
     }
 
     @Test
-    void ringBufferShouldDiscardOldestSamplesWhenCapacityExceeded() {
+    void historyShouldGrowBeyondInitialCapacityWithoutDiscarding() {
         WorldStatsStore store = new WorldStatsStore(12);
 
         for (int i = 0; i < 20; i++) {
@@ -69,16 +69,16 @@ class WorldStatsStoreTest {
             store.append(1_000L + i, i, values);
         }
 
-        List<WorldStatsSample> result = store.queryRange(
+        List<WorldStatsSample> result = store.queryRangeByTick(
                 EnumSet.of(WorldMetricId.POPULATION_ALIVE),
                 0L,
-                Long.MAX_VALUE,
+                19L,
                 100
         );
 
-        assertEquals(12, result.size());
-        assertEquals(1_008L, result.get(0).timestampMillis());
-        assertEquals(1_019L, result.get(result.size() - 1).timestampMillis());
+        assertEquals(20, result.size());
+        assertEquals(0L, result.get(0).tick());
+        assertEquals(19L, result.get(result.size() - 1).tick());
     }
 }
 

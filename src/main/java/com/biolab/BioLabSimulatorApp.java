@@ -334,7 +334,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private void createRuntimeOverlays() {
         InspectorPanel inspectorPanel = new InspectorPanel();
         EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
-        WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine);
+        WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine, settingsManager);
         ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
         ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);

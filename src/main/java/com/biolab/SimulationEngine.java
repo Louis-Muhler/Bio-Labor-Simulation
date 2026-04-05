@@ -47,13 +47,13 @@ public class SimulationEngine implements SimulationRuntime {
     private final Object frameMutationLock = new Object();
     private final SimulationEngineContext context;
     private final WorldStatsStore worldStatsStore;
+    private final WorldStatsSampleAppender worldStatsAppender;
     private volatile double foodSpawnRate = 0.75;
     private long simulationTick;
-    private volatile double foodSpawnedPerSecond;
-    private volatile double foodConsumedPerSecond;
-    private long rateWindowStartMillis;
-    private int spawnedWithinWindow;
-    private int consumedWithinWindow;
+    private double foodSpawnedPerSecond;
+    private double foodConsumedPerSecond;
+    private int spawnedSinceLastSample;
+    private int consumedSinceLastSample;
 
     // ── Lock-free render snapshot ─────────────────────────────────────────
 
@@ -89,6 +89,7 @@ public class SimulationEngine implements SimulationRuntime {
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.worldStatsStore = new WorldStatsStore();
+        this.worldStatsAppender = new WorldStatsSampleAppender(worldStatsStore, LOGGER);
         this.context = SimulationEngineContext.create(
                 MAX_QUEUED_COMMANDS,
                 frameMutationLock,
@@ -129,8 +130,6 @@ public class SimulationEngine implements SimulationRuntime {
                 .map(Microbe::toRenderState)
                 .toList();
         renderSnapshot = new SimulationSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
-        rateWindowStartMillis = System.currentTimeMillis();
-        appendWorldStatsSample(rateWindowStartMillis);
     }
 
     /**
@@ -155,10 +154,16 @@ public class SimulationEngine implements SimulationRuntime {
         SimulationFrameResult frameResult = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
         renderSnapshot = frameResult.snapshot();
         simulationTick++;
+        spawnedSinceLastSample += Math.max(0, frameResult.spawnedFoodCount());
+        consumedSinceLastSample += Math.max(0, frameResult.consumedFoodCount());
 
-        long nowMillis = System.currentTimeMillis();
-        updateFoodRates(nowMillis, frameResult.spawnedFoodCount(), frameResult.consumedFoodCount());
-        appendWorldStatsSample(nowMillis);
+        if (simulationTick > 0 && simulationTick % 30L == 0L) {
+            foodSpawnedPerSecond = spawnedSinceLastSample;
+            foodConsumedPerSecond = consumedSinceLastSample;
+            worldStatsAppender.submit(buildWorldStatsSample(System.currentTimeMillis()));
+            spawnedSinceLastSample = 0;
+            consumedSinceLastSample = 0;
+        }
     }
 
     /**
@@ -220,8 +225,13 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public SimulationState captureState() {
         synchronized (frameMutationLock) {
+            worldStatsAppender.flush();
             synchronized (worldState.dataLock()) {
-                return context.stateCoordinator().captureState(foodSpawnRate);
+                return context.stateCoordinator().captureState(
+                        foodSpawnRate,
+                        simulationTick,
+                        worldStatsStore.snapshotAll()
+                );
             }
         }
     }
@@ -231,8 +241,14 @@ public class SimulationEngine implements SimulationRuntime {
      */
     public void loadState(SimulationState state) {
         synchronized (frameMutationLock) {
+            worldStatsAppender.flush();
             synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
+                simulationTick = Math.max(0L, state.simulationTick());
+                worldStatsStore.replaceAll(state.worldStatsHistory());
+                spawnedSinceLastSample = 0;
+                consumedSinceLastSample = 0;
+                recomputeLatestRatesFromStore();
             }
         }
     }
@@ -278,21 +294,7 @@ public class SimulationEngine implements SimulationRuntime {
         this.foodSpawnRate = Math.max(0.0, Math.min(1.0, rate));
     }
 
-    private void updateFoodRates(long nowMillis, int spawned, int consumed) {
-        spawnedWithinWindow += Math.max(0, spawned);
-        consumedWithinWindow += Math.max(0, consumed);
-
-        long elapsed = Math.max(1L, nowMillis - rateWindowStartMillis);
-        if (elapsed >= 1_000L) {
-            foodSpawnedPerSecond = spawnedWithinWindow * 1000.0 / elapsed;
-            foodConsumedPerSecond = consumedWithinWindow * 1000.0 / elapsed;
-            spawnedWithinWindow = 0;
-            consumedWithinWindow = 0;
-            rateWindowStartMillis = nowMillis;
-        }
-    }
-
-    private void appendWorldStatsSample(long timestampMillis) {
+    private WorldStatsSample buildWorldStatsSample(long timestampMillis) {
         WorldMetricContext contextSnapshot;
         synchronized (worldState.dataLock()) {
             List<Microbe> microbes = worldState.population().microbes();
@@ -335,11 +337,34 @@ public class SimulationEngine implements SimulationRuntime {
             );
         }
 
-        double[] values = new double[WorldMetricId.values().length];
+        java.util.EnumMap<WorldMetricId, Double> valuesMap = new java.util.EnumMap<>(WorldMetricId.class);
         for (WorldMetricDefinition definition : WorldMetricRegistry.definitions()) {
-            values[definition.id().ordinal()] = definition.extractor().applyAsDouble(contextSnapshot);
+            double value = definition.extractor().applyAsDouble(contextSnapshot);
+            valuesMap.put(definition.id(), value);
         }
-        worldStatsStore.append(timestampMillis, simulationTick, values);
+        return new WorldStatsSample(timestampMillis, simulationTick, valuesMap);
+    }
+
+    private void recomputeLatestRatesFromStore() {
+        if (worldStatsStore.size() == 0) {
+            foodSpawnedPerSecond = 0.0;
+            foodConsumedPerSecond = 0.0;
+            return;
+        }
+        List<WorldStatsSample> last = worldStatsStore.queryRangeByTick(
+                java.util.EnumSet.of(WorldMetricId.FOOD_SPAWNED_PER_SEC, WorldMetricId.FOOD_CONSUMED_PER_SEC),
+                worldStatsStore.lastTick(),
+                worldStatsStore.lastTick(),
+                1
+        );
+        if (last.isEmpty()) {
+            foodSpawnedPerSecond = 0.0;
+            foodConsumedPerSecond = 0.0;
+            return;
+        }
+        WorldStatsSample sample = last.get(0);
+        foodSpawnedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_SPAWNED_PER_SEC, 0.0);
+        foodConsumedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_CONSUMED_PER_SEC, 0.0);
     }
 
     /**
@@ -354,6 +379,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Shuts down the thread pool gracefully.
      */
     public void shutdown() {
+        worldStatsAppender.shutdown();
         context.lifecycleService().shutdown();
     }
 }

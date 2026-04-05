@@ -180,7 +180,12 @@ public class OverlayManager {
         if (worldStatsPanel.getParent() != lp) {
             lp.add(worldStatsPanel, JLayeredPane.PALETTE_LAYER);
         }
-        worldStatsPanel.setBounds(panelX, topY, WorldStatsPanel.PANEL_WIDTH, WorldStatsPanel.PANEL_HEIGHT);
+        worldStatsPanel.setBounds(
+                panelX,
+                topY,
+                worldStatsPanel.getPanelWidthSetting(),
+                worldStatsPanel.getPanelHeightSetting()
+        );
         worldStatsPanel.revalidate();
         worldStatsPanel.repaint();
     }
@@ -278,6 +283,10 @@ public class OverlayManager {
             environmentPanel.setVisible(false);
             envToggleButton.setDimmed(false);
         } else {
+            if (worldStatsPanel.isVisible()) {
+                worldStatsPanel.hidePanel();
+                statsToggleButton.setDimmed(false);
+            }
             environmentPanel.setVisible(true);
             positionEnvironmentPanel();
             envToggleButton.setDimmed(true);
@@ -291,6 +300,10 @@ public class OverlayManager {
             worldStatsPanel.hidePanel();
             statsToggleButton.setDimmed(false);
         } else {
+            if (environmentPanel.isVisible()) {
+                environmentPanel.setVisible(false);
+                envToggleButton.setDimmed(false);
+            }
             worldStatsPanel.showPanel();
             positionWorldStatsPanel();
             statsToggleButton.setDimmed(true);
@@ -322,12 +335,16 @@ public class OverlayManager {
     public void setGameplayOverlaysVisible(boolean visible) {
         if (visible) {
             inspectorPanel.setVisible(inspectorVisibleBeforeHide);
-            environmentPanel.setVisible(environmentVisibleBeforeHide);
-            if (statsVisibleBeforeHide) {
+            boolean wantStats = statsVisibleBeforeHide;
+            boolean wantEnv = environmentVisibleBeforeHide && !wantStats;
+            environmentPanel.setVisible(wantEnv);
+            if (wantStats) {
                 worldStatsPanel.showPanel();
             } else {
                 worldStatsPanel.hidePanel();
             }
+            envToggleButton.setDimmed(wantEnv);
+            statsToggleButton.setDimmed(wantStats);
         } else {
             inspectorVisibleBeforeHide = inspectorPanel.isVisible();
             environmentVisibleBeforeHide = environmentPanel.isVisible();

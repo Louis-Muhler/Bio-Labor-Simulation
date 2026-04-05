@@ -9,9 +9,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,66 +21,94 @@ import java.util.stream.Collectors;
 public class WorldStatsPanel extends JPanel {
     static final int PANEL_WIDTH = 640;
     static final int PANEL_HEIGHT = 420;
+    private static final int MIN_WIDTH = 500;
+    private static final int MIN_HEIGHT = 320;
+    private static final int EDGE_DRAG = 8;
 
     private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
     private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
     private static final Color TEXT_COLOR = new Color(220, 220, 220);
-    private static final Color SUBTEXT_COLOR = new Color(145, 150, 160);
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT).withZone(ZoneId.systemDefault());
 
     private final WorldStatsStore store;
+    private final SettingsManager settingsManager;
 
     private final JTextField searchField = new JTextField();
     private final JPanel metricListPanel = new JPanel();
-    private final JPanel chipsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-    private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
-    private final JSpinner customStartMinutes = new JSpinner(new SpinnerNumberModel(10, 1, 1_440, 1));
-    private final JSpinner customEndMinutes = new JSpinner(new SpinnerNumberModel(0, 0, 1_439, 1));
+    private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel yAxisPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final ChartCanvas chartCanvas = new ChartCanvas();
+
+    private final ModernButton exportCsvButton = new ModernButton("CSV");
+    private final ModernButton exportPngButton = new ModernButton("PNG");
+    private final ModernButton exportJsonButton = new ModernButton("JSON");
 
     private final Map<WorldMetricId, JCheckBox> metricCheckboxes = new EnumMap<>(WorldMetricId.class);
     private final Set<WorldMetricId> selectedMetrics = new LinkedHashSet<>();
-    private final Timer refreshTimer;
+    private final Map<WorldStatsRangePreset, ModernButton> presetButtons = new EnumMap<>(WorldStatsRangePreset.class);
+    private final Map<WorldStatsYAxisMode, ModernButton> yAxisButtons = new EnumMap<>(WorldStatsYAxisMode.class);
+
     private WorldStatsRangePreset activePreset = WorldStatsRangePreset.SINCE_BEGINNING;
+    private final Timer refreshTimer;
+    private WorldStatsYAxisMode yAxisMode = WorldStatsYAxisMode.RELATIV_PRO_SERIE;
+    private long customStartValue = 10;
+    private WorldStatsTimeUnit customStartUnit = WorldStatsTimeUnit.MIN;
+    private long customEndValue = 0;
+    private WorldStatsTimeUnit customEndUnit = WorldStatsTimeUnit.MIN;
+    private List<WorldStatsSample> currentSamples = List.of();
+    private List<WorldMetricDefinition> currentDefinitions = List.of();
+    private int panelWidth = PANEL_WIDTH;
+    private int panelHeight = PANEL_HEIGHT;
+    private ResizeEdge resizeEdge = ResizeEdge.NONE;
+    private Point dragStart;
+    private Dimension sizeAtDragStart;
 
     public WorldStatsPanel(SimulationRuntime runtime) {
+        this(runtime, null);
+    }
+
+    public WorldStatsPanel(SimulationRuntime runtime, SettingsManager settingsManager) {
         this.store = runtime.getWorldStatsStore();
+        this.settingsManager = settingsManager;
+
+        loadUiSettings();
 
         setOpaque(false);
         setBackground(new Color(0, 0, 0, 0));
-        setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
+        setPreferredSize(new Dimension(panelWidth, panelHeight));
         setVisible(false);
+        setLayout(new BorderLayout(10, 8));
+        setBorder(new EmptyBorder(12, 12, 12, 12));
 
-        setLayout(new BorderLayout(12, 8));
-        setBorder(new EmptyBorder(14, 14, 14, 14));
-
-        add(buildLeftControls(), BorderLayout.WEST);
-        add(buildCenterPanel(), BorderLayout.CENTER);
-
-        selectedMetrics.add(WorldMetricId.POPULATION_ALIVE);
-        selectedMetrics.add(WorldMetricId.FOOD_PELLETS_AVAILABLE);
+        add(buildHeader(), BorderLayout.NORTH);
+        add(buildContent(), BorderLayout.CENTER);
 
         rebuildMetricOptions();
-        updateChips();
         refreshChart();
 
-        refreshTimer = new Timer(1000, e -> refreshChart());
+        refreshTimer = new Timer(350, e -> refreshChart());
         refreshTimer.setRepeats(true);
+        installResizeHandler();
     }
 
     void showPanel() {
         setVisible(true);
-        if (!refreshTimer.isRunning()) {
-            refreshTimer.start();
-        }
+        if (!refreshTimer.isRunning()) refreshTimer.start();
         refreshChart();
     }
 
     void hidePanel() {
         setVisible(false);
         refreshTimer.stop();
+        persistUiSettings(true);
+    }
+
+    int getPanelWidthSetting() {
+        return panelWidth;
+    }
+
+    int getPanelHeightSetting() {
+        return panelHeight;
     }
 
     int getRenderedMetricOptionCountForTest() {
@@ -92,18 +119,113 @@ public class WorldStatsPanel extends JPanel {
         return Set.copyOf(metricCheckboxes.keySet());
     }
 
-    private JPanel buildLeftControls() {
-        JPanel left = new JPanel(new BorderLayout(0, 8));
-        left.setOpaque(false);
-        left.setPreferredSize(new Dimension(250, PANEL_HEIGHT - 25));
+    private JPanel buildHeader() {
+        JPanel header = new JPanel(new BorderLayout(8, 0));
+        header.setOpaque(false);
 
+        JLabel title = new JLabel("WORLD STATISTICS");
+        title.setForeground(ACCENT_COLOR);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
+
+        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        exportButtons.setOpaque(false);
+
+        styleSmallButton(exportCsvButton);
+        styleSmallButton(exportPngButton);
+        styleSmallButton(exportJsonButton);
+
+        exportCsvButton.addActionListener(e -> exportCsv());
+        exportPngButton.addActionListener(e -> exportPng());
+        exportJsonButton.addActionListener(e -> exportJson());
+
+        exportButtons.add(exportCsvButton);
+        exportButtons.add(exportPngButton);
+        exportButtons.add(exportJsonButton);
+
+        header.add(title, BorderLayout.WEST);
+        header.add(exportButtons, BorderLayout.EAST);
+        return header;
+    }
+
+    private JPanel buildContent() {
+        JPanel content = new JPanel(new BorderLayout(10, 8));
+        content.setOpaque(false);
+
+        JPanel left = new JPanel(new BorderLayout(0, 6));
+        left.setOpaque(false);
+        left.setPreferredSize(new Dimension(220, 20));
+
+        styleSearchField();
+
+        metricListPanel.setOpaque(false);
+        metricListPanel.setLayout(new BoxLayout(metricListPanel, BoxLayout.Y_AXIS));
+
+        JScrollPane scrollPane = new JScrollPane(metricListPanel);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(50, 55, 70), 1));
+        scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
+
+        left.add(searchField, BorderLayout.NORTH);
+        left.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel topControls = new JPanel(new GridLayout(2, 1, 0, 6));
+        topControls.setOpaque(false);
+        topControls.add(buildPresetPanel());
+        topControls.add(buildYAxisPanel());
+
+        JPanel right = new JPanel(new BorderLayout(0, 8));
+        right.setOpaque(false);
+        right.add(topControls, BorderLayout.NORTH);
+        right.add(chartCanvas, BorderLayout.CENTER);
+
+        content.add(left, BorderLayout.WEST);
+        content.add(right, BorderLayout.CENTER);
+        return content;
+    }
+
+    private JPanel buildPresetPanel() {
+        presetPanel.setOpaque(false);
+        for (WorldStatsRangePreset preset : WorldStatsRangePreset.values()) {
+            ModernButton button = new ModernButton(preset.label());
+            button.setPreferredSize(new Dimension(90, 34));
+            button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            button.addActionListener(e -> onPresetClicked(preset));
+            presetButtons.put(preset, button);
+            presetPanel.add(button);
+        }
+        syncPresetButtons();
+        return presetPanel;
+    }
+
+    private JPanel buildYAxisPanel() {
+        yAxisPanel.setOpaque(false);
+        for (WorldStatsYAxisMode mode : WorldStatsYAxisMode.values()) {
+            ModernButton button = new ModernButton(mode.label());
+            button.setPreferredSize(new Dimension(130, 34));
+            button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            button.addActionListener(e -> {
+                yAxisMode = mode;
+                syncYAxisButtons();
+                persistUiSettings(false);
+                refreshChart();
+            });
+            yAxisButtons.put(mode, button);
+            yAxisPanel.add(button);
+        }
+        syncYAxisButtons();
+        return yAxisPanel;
+    }
+
+    private void styleSearchField() {
+        searchField.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        searchField.setForeground(OverlayTheme.ACCENT);
         searchField.setBackground(OverlayTheme.CONTROL_BG);
-        searchField.setForeground(TEXT_COLOR);
-        searchField.setCaretColor(ACCENT_COLOR);
+        searchField.setCaretColor(OverlayTheme.ACCENT);
         searchField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(45, 45, 60), 1),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-        searchField.setToolTipText("Metrik suchen...");
+                BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1),
+                BorderFactory.createEmptyBorder(7, 10, 7, 10)
+        ));
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -120,83 +242,70 @@ public class WorldStatsPanel extends JPanel {
                 rebuildMetricOptions();
             }
         });
-
-        metricListPanel.setOpaque(false);
-        metricListPanel.setLayout(new BoxLayout(metricListPanel, BoxLayout.Y_AXIS));
-        JScrollPane metricScroll = new JScrollPane(metricListPanel);
-        metricScroll.setOpaque(false);
-        metricScroll.getViewport().setOpaque(false);
-        metricScroll.setBorder(BorderFactory.createLineBorder(new Color(45, 45, 60), 1));
-        metricScroll.getVerticalScrollBar().setUnitIncrement(14);
-
-        left.add(searchField, BorderLayout.NORTH);
-        left.add(metricScroll, BorderLayout.CENTER);
-        return left;
     }
 
-    private JPanel buildCenterPanel() {
-        JPanel center = new JPanel(new BorderLayout(0, 8));
-        center.setOpaque(false);
-
-        chipsPanel.setOpaque(false);
-
-        JPanel customPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        customPanel.setOpaque(false);
-        customPanel.add(makeSubLabel("Custom start (min ago):"));
-        customPanel.add(customStartMinutes);
-        customPanel.add(makeSubLabel("end:"));
-        customPanel.add(customEndMinutes);
-        customStartMinutes.addChangeListener(e -> {
-            if (activePreset == WorldStatsRangePreset.CUSTOM) refreshChart();
-        });
-        customEndMinutes.addChangeListener(e -> {
-            if (activePreset == WorldStatsRangePreset.CUSTOM) refreshChart();
-        });
-
-        JPanel top = new JPanel(new GridLayout(3, 1, 0, 6));
-        top.setOpaque(false);
-        top.add(chipsPanel);
-        top.add(buildPresetPanel());
-        top.add(customPanel);
-
-        center.add(top, BorderLayout.NORTH);
-        center.add(chartCanvas, BorderLayout.CENTER);
-        return center;
+    private void styleSmallButton(ModernButton button) {
+        button.setPreferredSize(new Dimension(64, 34));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
     }
 
-    private JPanel buildPresetPanel() {
-        presetPanel.setOpaque(false);
-        ButtonGroup group = new ButtonGroup();
-        for (WorldStatsRangePreset preset : WorldStatsRangePreset.values()) {
-            JToggleButton button = new JToggleButton(preset.label());
-            stylePresetButton(button);
-            if (preset == activePreset) {
-                button.setSelected(true);
-            }
-            button.addActionListener(e -> {
-                activePreset = preset;
-                refreshChart();
-            });
-            group.add(button);
-            presetPanel.add(button);
+    private void onPresetClicked(WorldStatsRangePreset preset) {
+        WorldStatsRangePreset previous = activePreset;
+        activePreset = preset;
+        if (preset == WorldStatsRangePreset.CUSTOM && !showCustomRangeDialog()) {
+            activePreset = previous;
         }
-        return presetPanel;
+        syncPresetButtons();
+        persistUiSettings(false);
+        refreshChart();
     }
 
-    private JLabel makeSubLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setForeground(SUBTEXT_COLOR);
-        label.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        return label;
+    private boolean showCustomRangeDialog() {
+        JSpinner startValue = new JSpinner(new SpinnerNumberModel((int) customStartValue, 0, Integer.MAX_VALUE, 1));
+        JSpinner endValue = new JSpinner(new SpinnerNumberModel((int) customEndValue, 0, Integer.MAX_VALUE, 1));
+        JComboBox<WorldStatsTimeUnit> startUnit = new JComboBox<>(WorldStatsTimeUnit.values());
+        JComboBox<WorldStatsTimeUnit> endUnit = new JComboBox<>(WorldStatsTimeUnit.values());
+        startUnit.setSelectedItem(customStartUnit);
+        endUnit.setSelectedItem(customEndUnit);
+
+        JPanel panel = new JPanel(new GridLayout(2, 4, 8, 6));
+        panel.add(new JLabel("Start"));
+        panel.add(startValue);
+        panel.add(new JLabel("Einheit"));
+        panel.add(startUnit);
+        panel.add(new JLabel("Ende"));
+        panel.add(endValue);
+        panel.add(new JLabel("Einheit"));
+        panel.add(endUnit);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Custom Zeitbereich (Tick-basiert)",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return false;
+
+        customStartValue = ((Number) startValue.getValue()).longValue();
+        customStartUnit = (WorldStatsTimeUnit) startUnit.getSelectedItem();
+        customEndValue = ((Number) endValue.getValue()).longValue();
+        customEndUnit = (WorldStatsTimeUnit) endUnit.getSelectedItem();
+
+        long startTick = customStartUnit.toTicks(customStartValue);
+        long endTick = customEndUnit.toTicks(customEndValue);
+        if (endTick < startTick) {
+            customEndValue = customStartValue;
+            customEndUnit = customStartUnit;
+        }
+        return true;
     }
 
-    private void stylePresetButton(AbstractButton button) {
-        button.setFocusPainted(false);
-        button.setOpaque(true);
-        button.setBackground(OverlayTheme.CONTROL_BG);
-        button.setForeground(TEXT_COLOR);
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        button.setBorder(BorderFactory.createLineBorder(new Color(60, 60, 80), 1));
+    private void syncPresetButtons() {
+        for (Map.Entry<WorldStatsRangePreset, ModernButton> e : presetButtons.entrySet()) {
+            e.getValue().setDimmed(e.getKey() != activePreset);
+        }
+    }
+
+    private void syncYAxisButtons() {
+        for (Map.Entry<WorldStatsYAxisMode, ModernButton> e : yAxisButtons.entrySet()) {
+            e.getValue().setDimmed(e.getKey() != yAxisMode);
+        }
     }
 
     private void rebuildMetricOptions() {
@@ -204,44 +313,38 @@ public class WorldStatsPanel extends JPanel {
         metricCheckboxes.clear();
 
         String needle = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
-
         Map<WorldMetricCategory, List<WorldMetricDefinition>> grouped = WorldMetricRegistry.definitions().stream()
                 .filter(def -> needle.isEmpty() || def.label().toLowerCase(Locale.ROOT).contains(needle))
-                .collect(Collectors.groupingBy(
-                        WorldMetricDefinition::category,
+                .collect(Collectors.groupingBy(WorldMetricDefinition::category,
                         () -> new EnumMap<>(WorldMetricCategory.class),
                         Collectors.toList()));
 
         for (WorldMetricCategory category : WorldMetricCategory.values()) {
             List<WorldMetricDefinition> defs = grouped.get(category);
-            if (defs == null || defs.isEmpty()) {
-                continue;
-            }
+            if (defs == null || defs.isEmpty()) continue;
 
             JLabel title = new JLabel(category.label());
             title.setForeground(ACCENT_COLOR);
             title.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            title.setBorder(new EmptyBorder(8, 0, 4, 0));
+            title.setBorder(new EmptyBorder(6, 0, 2, 0));
             metricListPanel.add(title);
 
             defs.sort(Comparator.comparing(WorldMetricDefinition::label));
             for (WorldMetricDefinition def : defs) {
-                JCheckBox checkBox = new JCheckBox(def.label());
-                checkBox.setOpaque(false);
-                checkBox.setForeground(TEXT_COLOR);
-                checkBox.setFocusPainted(false);
-                checkBox.setSelected(selectedMetrics.contains(def.id()));
-                checkBox.addActionListener(e -> {
-                    if (checkBox.isSelected()) {
-                        selectedMetrics.add(def.id());
-                    } else {
-                        selectedMetrics.remove(def.id());
-                    }
-                    updateChips();
+                JCheckBox cb = new JCheckBox(def.label());
+                cb.setOpaque(false);
+                cb.setForeground(TEXT_COLOR);
+                cb.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+                cb.setFocusPainted(false);
+                cb.setSelected(selectedMetrics.contains(def.id()));
+                cb.addActionListener(e -> {
+                    if (cb.isSelected()) selectedMetrics.add(def.id());
+                    else selectedMetrics.remove(def.id());
+                    persistUiSettings(false);
                     refreshChart();
                 });
-                metricCheckboxes.put(def.id(), checkBox);
-                metricListPanel.add(checkBox);
+                metricCheckboxes.put(def.id(), cb);
+                metricListPanel.add(cb);
             }
         }
 
@@ -249,68 +352,184 @@ public class WorldStatsPanel extends JPanel {
         metricListPanel.repaint();
     }
 
-    private void updateChips() {
-        chipsPanel.removeAll();
-        if (selectedMetrics.isEmpty()) {
-            JLabel empty = new JLabel("Keine Metrik ausgewahlt");
-            empty.setForeground(SUBTEXT_COLOR);
-            chipsPanel.add(empty);
-        } else {
-            for (WorldMetricId id : selectedMetrics) {
-                WorldMetricDefinition def = WorldMetricRegistry.definition(id);
-                JButton chip = new JButton(def.label() + "  x");
-                chip.setFocusPainted(false);
-                chip.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-                chip.setForeground(Color.BLACK);
-                chip.setBackground(def.color());
-                chip.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-                chip.addActionListener(e -> {
-                    selectedMetrics.remove(id);
-                    JCheckBox cb = metricCheckboxes.get(id);
-                    if (cb != null) cb.setSelected(false);
-                    updateChips();
-                    refreshChart();
-                });
-                chipsPanel.add(chip);
-            }
-        }
-        chipsPanel.revalidate();
-        chipsPanel.repaint();
-    }
-
     private void refreshChart() {
         if (selectedMetrics.isEmpty()) {
-            chartCanvas.setChartData(List.of(), List.of(), false);
+            currentSamples = List.of();
+            currentDefinitions = List.of();
+            chartCanvas.setChartData(currentSamples, currentDefinitions, yAxisMode);
             return;
         }
 
-        long now = System.currentTimeMillis();
-        long earliest = store.firstTimestampMillis();
-        if (earliest == 0L) {
-            earliest = now;
-        }
+        long latestTick = store.lastTick();
+        long earliestTick = store.firstTick();
+        long customStartTick = customStartUnit.toTicks(customStartValue);
+        long customEndTick = customEndUnit.toTicks(customEndValue);
 
-        long customStart = now - ((Number) customStartMinutes.getValue()).longValue() * 60_000L;
-        long customEnd = now - ((Number) customEndMinutes.getValue()).longValue() * 60_000L;
-        if (customStart > customEnd) {
-            long tmp = customStart;
-            customStart = customEnd;
-            customEnd = tmp;
-        }
+        long fromTick = activePreset.resolveStartTick(latestTick, earliestTick, customStartTick, customEndTick);
+        long toTick = activePreset.resolveEndTick(latestTick, customStartTick, customEndTick);
+        if (toTick < fromTick) toTick = fromTick;
 
-        long from = activePreset.resolveStartMillis(now, earliest, customStart, customEnd);
-        long to = activePreset.resolveEndMillis(now, customStart, customEnd);
-
-        int maxPoints = Math.max(80, chartCanvas.getWidth() - 50);
-        List<WorldStatsSample> currentSamples = store.queryRange(selectedMetrics, from, to, maxPoints);
-
-        List<WorldMetricDefinition> selectedDefs = selectedMetrics.stream()
+        int maxPoints = Math.max(80, chartCanvas.getWidth() - 280);
+        currentSamples = store.queryRangeByTick(selectedMetrics, fromTick, toTick, maxPoints);
+        currentDefinitions = selectedMetrics.stream()
                 .map(WorldMetricRegistry::definition)
-                .filter(def -> def != null)
+                .filter(java.util.Objects::nonNull)
                 .toList();
 
-        boolean mixedUnits = selectedDefs.stream().map(WorldMetricDefinition::unit).distinct().count() > 1;
-        chartCanvas.setChartData(currentSamples, selectedDefs, mixedUnits);
+        chartCanvas.setChartData(currentSamples, currentDefinitions, yAxisMode);
+    }
+
+    private void exportCsv() {
+        exportWithChooser("csv", path -> WorldStatsExportService.exportCsv(path, currentSamples, currentDefinitions));
+    }
+
+    private void exportPng() {
+        exportWithChooser("png", path -> WorldStatsExportService.exportPng(path, chartCanvas));
+    }
+
+    private void exportJson() {
+        exportWithChooser("json", path -> WorldStatsExportService.exportJson(path, currentSamples, currentDefinitions));
+    }
+
+    private void exportWithChooser(String ext, ThrowingPathConsumer consumer) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File(WorldStatsExportService.defaultFileName("world-stats", ext)));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        try {
+            consumer.accept(chooser.getSelectedFile().toPath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Export fehlgeschlagen: " + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void loadUiSettings() {
+        if (settingsManager == null) {
+            selectedMetrics.add(WorldMetricId.POPULATION_ALIVE);
+            selectedMetrics.add(WorldMetricId.FOOD_PELLETS_AVAILABLE);
+            return;
+        }
+
+        panelWidth = settingsManager.getWorldStatsViewerWidth();
+        panelHeight = settingsManager.getWorldStatsViewerHeight();
+
+        String csv = settingsManager.getWorldStatsSelectedMetrics();
+        if (csv != null && !csv.isBlank()) {
+            for (String raw : csv.split(",")) {
+                try {
+                    selectedMetrics.add(WorldMetricId.valueOf(raw.trim()));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+        if (selectedMetrics.isEmpty()) {
+            selectedMetrics.add(WorldMetricId.POPULATION_ALIVE);
+            selectedMetrics.add(WorldMetricId.FOOD_PELLETS_AVAILABLE);
+        }
+
+        try {
+            activePreset = WorldStatsRangePreset.valueOf(settingsManager.getWorldStatsRangePreset());
+        } catch (IllegalArgumentException ignored) {
+            activePreset = WorldStatsRangePreset.SINCE_BEGINNING;
+        }
+        try {
+            yAxisMode = WorldStatsYAxisMode.valueOf(settingsManager.getWorldStatsYAxisMode());
+        } catch (IllegalArgumentException ignored) {
+            yAxisMode = WorldStatsYAxisMode.RELATIV_PRO_SERIE;
+        }
+
+        customStartValue = settingsManager.getWorldStatsCustomStartValue();
+        customEndValue = settingsManager.getWorldStatsCustomEndValue();
+        try {
+            customStartUnit = WorldStatsTimeUnit.valueOf(settingsManager.getWorldStatsCustomStartUnit());
+            customEndUnit = WorldStatsTimeUnit.valueOf(settingsManager.getWorldStatsCustomEndUnit());
+        } catch (IllegalArgumentException ignored) {
+            customStartUnit = WorldStatsTimeUnit.MIN;
+            customEndUnit = WorldStatsTimeUnit.MIN;
+        }
+    }
+
+    private void persistUiSettings(boolean save) {
+        if (settingsManager == null) return;
+        settingsManager.setWorldStatsViewerWidth(panelWidth);
+        settingsManager.setWorldStatsViewerHeight(panelHeight);
+        settingsManager.setWorldStatsSelectedMetrics(selectedMetrics.stream().map(Enum::name).collect(Collectors.joining(",")));
+        settingsManager.setWorldStatsRangePreset(activePreset.name());
+        settingsManager.setWorldStatsYAxisMode(yAxisMode.name());
+        settingsManager.setWorldStatsCustomStartValue(customStartValue);
+        settingsManager.setWorldStatsCustomStartUnit(customStartUnit.name());
+        settingsManager.setWorldStatsCustomEndValue(customEndValue);
+        settingsManager.setWorldStatsCustomEndUnit(customEndUnit.name());
+        if (save) settingsManager.saveSettings();
+    }
+
+    private void installResizeHandler() {
+        MouseAdapter adapter = new MouseAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                resizeEdge = detectResizeEdge(e.getPoint());
+                setCursor(switch (resizeEdge) {
+                    case RIGHT -> Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR);
+                    case BOTTOM -> Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR);
+                    case CORNER -> Cursor.getPredefinedCursor(Cursor.SE_RESIZE_CURSOR);
+                    default -> Cursor.getDefaultCursor();
+                });
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                resizeEdge = detectResizeEdge(e.getPoint());
+                if (resizeEdge != ResizeEdge.NONE) {
+                    dragStart = e.getPoint();
+                    sizeAtDragStart = getSize();
+                }
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (resizeEdge == ResizeEdge.NONE || dragStart == null || sizeAtDragStart == null) return;
+                int newW = sizeAtDragStart.width;
+                int newH = sizeAtDragStart.height;
+                int dx = e.getX() - dragStart.x;
+                int dy = e.getY() - dragStart.y;
+                if (resizeEdge == ResizeEdge.RIGHT || resizeEdge == ResizeEdge.CORNER) newW += dx;
+                if (resizeEdge == ResizeEdge.BOTTOM || resizeEdge == ResizeEdge.CORNER) newH += dy;
+                Dimension d = clampSize(newW, newH);
+                panelWidth = d.width;
+                panelHeight = d.height;
+                setBounds(getX(), getY(), panelWidth, panelHeight);
+                revalidate();
+                repaint();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                dragStart = null;
+                sizeAtDragStart = null;
+                persistUiSettings(true);
+            }
+        };
+        addMouseListener(adapter);
+        addMouseMotionListener(adapter);
+    }
+
+    private ResizeEdge detectResizeEdge(Point p) {
+        boolean right = p.x >= getWidth() - EDGE_DRAG;
+        boolean bottom = p.y >= getHeight() - EDGE_DRAG;
+        if (right && bottom) return ResizeEdge.CORNER;
+        if (right) return ResizeEdge.RIGHT;
+        if (bottom) return ResizeEdge.BOTTOM;
+        return ResizeEdge.NONE;
+    }
+
+    private Dimension clampSize(int w, int h) {
+        int maxW = w;
+        int maxH = h;
+        if (getParent() != null) {
+            maxW = Math.max(MIN_WIDTH, getParent().getWidth() - getX() - 15);
+            maxH = Math.max(MIN_HEIGHT, getParent().getHeight() - getY() - 15);
+        }
+        return new Dimension(Math.max(MIN_WIDTH, Math.min(w, maxW)), Math.max(MIN_HEIGHT, Math.min(h, maxH)));
     }
 
     @Override
@@ -320,38 +539,50 @@ public class WorldStatsPanel extends JPanel {
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(BG_COLOR);
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
             g2.setColor(BORDER_GLOW_COLOR);
             g2.setStroke(new BasicStroke(3f));
-            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 16, 16);
+            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 15, 15);
             g2.setColor(ACCENT_COLOR);
             g2.setStroke(new BasicStroke(1f));
-            g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 16, 16);
+            g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 15, 15);
         } finally {
             g2.dispose();
         }
+    }
+
+    private enum ResizeEdge {NONE, RIGHT, BOTTOM, CORNER}
+
+    private interface ThrowingPathConsumer {
+        void accept(Path path) throws IOException;
     }
 
     private static final class ChartCanvas extends JPanel {
         private static final Color GRID = new Color(42, 44, 52);
         private static final Color AXIS_TEXT = new Color(160, 170, 180);
         private static final Color CHART_BG = new Color(10, 10, 14, 170);
-        private static final int LEFT_PAD = 45;
-        private static final int RIGHT_PAD = 12;
-        private static final int TOP_PAD = 14;
-        private static final int BOTTOM_PAD = 25;
+        private static final int LEFT_PAD = 40;
+        private static final int TOP_PAD = 16;
+        private static final int BOTTOM_PAD = 60;
+        private static final int RIGHT_PAD = 210;
 
         private List<WorldStatsSample> samples = List.of();
         private List<WorldMetricDefinition> definitions = List.of();
-        private boolean normalize = false;
+        private WorldStatsYAxisMode yAxisMode = WorldStatsYAxisMode.RELATIV_PRO_SERIE;
         private int hoveredIndex = -1;
 
         ChartCanvas() {
             setOpaque(false);
-            MouseAdapter mouse = new MouseAdapter() {
+            MouseAdapter adapter = new MouseAdapter() {
                 @Override
                 public void mouseMoved(MouseEvent e) {
-                    hoveredIndex = findNearestIndex(e.getX());
+                    Rectangle plot = plotRect();
+                    if (!plot.contains(e.getPoint())) {
+                        hoveredIndex = -1;
+                        repaint();
+                        return;
+                    }
+                    hoveredIndex = findNearestIndex(e.getX(), plot);
                     repaint();
                 }
 
@@ -361,35 +592,14 @@ public class WorldStatsPanel extends JPanel {
                     repaint();
                 }
             };
-            addMouseMotionListener(mouse);
+            addMouseMotionListener(adapter);
         }
 
-        void setChartData(List<WorldStatsSample> samples,
-                          List<WorldMetricDefinition> definitions,
-                          boolean normalize) {
+        void setChartData(List<WorldStatsSample> samples, List<WorldMetricDefinition> definitions, WorldStatsYAxisMode mode) {
             this.samples = samples == null ? List.of() : samples;
             this.definitions = definitions == null ? List.of() : definitions;
-            this.normalize = normalize;
+            this.yAxisMode = mode == null ? WorldStatsYAxisMode.RELATIV_PRO_SERIE : mode;
             repaint();
-        }
-
-        private int findNearestIndex(int mouseX) {
-            if (samples.isEmpty()) return -1;
-            int chartW = Math.max(1, getWidth() - LEFT_PAD - RIGHT_PAD);
-            int best = -1;
-            int bestDx = Integer.MAX_VALUE;
-            long minTs = samples.get(0).timestampMillis();
-            long maxTs = samples.get(samples.size() - 1).timestampMillis();
-            long tsRange = Math.max(1L, maxTs - minTs);
-            for (int i = 0; i < samples.size(); i++) {
-                int x = LEFT_PAD + (int) ((samples.get(i).timestampMillis() - minTs) * chartW / tsRange);
-                int dx = Math.abs(mouseX - x);
-                if (dx < bestDx) {
-                    bestDx = dx;
-                    best = i;
-                }
-            }
-            return bestDx <= 18 ? best : -1;
         }
 
         @Override
@@ -400,60 +610,75 @@ public class WorldStatsPanel extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-                int w = getWidth();
-                int h = getHeight();
-                int chartW = Math.max(1, w - LEFT_PAD - RIGHT_PAD);
-                int chartH = Math.max(1, h - TOP_PAD - BOTTOM_PAD);
-                int chartX = LEFT_PAD;
-                int chartY = TOP_PAD;
-
+                Rectangle plot = plotRect();
                 g2.setColor(CHART_BG);
-                g2.fillRoundRect(chartX, chartY, chartW, chartH, 10, 10);
-
-                drawGrid(g2, chartX, chartY, chartW, chartH);
+                g2.fillRoundRect(plot.x, plot.y, plot.width, plot.height, 10, 10);
+                drawGrid(g2, plot);
 
                 if (samples.isEmpty() || definitions.isEmpty()) {
                     g2.setColor(AXIS_TEXT);
-                    g2.drawString("Keine Daten fur den gewahlten Bereich", chartX + 12, chartY + 24);
+                    g2.drawString("Keine Daten im gewahlten Bereich", plot.x + 8, plot.y + 20);
                     return;
                 }
 
-                long minTs = samples.get(0).timestampMillis();
-                long maxTs = samples.get(samples.size() - 1).timestampMillis();
-                long tsRange = Math.max(1L, maxTs - minTs);
+                Map<WorldMetricId, double[]> ranges = perSeriesRanges();
+                double[] global = globalRange();
 
-                Map<WorldMetricId, double[]> ranges = computeRanges();
-                double[] globalRange = computeGlobalRange();
+                long minTick = samples.get(0).tick();
+                long maxTick = samples.get(samples.size() - 1).tick();
+                long span = Math.max(1L, maxTick - minTick);
+
                 for (WorldMetricDefinition def : definitions) {
-                    drawSeries(g2, def, ranges.get(def.id()), globalRange,
-                            chartX, chartY, chartW, chartH, minTs, tsRange);
+                    double[] range = yAxisMode == WorldStatsYAxisMode.GLOBAL ? global : ranges.get(def.id());
+                    drawSeries(g2, plot, def, range, minTick, span);
                 }
 
-                drawLegend(g2, chartX, chartY, chartW);
-                drawAxesLabels(g2, chartX, chartY, chartW, chartH, minTs, maxTs);
-
+                drawAxisLabels(g2, plot, minTick, maxTick);
+                drawLegend(g2, plot);
                 if (hoveredIndex >= 0 && hoveredIndex < samples.size()) {
-                    drawHover(g2, hoveredIndex, chartX, chartY, chartW, chartH, minTs, tsRange);
+                    drawHover(g2, plot, hoveredIndex, minTick, span);
                 }
             } finally {
                 g2.dispose();
             }
         }
 
-        private void drawGrid(Graphics2D g2, int x, int y, int w, int h) {
+        private Rectangle plotRect() {
+            return new Rectangle(LEFT_PAD, TOP_PAD,
+                    Math.max(1, getWidth() - LEFT_PAD - RIGHT_PAD),
+                    Math.max(1, getHeight() - TOP_PAD - BOTTOM_PAD));
+        }
+
+        private int findNearestIndex(int mouseX, Rectangle plot) {
+            long minTick = samples.get(0).tick();
+            long maxTick = samples.get(samples.size() - 1).tick();
+            long span = Math.max(1L, maxTick - minTick);
+            int best = -1;
+            int bestDx = Integer.MAX_VALUE;
+            for (int i = 0; i < samples.size(); i++) {
+                int x = plot.x + (int) ((samples.get(i).tick() - minTick) * plot.width / span);
+                int dx = Math.abs(mouseX - x);
+                if (dx < bestDx) {
+                    bestDx = dx;
+                    best = i;
+                }
+            }
+            return bestDx <= 16 ? best : -1;
+        }
+
+        private void drawGrid(Graphics2D g2, Rectangle plot) {
             g2.setColor(GRID);
-            g2.setStroke(new BasicStroke(1f));
             for (int i = 0; i <= 4; i++) {
-                int gy = y + i * h / 4;
-                g2.drawLine(x, gy, x + w, gy);
+                int y = plot.y + i * plot.height / 4;
+                g2.drawLine(plot.x, y, plot.x + plot.width, y);
             }
             for (int i = 0; i <= 5; i++) {
-                int gx = x + i * w / 5;
-                g2.drawLine(gx, y, gx, y + h);
+                int x = plot.x + i * plot.width / 5;
+                g2.drawLine(x, plot.y, x, plot.y + plot.height);
             }
         }
 
-        private Map<WorldMetricId, double[]> computeRanges() {
+        private Map<WorldMetricId, double[]> perSeriesRanges() {
             Map<WorldMetricId, double[]> out = new EnumMap<>(WorldMetricId.class);
             for (WorldMetricDefinition def : definitions) {
                 double min = Double.POSITIVE_INFINITY;
@@ -463,150 +688,104 @@ public class WorldStatsPanel extends JPanel {
                     min = Math.min(min, v);
                     max = Math.max(max, v);
                 }
-                if (Double.isInfinite(min) || Double.isInfinite(max)) {
-                    min = 0.0;
-                    max = 1.0;
-                }
-                if (Math.abs(max - min) < 1e-9) {
-                    max = min + 1.0;
-                }
-                out.put(def.id(), new double[]{min, max});
+                out.put(def.id(), WorldStatsChartScaler.ensureRange(min, max));
             }
             return out;
         }
 
-        private void drawSeries(Graphics2D g2,
-                                WorldMetricDefinition def,
-                                double[] range,
-                                double[] globalRange,
-                                int chartX,
-                                int chartY,
-                                int chartW,
-                                int chartH,
-                                long minTs,
-                                long tsRange) {
-            Path2D path = new Path2D.Double();
-            for (int i = 0; i < samples.size(); i++) {
-                WorldStatsSample sample = samples.get(i);
-                double raw = sample.metricValues().getOrDefault(def.id(), 0.0);
-                double normalized = normalize
-                        ? normalize(raw, range[0], range[1])
-                        : normalize(raw, globalRange[0], globalRange[1]);
-                double px = chartX + ((sample.timestampMillis() - minTs) * 1.0 / tsRange) * chartW;
-                double py = chartY + chartH - normalized * chartH;
-                if (i == 0) path.moveTo(px, py);
-                else path.lineTo(px, py);
-            }
-
-            Composite original = g2.getComposite();
-            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.22f));
-            g2.setColor(def.color());
-            g2.setStroke(new BasicStroke(3f));
-            g2.draw(path);
-
-            g2.setComposite(original);
-            g2.setColor(def.color());
-            g2.setStroke(new BasicStroke(1.6f));
-            g2.draw(path);
-        }
-
-        private double[] computeGlobalRange() {
+        private double[] globalRange() {
             double min = Double.POSITIVE_INFINITY;
             double max = Double.NEGATIVE_INFINITY;
             for (WorldMetricDefinition def : definitions) {
                 for (WorldStatsSample sample : samples) {
-                    min = Math.min(min, sample.metricValues().getOrDefault(def.id(), 0.0));
-                    max = Math.max(max, sample.metricValues().getOrDefault(def.id(), 0.0));
+                    double v = sample.metricValues().getOrDefault(def.id(), 0.0);
+                    min = Math.min(min, v);
+                    max = Math.max(max, v);
                 }
             }
-            if (Double.isInfinite(min) || Double.isInfinite(max)) {
-                return new double[]{0.0, 1.0};
-            }
-            if (Math.abs(max - min) < 1e-9) {
-                max = min + 1.0;
-            }
-            return new double[]{min, max};
+            return WorldStatsChartScaler.ensureRange(min, max);
         }
 
-        private double normalize(double value, double min, double max) {
-            double span = Math.max(1e-9, max - min);
-            return (value - min) / span;
+        private void drawSeries(Graphics2D g2, Rectangle plot, WorldMetricDefinition def, double[] range, long minTick, long span) {
+            Path2D path = new Path2D.Double();
+            for (int i = 0; i < samples.size(); i++) {
+                WorldStatsSample sample = samples.get(i);
+                double raw = sample.metricValues().getOrDefault(def.id(), 0.0);
+                double ny = WorldStatsChartScaler.normalize(raw, range[0], range[1]);
+                double px = plot.x + ((sample.tick() - minTick) * 1.0 / span) * plot.width;
+                double py = plot.y + plot.height - ny * plot.height;
+                if (i == 0) path.moveTo(px, py);
+                else path.lineTo(px, py);
+            }
+
+            Composite orig = g2.getComposite();
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.25f));
+            g2.setColor(def.color());
+            g2.setStroke(new BasicStroke(3f));
+            g2.draw(path);
+            g2.setComposite(orig);
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.draw(path);
         }
 
-        private void drawLegend(Graphics2D g2, int chartX, int chartY, int chartW) {
-            int x = chartX + 8;
-            int y = chartY + 14;
+        private void drawAxisLabels(Graphics2D g2, Rectangle plot, long minTick, long maxTick) {
+            g2.setColor(AXIS_TEXT);
+            g2.setFont(new Font("Consolas", Font.PLAIN, 11));
+            g2.drawString(WorldStatsTimeUnit.formatTickDuration(minTick), plot.x, plot.y + plot.height + 16);
+            String end = WorldStatsTimeUnit.formatTickDuration(maxTick);
+            int w = g2.getFontMetrics().stringWidth(end);
+            g2.drawString(end, plot.x + plot.width - w, plot.y + plot.height + 16);
+            g2.drawString("X: Simulationszeit (Tick-basiert)", plot.x, plot.y - 2);
+        }
+
+        private void drawLegend(Graphics2D g2, Rectangle plot) {
+            int x = plot.x;
+            int y = plot.y + plot.height + 36;
             g2.setFont(new Font("Segoe UI", Font.PLAIN, 11));
             for (WorldMetricDefinition def : definitions) {
                 g2.setColor(def.color());
-                g2.fillRect(x, y - 8, 10, 3);
-                g2.setColor(new Color(210, 215, 220));
-                g2.drawString(def.label(), x + 14, y);
-                x += g2.getFontMetrics().stringWidth(def.label()) + 28;
-                if (x > chartX + chartW - 120) {
-                    x = chartX + 8;
+                g2.fillRect(x, y - 7, 12, 3);
+                g2.setColor(TEXT_COLOR);
+                g2.drawString(def.label(), x + 15, y);
+                x += 22 + g2.getFontMetrics().stringWidth(def.label());
+                if (x > plot.x + plot.width - 120) {
+                    x = plot.x;
                     y += 14;
                 }
             }
         }
 
-        private void drawAxesLabels(Graphics2D g2, int chartX, int chartY, int chartW, int chartH, long minTs, long maxTs) {
-            g2.setColor(AXIS_TEXT);
-            g2.setFont(new Font("Consolas", Font.PLAIN, 11));
-            g2.drawString(TIME_FORMAT.format(Instant.ofEpochMilli(minTs)), chartX, chartY + chartH + 16);
-            String end = TIME_FORMAT.format(Instant.ofEpochMilli(maxTs));
-            int endW = g2.getFontMetrics().stringWidth(end);
-            g2.drawString(end, chartX + chartW - endW, chartY + chartH + 16);
-            if (normalize) {
-                g2.drawString("Normalized", chartX, chartY - 2);
-            }
-        }
-
-        private void drawHover(Graphics2D g2,
-                               int index,
-                               int chartX,
-                               int chartY,
-                               int chartW,
-                               int chartH,
-                               long minTs,
-                               long tsRange) {
+        private void drawHover(Graphics2D g2, Rectangle plot, int index, long minTick, long span) {
             WorldStatsSample sample = samples.get(index);
-            int x = chartX + (int) (((sample.timestampMillis() - minTs) * 1.0 / tsRange) * chartW);
-            g2.setColor(new Color(255, 255, 255, 65));
-            g2.drawLine(x, chartY, x, chartY + chartH);
+            int x = plot.x + (int) (((sample.tick() - minTick) * 1.0 / span) * plot.width);
+            g2.setColor(new Color(255, 255, 255, 70));
+            g2.drawLine(x, plot.y, x, plot.y + plot.height);
 
             List<String> lines = new ArrayList<>();
-            lines.add(TIME_FORMAT.format(Instant.ofEpochMilli(sample.timestampMillis())) + "  (tick " + sample.tick() + ")");
+            lines.add(WorldStatsTimeUnit.formatTickDuration(sample.tick()));
             for (WorldMetricDefinition def : definitions) {
                 double v = sample.metricValues().getOrDefault(def.id(), 0.0);
                 lines.add(def.label() + ": " + String.format(Locale.ROOT, "%.2f", v) + " " + def.unit());
             }
 
+            int ttX = plot.x + plot.width + 10;
+            int ttY = plot.y + 8;
             g2.setFont(new Font("Consolas", Font.PLAIN, 11));
             FontMetrics fm = g2.getFontMetrics();
-            int width = lines.stream().mapToInt(fm::stringWidth).max().orElse(120) + 12;
-            int height = lines.size() * fm.getHeight() + 8;
-
-            int tx = x + 10;
-            if (tx + width > getWidth()) {
-                tx = x - width - 10;
-            }
-            int ty = Math.max(4, chartY + 8);
+            int width = 190;
+            int height = lines.size() * fm.getHeight() + 10;
 
             g2.setColor(new Color(18, 18, 18, 235));
-            g2.fillRoundRect(tx, ty, width, height, 8, 8);
-            g2.setColor(OverlayTheme.ACCENT);
-            g2.drawRoundRect(tx, ty, width, height, 8, 8);
+            g2.fillRoundRect(ttX, ttY, width, height, 8, 8);
+            g2.setColor(ACCENT_COLOR);
+            g2.drawRoundRect(ttX, ttY, width, height, 8, 8);
 
-            int y = ty + fm.getAscent() + 4;
+            int y = ttY + fm.getAscent() + 5;
             for (int i = 0; i < lines.size(); i++) {
-                if (i == 0) g2.setColor(OverlayTheme.ACCENT);
-                else g2.setColor(TEXT_COLOR);
-                g2.drawString(lines.get(i), tx + 6, y);
+                g2.setColor(i == 0 ? ACCENT_COLOR : TEXT_COLOR);
+                g2.drawString(lines.get(i), ttX + 6, y);
                 y += fm.getHeight();
             }
         }
     }
 }
-
-

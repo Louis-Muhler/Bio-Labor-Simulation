@@ -26,7 +26,9 @@ final class SimulationStateCoordinator {
         this.worldState = worldState;
     }
 
-    SimulationState captureState(double foodSpawnRate) {
+    SimulationState captureState(double foodSpawnRate,
+                                 long simulationTick,
+                                 List<WorldStatsSample> worldStatsHistory) {
         List<Microbe> microbes = worldState.population().microbes();
         List<FoodPellet> foodPellets = worldState.food().pellets();
         List<Microbe.PersistedState> microbesState = microbes.stream()
@@ -43,6 +45,8 @@ final class SimulationStateCoordinator {
                 environment.getTemperature(),
                 environment.getToxicity(),
                 foodSpawnRate,
+                simulationTick,
+                worldStatsHistory,
                 microbesState,
                 foodState,
                 debugModeService.isEnabled()

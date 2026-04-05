@@ -24,6 +24,8 @@ class SaveGameRepositoryTest {
                 0.2,
                 0.4,
                 0.5,
+                0L,
+                List.of(),
                 List.of(),
                 List.of(),
                 false

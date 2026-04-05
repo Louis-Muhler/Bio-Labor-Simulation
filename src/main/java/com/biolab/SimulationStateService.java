@@ -13,8 +13,8 @@ import java.util.List;
  */
 public class SimulationStateService {
     private static final int MAGIC = 0x424C5331; // BLS1
-    private static final int FORMAT_VERSION = 1;
-    private static final long MAX_SAVE_FILE_BYTES = 50L * 1024L * 1024L;
+    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION_V1 = 1;
 
     private static void writeState(DataOutputStream out, SimulationState state) throws IOException {
         out.writeInt(MAGIC);
@@ -24,6 +24,7 @@ public class SimulationStateService {
         out.writeDouble(state.temperature());
         out.writeDouble(state.toxicity());
         out.writeDouble(state.foodSpawnRate());
+        out.writeLong(state.simulationTick());
         out.writeBoolean(state.debugMode());
 
         out.writeInt(state.microbes().size());
@@ -65,6 +66,16 @@ public class SimulationStateService {
             out.writeDouble(food.x());
             out.writeDouble(food.y());
         }
+
+        out.writeInt(state.worldStatsHistory().size());
+        for (WorldStatsSample sample : state.worldStatsHistory()) {
+            out.writeLong(sample.timestampMillis());
+            out.writeLong(sample.tick());
+            out.writeInt(WorldMetricId.values().length);
+            for (WorldMetricId id : WorldMetricId.values()) {
+                out.writeDouble(sample.metricValues().getOrDefault(id, 0.0));
+            }
+        }
     }
 
     private static SimulationState readState(DataInputStream in) throws IOException {
@@ -74,7 +85,7 @@ public class SimulationStateService {
         }
 
         int version = in.readInt();
-        if (version != FORMAT_VERSION) {
+        if (version != FORMAT_VERSION && version != FORMAT_VERSION_V1) {
             throw new IOException("Unsupported save format version: " + version);
         }
 
@@ -83,6 +94,7 @@ public class SimulationStateService {
         double temperature = in.readDouble();
         double toxicity = in.readDouble();
         double foodSpawnRate = in.readDouble();
+        long simulationTick = version >= 2 ? in.readLong() : 0L;
         boolean debugMode = in.readBoolean();
 
         int microbeCount = in.readInt();
@@ -168,12 +180,40 @@ public class SimulationStateService {
             food.add(new SimulationState.FoodState(in.readDouble(), in.readDouble()));
         }
 
+        List<WorldStatsSample> worldStatsHistory = new ArrayList<>();
+        if (version >= 2) {
+            int sampleCount = in.readInt();
+            if (sampleCount < 0) {
+                throw new IOException("Invalid world stats sample count: " + sampleCount);
+            }
+            for (int i = 0; i < sampleCount; i++) {
+                long timestampMillis = in.readLong();
+                long tick = in.readLong();
+                int metricCount = in.readInt();
+                if (metricCount < 0 || metricCount > WorldMetricId.values().length) {
+                    throw new IOException("Invalid world stats metric count: " + metricCount);
+                }
+                java.util.EnumMap<WorldMetricId, Double> values = new java.util.EnumMap<>(WorldMetricId.class);
+                WorldMetricId[] ids = WorldMetricId.values();
+                int readCount = Math.min(metricCount, ids.length);
+                for (int m = 0; m < readCount; m++) {
+                    values.put(ids[m], in.readDouble());
+                }
+                for (int m = readCount; m < metricCount; m++) {
+                    in.readDouble();
+                }
+                worldStatsHistory.add(new WorldStatsSample(timestampMillis, tick, values));
+            }
+        }
+
         return new SimulationState(
                 worldWidth,
                 worldHeight,
                 temperature,
                 toxicity,
                 foodSpawnRate,
+                simulationTick,
+                worldStatsHistory,
                 microbes,
                 food,
                 debugMode
@@ -210,7 +250,7 @@ public class SimulationStateService {
         }
 
         long size = Files.size(normalized);
-        if (size <= 0 || size > MAX_SAVE_FILE_BYTES) {
+        if (size <= 0) {
             throw new IOException("Invalid save file size: " + size + " bytes");
         }
 

@@ -1,24 +1,22 @@
 package com.biolab;
 
-import java.time.Duration;
-
 /**
  * Time-window presets for the world statistics chart.
  */
 public enum WorldStatsRangePreset {
-    SINCE_BEGINNING(null, "Seit Beginn"),
-    LAST_1_MIN(Duration.ofMinutes(1), "1m"),
-    LAST_5_MIN(Duration.ofMinutes(5), "5m"),
-    LAST_10_MIN(Duration.ofMinutes(10), "10m"),
-    LAST_30_MIN(Duration.ofMinutes(30), "30m"),
-    LAST_60_MIN(Duration.ofMinutes(60), "60m"),
+    SINCE_BEGINNING(-1L, "Seit Beginn"),
+    LAST_1_MIN(30L * 60L, "1m"),
+    LAST_5_MIN(30L * 60L * 5L, "5m"),
+    LAST_10_MIN(30L * 60L * 10L, "10m"),
+    LAST_30_MIN(30L * 60L * 30L, "30m"),
+    LAST_60_MIN(30L * 60L * 60L, "60m"),
     CUSTOM(null, "Custom");
 
-    private final Duration duration;
+    private final Long durationTicks;
     private final String label;
 
-    WorldStatsRangePreset(Duration duration, String label) {
-        this.duration = duration;
+    WorldStatsRangePreset(Long durationTicks, String label) {
+        this.durationTicks = durationTicks;
         this.label = label;
     }
 
@@ -26,23 +24,23 @@ public enum WorldStatsRangePreset {
         return label;
     }
 
-    public long resolveStartMillis(long nowMillis, long earliestMillis, long customStartMillis, long customEndMillis) {
+    public long resolveStartTick(long latestTick, long earliestTick, long customStartTick, long customEndTick) {
         if (this == SINCE_BEGINNING) {
-            return earliestMillis;
+            return earliestTick;
         }
         if (this == CUSTOM) {
-            long start = Math.min(customStartMillis, customEndMillis);
-            return Math.max(earliestMillis, start);
+            long start = Math.min(customStartTick, customEndTick);
+            return Math.max(earliestTick, start);
         }
-        long start = nowMillis - duration.toMillis();
-        return Math.max(earliestMillis, start);
+        long start = latestTick - durationTicks;
+        return Math.max(earliestTick, start);
     }
 
-    public long resolveEndMillis(long nowMillis, long customStartMillis, long customEndMillis) {
+    public long resolveEndTick(long latestTick, long customStartTick, long customEndTick) {
         if (this == CUSTOM) {
-            return Math.max(customStartMillis, customEndMillis);
+            return Math.max(customStartTick, customEndTick);
         }
-        return nowMillis;
+        return latestTick;
     }
 }
 

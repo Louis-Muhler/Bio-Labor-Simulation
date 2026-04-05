@@ -2,6 +2,8 @@ package com.biolab;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -32,6 +34,7 @@ class SimulationStateServiceTest {
         assertEquals(0.77, target.getEnvironment().getTemperature(), 0.0001);
         assertEquals(0.12, target.getEnvironment().getToxicity(), 0.0001);
         assertEquals(0.65, target.getFoodSpawnRate(), 0.0001);
+        assertEquals(captured.worldStatsHistory(), loaded.worldStatsHistory());
 
         source.shutdown();
         target.shutdown();
@@ -46,6 +49,8 @@ class SimulationStateServiceTest {
                 0.2,
                 0.3,
                 0.4,
+                0L,
+                java.util.List.of(),
                 java.util.List.of(),
                 java.util.List.of(),
                 true
@@ -78,6 +83,8 @@ class SimulationStateServiceTest {
                 0.2,
                 0.3,
                 0.4,
+                0L,
+                java.util.List.of(),
                 java.util.List.of(),
                 java.util.List.of(),
                 false
@@ -86,6 +93,29 @@ class SimulationStateServiceTest {
         assertThrows(IllegalArgumentException.class, () -> engine.loadState(wrongDims));
 
         engine.shutdown();
+    }
+
+    @Test
+    void loadShouldSupportLegacyFormatWithoutWorldStats() throws IOException {
+        Path file = Files.createTempFile("biolab-legacy-v1-", ".bin");
+        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(file)))) {
+            out.writeInt(0x424C5331); // MAGIC
+            out.writeInt(1);          // FORMAT_VERSION v1
+            out.writeInt(400);
+            out.writeInt(300);
+            out.writeDouble(0.4);
+            out.writeDouble(0.2);
+            out.writeDouble(0.7);
+            out.writeBoolean(false);
+            out.writeInt(0); // microbes
+            out.writeInt(0); // food
+        }
+
+        SimulationStateService service = new SimulationStateService();
+        SimulationState loaded = service.load(file);
+
+        assertEquals(0L, loaded.simulationTick());
+        assertTrue(loaded.worldStatsHistory().isEmpty());
     }
 }
 

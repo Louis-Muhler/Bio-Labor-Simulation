@@ -3,34 +3,25 @@ package com.biolab;
 import java.util.*;
 
 /**
- * Thread-safe ring-buffer store for world metric samples.
- *
- * <p>Write pattern is single-writer (simulation thread), reads may happen on EDT.
- * Methods are synchronized to guarantee consistent snapshots for the UI.</p>
+ * Thread-safe, unbounded world-stats history storage.
  */
 public class WorldStatsStore {
-    private static final int DEFAULT_CAPACITY = 108_000;
+    private static final int INITIAL_CAPACITY = 1_024;
 
-    private final int capacity;
-    private final long[] timestamps;
-    private final long[] ticks;
-    private final double[][] metricValues;
-
+    private long[] timestamps;
+    private long[] ticks;
+    private double[][] metricValues;
     private int size;
-    private int writeIndex;
 
     public WorldStatsStore() {
-        this(DEFAULT_CAPACITY);
+        this(INITIAL_CAPACITY);
     }
 
-    public WorldStatsStore(int capacity) {
-        if (capacity <= 8) {
-            throw new IllegalArgumentException("capacity must be > 8");
-        }
-        this.capacity = capacity;
-        this.timestamps = new long[capacity];
-        this.ticks = new long[capacity];
-        this.metricValues = new double[WorldMetricId.values().length][capacity];
+    public WorldStatsStore(int initialCapacity) {
+        int cap = Math.max(16, initialCapacity);
+        this.timestamps = new long[cap];
+        this.ticks = new long[cap];
+        this.metricValues = new double[WorldMetricId.values().length][cap];
     }
 
     public synchronized void append(WorldStatsSample sample) {
@@ -38,44 +29,59 @@ public class WorldStatsStore {
         for (WorldMetricId id : WorldMetricId.values()) {
             values[id.ordinal()] = sample.metricValues().getOrDefault(id, 0.0);
         }
-        appendInternal(sample.timestampMillis(), sample.tick(), values);
+        append(sample.timestampMillis(), sample.tick(), values);
     }
 
     public synchronized void append(long timestampMillis, long tick, double[] valuesByOrdinal) {
         if (valuesByOrdinal == null || valuesByOrdinal.length != WorldMetricId.values().length) {
             throw new IllegalArgumentException("valuesByOrdinal must match metric count");
         }
-        appendInternal(timestampMillis, tick, valuesByOrdinal);
-    }
-
-    private void appendInternal(long timestampMillis, long tick, double[] valuesByOrdinal) {
-        timestamps[writeIndex] = timestampMillis;
-        ticks[writeIndex] = tick;
+        ensureCapacity(size + 1);
+        timestamps[size] = timestampMillis;
+        ticks[size] = tick;
         for (int m = 0; m < metricValues.length; m++) {
-            metricValues[m][writeIndex] = valuesByOrdinal[m];
+            metricValues[m][size] = valuesByOrdinal[m];
         }
+        size++;
+    }
 
-        writeIndex = (writeIndex + 1) % capacity;
-        if (size < capacity) {
-            size++;
+    public synchronized void replaceAll(List<WorldStatsSample> samples) {
+        clear();
+        if (samples == null || samples.isEmpty()) {
+            return;
+        }
+        ensureCapacity(samples.size());
+        for (WorldStatsSample sample : samples) {
+            append(sample);
         }
     }
 
-    public synchronized long firstTimestampMillis() {
-        if (size == 0) {
-            return 0;
-        }
-        return timestamps[toPhysicalIndex(0)];
+    public synchronized List<WorldStatsSample> snapshotAll() {
+        LinkedHashSet<WorldMetricId> all = new LinkedHashSet<>();
+        Collections.addAll(all, WorldMetricId.values());
+        return queryRangeByTick(all, firstTick(), lastTick(), Integer.MAX_VALUE);
+    }
+
+    public synchronized void clear() {
+        size = 0;
     }
 
     public synchronized int size() {
         return size;
     }
 
-    public synchronized List<WorldStatsSample> queryRange(
+    public synchronized long firstTick() {
+        return size == 0 ? 0L : ticks[0];
+    }
+
+    public synchronized long lastTick() {
+        return size == 0 ? 0L : ticks[size - 1];
+    }
+
+    public synchronized List<WorldStatsSample> queryRangeByTick(
             Set<WorldMetricId> requestedMetrics,
-            long fromMillis,
-            long toMillis,
+            long fromTick,
+            long toTick,
             int maxPoints
     ) {
         if (size == 0) {
@@ -90,12 +96,10 @@ public class WorldStatsStore {
         }
 
         List<Integer> matching = new ArrayList<>();
-        int logicalEnd = size - 1;
-        for (int logical = 0; logical <= logicalEnd; logical++) {
-            int physical = toPhysicalIndex(logical);
-            long ts = timestamps[physical];
-            if (ts >= fromMillis && ts <= toMillis) {
-                matching.add(physical);
+        for (int index = 0; index < size; index++) {
+            long tick = ticks[index];
+            if (tick >= fromTick && tick <= toTick) {
+                matching.add(index);
             }
         }
         if (matching.isEmpty()) {
@@ -106,14 +110,37 @@ public class WorldStatsStore {
         List<Integer> sampled = downsample(matching, maxPoints, primary);
 
         List<WorldStatsSample> out = new ArrayList<>(sampled.size());
-        for (int physicalIndex : sampled) {
+        for (int index : sampled) {
             EnumMap<WorldMetricId, Double> values = new EnumMap<>(WorldMetricId.class);
             for (WorldMetricId id : metrics) {
-                values.put(id, metricValues[id.ordinal()][physicalIndex]);
+                values.put(id, metricValues[id.ordinal()][index]);
             }
-            out.add(new WorldStatsSample(timestamps[physicalIndex], ticks[physicalIndex], values));
+            out.add(new WorldStatsSample(timestamps[index], ticks[index], values));
         }
         return out;
+    }
+
+    private void ensureCapacity(int required) {
+        if (required <= timestamps.length) {
+            return;
+        }
+        int newCapacity = timestamps.length;
+        while (newCapacity < required) {
+            newCapacity = newCapacity * 2;
+        }
+
+        long[] newTimestamps = new long[newCapacity];
+        long[] newTicks = new long[newCapacity];
+        System.arraycopy(timestamps, 0, newTimestamps, 0, size);
+        System.arraycopy(ticks, 0, newTicks, 0, size);
+        timestamps = newTimestamps;
+        ticks = newTicks;
+
+        double[][] newMetricValues = new double[metricValues.length][newCapacity];
+        for (int m = 0; m < metricValues.length; m++) {
+            System.arraycopy(metricValues[m], 0, newMetricValues[m], 0, size);
+        }
+        metricValues = newMetricValues;
     }
 
     private Set<WorldMetricId> sanitizeMetrics(Set<WorldMetricId> requestedMetrics) {
@@ -145,25 +172,25 @@ public class WorldStatsStore {
         int primaryIndex = primaryMetric.ordinal();
 
         for (int bucket = 0; bucket < buckets; bucket++) {
-            int startLogical = 1 + (int) Math.floor(bucket * bucketSize);
-            int endLogical = 1 + (int) Math.floor((bucket + 1) * bucketSize);
-            endLogical = Math.max(startLogical + 1, Math.min(source.size() - 1, endLogical));
+            int start = 1 + (int) Math.floor(bucket * bucketSize);
+            int end = 1 + (int) Math.floor((bucket + 1) * bucketSize);
+            end = Math.max(start + 1, Math.min(source.size() - 1, end));
 
-            int bestPhysical = source.get(startLogical);
-            double best = metricValues[primaryIndex][bestPhysical];
+            int bestIndex = source.get(start);
+            double best = metricValues[primaryIndex][bestIndex];
             boolean chooseMax = (bucket % 2 == 0);
 
-            for (int i = startLogical + 1; i < endLogical; i++) {
-                int physical = source.get(i);
-                double candidate = metricValues[primaryIndex][physical];
+            for (int i = start + 1; i < end; i++) {
+                int idx = source.get(i);
+                double candidate = metricValues[primaryIndex][idx];
                 if ((chooseMax && candidate > best) || (!chooseMax && candidate < best)) {
                     best = candidate;
-                    bestPhysical = physical;
+                    bestIndex = idx;
                 }
             }
 
-            if (reduced.get(reduced.size() - 1) != bestPhysical) {
-                reduced.add(bestPhysical);
+            if (reduced.get(reduced.size() - 1) != bestIndex) {
+                reduced.add(bestIndex);
             }
         }
 
@@ -171,16 +198,10 @@ public class WorldStatsStore {
         if (reduced.get(reduced.size() - 1) != last) {
             reduced.add(last);
         }
-
         if (reduced.size() > maxPoints) {
             return reduced.subList(0, maxPoints);
         }
         return reduced;
-    }
-
-    private int toPhysicalIndex(int logicalIndex) {
-        int oldest = (writeIndex - size + capacity) % capacity;
-        return (oldest + logicalIndex) % capacity;
     }
 }
 
