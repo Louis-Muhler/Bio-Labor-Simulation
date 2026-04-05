@@ -47,10 +47,10 @@ public final class WorldMetricRegistry {
             new WorldMetricDefinition(WorldMetricId.AVG_AGE, "Avg Age", "cycles",
                     new Color(220, 220, 220), WorldMetricCategory.TRAITS,
                     WorldMetricContext::avgAge),
-            new WorldMetricDefinition(WorldMetricId.AVG_ENERGY_PERCENT, "Avg Energy%", "%",
+            new WorldMetricDefinition(WorldMetricId.AVG_ENERGY_PERCENT, "Avg Energy", "%",
                     new Color(255, 140, 220), WorldMetricCategory.TRAITS,
                     WorldMetricContext::avgEnergyPercent),
-            new WorldMetricDefinition(WorldMetricId.AVG_HEALTH_PERCENT, "Avg Health%", "%",
+            new WorldMetricDefinition(WorldMetricId.AVG_HEALTH_PERCENT, "Avg Health", "%",
                     new Color(255, 120, 200), WorldMetricCategory.TRAITS,
                     WorldMetricContext::avgHealthPercent)
     );
