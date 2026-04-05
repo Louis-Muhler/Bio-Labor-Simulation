@@ -155,19 +155,16 @@ public class WorldStatsPanel extends JPanel {
         left.setOpaque(false);
         left.setPreferredSize(new Dimension(220, 20));
 
-        styleSearchField();
+        configureSearchField();
 
         metricListPanel.setOpaque(false);
         metricListPanel.setLayout(new BoxLayout(metricListPanel, BoxLayout.Y_AXIS));
 
-        JScrollPane scrollPane = new JScrollPane(metricListPanel);
-        scrollPane.setOpaque(false);
-        scrollPane.getViewport().setOpaque(false);
-        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(50, 55, 70), 1));
-        scrollPane.getVerticalScrollBar().setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
+        JScrollPane scrollPane = OverlayControlFactory.createStyledScrollPane(metricListPanel);
+        JPanel metricListContainer = OverlayControlFactory.wrapInInnerFrame(scrollPane);
 
         left.add(searchField, BorderLayout.NORTH);
-        left.add(scrollPane, BorderLayout.CENTER);
+        left.add(metricListContainer, BorderLayout.CENTER);
 
         JPanel topControls = new JPanel(new GridLayout(2, 1, 0, 6));
         topControls.setOpaque(false);
@@ -217,15 +214,9 @@ public class WorldStatsPanel extends JPanel {
         return yAxisPanel;
     }
 
-    private void styleSearchField() {
-        searchField.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        searchField.setForeground(OverlayTheme.ACCENT);
-        searchField.setBackground(OverlayTheme.CONTROL_BG);
-        searchField.setCaretColor(OverlayTheme.ACCENT);
-        searchField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(OverlayTheme.ACCENT_GLOW, 1),
-                BorderFactory.createEmptyBorder(7, 10, 7, 10)
-        ));
+    private void configureSearchField() {
+        OverlayControlFactory.styleTextField(searchField);
+        searchField.setToolTipText("Search metrics...");
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -331,12 +322,10 @@ public class WorldStatsPanel extends JPanel {
 
             defs.sort(Comparator.comparing(WorldMetricDefinition::label));
             for (WorldMetricDefinition def : defs) {
-                JCheckBox cb = new JCheckBox(def.label());
-                cb.setOpaque(false);
-                cb.setForeground(TEXT_COLOR);
-                cb.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-                cb.setFocusPainted(false);
-                cb.setSelected(selectedMetrics.contains(def.id()));
+                JCheckBox cb = OverlayControlFactory.createStyledCheckBox(
+                        def.label(),
+                        selectedMetrics.contains(def.id())
+                );
                 cb.addActionListener(e -> {
                     if (cb.isSelected()) selectedMetrics.add(def.id());
                     else selectedMetrics.remove(def.id());
