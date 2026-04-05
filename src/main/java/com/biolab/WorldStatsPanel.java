@@ -27,6 +27,11 @@ public class WorldStatsPanel extends JPanel {
     private static final int FRAME_MARGIN = 20;
     private static final int FRAME_ARC = 15;
     private static final int LEFT_VIEWER_TO_SPECIMEN_GAP = 12;
+    private static final int LEFT_COL_MIN_WIDTH = 150;
+    private static final int LEFT_COL_MAX_WIDTH = 220;
+    private static final int LIST_SIDE_PADDING = 12;
+    private static final int CHECKBOX_ICON_AND_GAP = 28;
+    private static final int RIGHT_SCROLLBAR_WIDTH = 14;
 
     private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
     private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
@@ -38,6 +43,7 @@ public class WorldStatsPanel extends JPanel {
 
     private final JTextField searchField = new JTextField();
     private final JPanel metricListPanel = new JPanel();
+    private final JPanel leftColumn = new JPanel(new BorderLayout(0, 6));
     private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final JPanel yAxisPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final ChartCanvas chartCanvas = new ChartCanvas();
@@ -162,20 +168,20 @@ public class WorldStatsPanel extends JPanel {
         JPanel content = new JPanel(new BorderLayout(10, 8));
         content.setOpaque(false);
 
-        JPanel left = new JPanel(new BorderLayout(0, 6));
-        left.setOpaque(false);
-        left.setPreferredSize(new Dimension(220, 20));
+        leftColumn.setOpaque(false);
+        leftColumn.setPreferredSize(new Dimension(LEFT_COL_MIN_WIDTH, 20));
 
         configureSearchField();
 
         metricListPanel.setOpaque(false);
         metricListPanel.setLayout(new BoxLayout(metricListPanel, BoxLayout.Y_AXIS));
+        metricListPanel.setBorder(new EmptyBorder(8, LIST_SIDE_PADDING, 8, LIST_SIDE_PADDING));
 
         JScrollPane scrollPane = OverlayControlFactory.createStyledScrollPane(metricListPanel);
         JPanel metricListContainer = OverlayControlFactory.wrapInInnerFrame(scrollPane);
 
-        left.add(searchField, BorderLayout.NORTH);
-        left.add(metricListContainer, BorderLayout.CENTER);
+        leftColumn.add(searchField, BorderLayout.NORTH);
+        leftColumn.add(metricListContainer, BorderLayout.CENTER);
 
         JPanel topControls = new JPanel(new GridLayout(2, 1, 0, 6));
         topControls.setOpaque(false);
@@ -187,7 +193,7 @@ public class WorldStatsPanel extends JPanel {
         right.add(topControls, BorderLayout.NORTH);
         right.add(chartCanvas, BorderLayout.CENTER);
 
-        content.add(left, BorderLayout.WEST);
+        content.add(leftColumn, BorderLayout.WEST);
         content.add(right, BorderLayout.CENTER);
         return content;
     }
@@ -321,6 +327,9 @@ public class WorldStatsPanel extends JPanel {
                         () -> new EnumMap<>(WorldMetricCategory.class),
                         Collectors.toList()));
 
+        int columnWidth = computeDesiredLeftColumnWidth(grouped);
+        leftColumn.setPreferredSize(new Dimension(columnWidth, 20));
+
         for (WorldMetricCategory category : WorldMetricCategory.values()) {
             List<WorldMetricDefinition> defs = grouped.get(category);
             if (defs == null || defs.isEmpty()) continue;
@@ -350,7 +359,25 @@ public class WorldStatsPanel extends JPanel {
 
         metricListPanel.revalidate();
         metricListPanel.repaint();
+        leftColumn.revalidate();
     }
+
+    private int computeDesiredLeftColumnWidth(Map<WorldMetricCategory, List<WorldMetricDefinition>> grouped) {
+        FontMetrics fmMetric = metricListPanel.getFontMetrics(new Font("Segoe UI", Font.PLAIN, 12));
+        FontMetrics fmCategory = metricListPanel.getFontMetrics(new Font("Segoe UI", Font.BOLD, 12));
+        int widest = 0;
+
+        for (Map.Entry<WorldMetricCategory, List<WorldMetricDefinition>> entry : grouped.entrySet()) {
+            widest = Math.max(widest, fmCategory.stringWidth(entry.getKey().label()));
+            for (WorldMetricDefinition def : entry.getValue()) {
+                widest = Math.max(widest, fmMetric.stringWidth(def.label()));
+            }
+        }
+
+        int desired = widest + (LIST_SIDE_PADDING * 2) + CHECKBOX_ICON_AND_GAP + RIGHT_SCROLLBAR_WIDTH;
+        return Math.max(LEFT_COL_MIN_WIDTH, Math.min(desired, LEFT_COL_MAX_WIDTH));
+    }
+
 
     private void refreshChart() {
         if (selectedMetrics.isEmpty()) {
@@ -514,8 +541,10 @@ public class WorldStatsPanel extends JPanel {
     }
 
     private ResizeEdge detectResizeEdge(Point p) {
-        boolean right = p.x >= getWidth() - EDGE_DRAG;
-        boolean bottom = p.y >= getHeight() - EDGE_DRAG;
+        int frameRight = getWidth() - FRAME_MARGIN;
+        int frameBottom = getHeight() - FRAME_MARGIN;
+        boolean right = Math.abs(p.x - frameRight) <= EDGE_DRAG;
+        boolean bottom = Math.abs(p.y - frameBottom) <= EDGE_DRAG;
         if (right && bottom) return ResizeEdge.CORNER;
         if (right) return ResizeEdge.RIGHT;
         if (bottom) return ResizeEdge.BOTTOM;

@@ -12,6 +12,7 @@ import java.awt.*;
 final class OverlayControlFactory {
     private static final Font FIELD_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font CHECKBOX_FONT = new Font("Segoe UI", Font.PLAIN, 12);
+    private static final int SCROLLBAR_THICKNESS = 8;
 
     private OverlayControlFactory() {
     }
@@ -45,10 +46,27 @@ final class OverlayControlFactory {
         scrollPane.setOpaque(false);
         scrollPane.getViewport().setOpaque(false);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+
         JScrollBar vertical = scrollPane.getVerticalScrollBar();
         vertical.setBackground(OverlayTheme.PANEL_BG);
-        vertical.setPreferredSize(new Dimension(8, Integer.MAX_VALUE));
+        Dimension verticalSize = new Dimension(SCROLLBAR_THICKNESS, Integer.MAX_VALUE);
+        vertical.setPreferredSize(verticalSize);
+        vertical.setMinimumSize(verticalSize);
+        vertical.setMaximumSize(verticalSize);
+        vertical.setBorder(BorderFactory.createEmptyBorder());
         vertical.setUI(new RoundedScrollBarUI());
+
+        JScrollBar horizontal = scrollPane.getHorizontalScrollBar();
+        horizontal.setBackground(OverlayTheme.PANEL_BG);
+        Dimension horizontalSize = new Dimension(Integer.MAX_VALUE, SCROLLBAR_THICKNESS);
+        horizontal.setPreferredSize(horizontalSize);
+        horizontal.setMinimumSize(horizontalSize);
+        horizontal.setMaximumSize(horizontalSize);
+        horizontal.setBorder(BorderFactory.createEmptyBorder());
+        horizontal.setUI(new RoundedScrollBarUI());
+
         return scrollPane;
     }
 
@@ -177,13 +195,17 @@ final class OverlayControlFactory {
             Color thumbCol = (isDragging || isThumbRollover()) ? THUMB_ACTIVE : THUMB_IDLE;
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int inset = 2;
-            int x = thumbBounds.x + inset;
+            int x = thumbBounds.x + 2;
             int y = thumbBounds.y + 2;
-            int w = thumbBounds.width - inset * 2;
+            int w = thumbBounds.width - 4;
             int h = thumbBounds.height - 4;
+            if (w <= 0 || h <= 0) {
+                g2.dispose();
+                return;
+            }
+            int arc = Math.max(4, Math.min(w, h));
             g2.setColor(thumbCol);
-            g2.fillRoundRect(x, y, w, h, w, w);
+            g2.fillRoundRect(x, y, w, h, arc, arc);
             g2.dispose();
         }
     }
