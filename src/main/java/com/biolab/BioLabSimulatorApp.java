@@ -35,14 +35,13 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private SimulationLoopController loopController;
     private ModernButton globalSettingsButton;
     private final SessionSaveCoordinator sessionSaveCoordinator;
+    private final UiFlowCoordinator uiFlowCoordinator;
     private final AppUiStateMachine uiStateMachine;
     private ModernButton runtimeSpeedButton;
     private AppUiState stateBeforeSettings = AppUiState.BOOT;
 
     private volatile Microbe selectedMicrobe;
     private SettingsOverlay settingsOverlay;
-    private MainMenuOverlay mainMenuOverlay;
-    private SaveBrowserOverlay saveBrowserOverlay;
 
     private static final Integer SETTINGS_LAYER = JLayeredPane.DRAG_LAYER + 200;
     private boolean pausedForSettings;
@@ -62,6 +61,22 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         saveRepository = new SaveGameRepository();
         sessionSaveCoordinator = new SessionSaveCoordinator(saveRepository, new AsyncSaveService(), LOGGER);
         uiStateMachine = new AppUiStateMachine(AppUiState.BOOT);
+        uiFlowCoordinator = new UiFlowCoordinator(
+                this,
+                saveRepository,
+                this::getContentTopY,
+                () -> globalSettingsButton,
+                this::transitionOrRecover,
+                this::resumeLatestSave,
+                this::createWorldAndStart,
+                this::loadSaveAndStart,
+                () -> {
+                    if (isGameplaySession()) {
+                        uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
+                    }
+                },
+                LOGGER
+        );
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
 
@@ -146,15 +161,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             settingsOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
             settingsOverlay.revalidate();
         }
-        if (mainMenuOverlay != null) {
-            mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
-            mainMenuOverlay.revalidate();
-        }
-        if (saveBrowserOverlay != null) {
-            int topY = getContentTopY();
-            saveBrowserOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
-            saveBrowserOverlay.revalidate();
-        }
+        uiFlowCoordinator.refreshOverlayBounds(getWidth(), getHeight());
     }
 
     private void syncGameplayOverlayVisibilityByState() {
@@ -338,131 +345,15 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void showMainMenu() {
-        if (mainMenuOverlay != null) return;
         if (!transitionOrRecover(AppUiState.PREVIEW_MENU)) return;
-        mainMenuOverlay = new MainMenuOverlay(this::showSaveBrowserFromMenu, this::resumeLatestSave);
-        updateResumeAvailability();
-        getLayeredPane().add(mainMenuOverlay, JLayeredPane.POPUP_LAYER);
-        mainMenuOverlay.setBounds(0, 0, getWidth(), getHeight());
-        mainMenuOverlay.setVisible(true);
-        getLayeredPane().moveToFront(globalSettingsButton);
-        getLayeredPane().repaint();
-    }
-
-    private void showSaveBrowserFromMenu() {
-        removeMainMenu();
-        showSaveBrowser();
-    }
-
-    private void removeMainMenu() {
-        if (mainMenuOverlay == null) return;
-        getLayeredPane().remove(mainMenuOverlay);
-        mainMenuOverlay = null;
-        revalidate();
-        repaint();
-    }
-
-    private void showSaveBrowser() {
-        if (saveBrowserOverlay != null) return;
-        if (!transitionOrRecover(AppUiState.SAVE_BROWSER)) return;
-        // Defensive: avoid stale menu controls being visible under/over the browser.
-        removeMainMenu();
-        saveBrowserOverlay = new SaveBrowserOverlay(new SaveBrowserOverlay.Listener() {
-            @Override
-            public void onCreateRequested(WorldConfig config) {
-                createWorldAndStart(config);
-            }
-
-            @Override
-            public void onPlayRequested(SaveGameMetadata metadata) {
-                loadSaveAndStart(metadata);
-            }
-
-            @Override
-            public void onDeleteRequested(SaveGameMetadata metadata) {
-                deleteSaveAsync(metadata);
-            }
-
-            @Override
-            public void onBackRequested() {
-                removeSaveBrowser(true);
-            }
-        });
-        getLayeredPane().add(saveBrowserOverlay, JLayeredPane.POPUP_LAYER);
-        int topY = getContentTopY();
-        saveBrowserOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
-        getLayeredPane().moveToFront(globalSettingsButton);
-        refreshSaveBrowserAsync();
-        revalidate();
-        repaint();
-    }
-
-    private void refreshSaveBrowserAsync() {
-        if (saveBrowserOverlay == null) return;
-        SwingWorker<java.util.List<SaveGameMetadata>, Void> worker = new SwingWorker<>() {
-            @Override
-            protected java.util.List<SaveGameMetadata> doInBackground() throws Exception {
-                return saveRepository.listSaves();
-            }
-
-            @Override
-            protected void done() {
-                if (saveBrowserOverlay == null) return;
-                try {
-                    saveBrowserOverlay.setSaves(get());
-                    updateResumeAvailability();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
-                            "Failed to list saves: " + ex.getMessage(),
-                            "Save Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        };
-        worker.execute();
-    }
-
-    private void deleteSaveAsync(SaveGameMetadata metadata) {
-        if (metadata == null) return;
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                saveRepository.deleteSave(metadata.saveId());
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    get();
-                    refreshSaveBrowserAsync();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
-                            "Delete failed: " + ex.getMessage(), "Save Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        };
-        worker.execute();
-    }
-
-    private void removeSaveBrowser(boolean reopenMainMenu) {
-        if (saveBrowserOverlay != null) {
-            getLayeredPane().remove(saveBrowserOverlay);
-            saveBrowserOverlay = null;
-        }
-        if (reopenMainMenu) {
-            showMainMenu();
-        } else if (isGameplaySession()) {
-            uiStateMachine.transitionTo(AppUiState.GAMEPLAY);
-        }
-        revalidate();
-        repaint();
+        uiFlowCoordinator.showMainMenu();
     }
 
     private void createWorldAndStart(WorldConfig config) {
         startSimulationSession(config, true);
         transitionOrRecover(AppUiState.GAMEPLAY);
-        removeMainMenu();
-        removeSaveBrowser(false);
+        uiFlowCoordinator.removeMainMenu();
+        uiFlowCoordinator.removeSaveBrowser(false);
 
         try {
             SimulationState state = engine.captureState();
@@ -504,8 +395,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                     engine.loadState(state);
                     sessionSaveCoordinator.markSessionStarted(metadata.mapName(), metadata);
 
-                    removeMainMenu();
-                    removeSaveBrowser(false);
+                    uiFlowCoordinator.removeMainMenu();
+                    uiFlowCoordinator.removeSaveBrowser(false);
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
                             "Load failed: " + ex.getMessage(),
@@ -520,21 +411,6 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private boolean isGameplaySession() {
         return overlayManager != null;
-    }
-
-    private boolean hasResumeTarget() {
-        try {
-            return saveRepository.findMostRecentSave().isPresent();
-        } catch (IOException ex) {
-            LOGGER.log(Level.WARNING, "Failed to query latest save", ex);
-            return false;
-        }
-    }
-
-    private void updateResumeAvailability() {
-        if (mainMenuOverlay != null) {
-            mainMenuOverlay.setResumeEnabled(hasResumeTarget());
-        }
     }
 
     private void returnToMainMenuFromGameplay() {
@@ -566,7 +442,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 gameplayParkedInMenu = false;
                 loadSaveAndStart(latest);
             } else {
-                updateResumeAvailability();
+                uiFlowCoordinator.updateResumeAvailability();
             }
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this,
@@ -588,10 +464,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             return;
         }
         if (settingsOverlay != null) removeSettingsOverlay();
-        if (saveBrowserOverlay != null) {
-            getLayeredPane().remove(saveBrowserOverlay);
-            saveBrowserOverlay = null;
-        }
+        uiFlowCoordinator.clearSaveBrowser();
         if (engine == null || canvas == null) {
             startPreviewSession();
         }
@@ -599,10 +472,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             overlayManager.setGameplayOverlaysVisible(false);
         }
         uiStateMachine.forceState(AppUiState.PREVIEW_MENU);
-        if (mainMenuOverlay == null) {
+        if (!uiFlowCoordinator.isMainMenuVisible()) {
             showMainMenu();
         } else {
-            updateResumeAvailability();
+            uiFlowCoordinator.updateResumeAvailability();
         }
         revalidate();
         repaint();
@@ -669,8 +542,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private boolean isSelectionBlockedByUi() {
-        return mainMenuOverlay != null
-                || saveBrowserOverlay != null
+        return uiFlowCoordinator.hasBlockingOverlay()
                 || settingsOverlay != null
                 || gameplayParkedInMenu;
     }
