@@ -36,15 +36,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private ModernButton globalSettingsButton;
     private final SessionSaveCoordinator sessionSaveCoordinator;
     private final UiFlowCoordinator uiFlowCoordinator;
+    private final SettingsFlowCoordinator settingsFlowCoordinator;
     private final AppUiStateMachine uiStateMachine;
     private ModernButton runtimeSpeedButton;
-    private AppUiState stateBeforeSettings = AppUiState.BOOT;
 
     private volatile Microbe selectedMicrobe;
-    private SettingsOverlay settingsOverlay;
-
-    private static final Integer SETTINGS_LAYER = JLayeredPane.DRAG_LAYER + 200;
-    private boolean pausedForSettings;
     private boolean gameplayParkedInMenu;
 
     private int windowWidth;
@@ -76,6 +72,19 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                     }
                 },
                 LOGGER
+        );
+        settingsFlowCoordinator = new SettingsFlowCoordinator(
+                this,
+                settingsManager,
+                sessionSaveCoordinator,
+                () -> engine,
+                this::isGameplaySession,
+                () -> loopController,
+                this::getContentTopY,
+                uiStateMachine,
+                this::transitionOrRecover,
+                this::returnToMainMenuFromGameplay,
+                this::applySettingsAfterOverlay
         );
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
@@ -156,11 +165,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void refreshOverlayBounds() {
-        if (settingsOverlay != null) {
-            int topY = getContentTopY();
-            settingsOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
-            settingsOverlay.revalidate();
-        }
+        settingsFlowCoordinator.refreshOverlayBounds(getWidth(), getHeight());
         uiFlowCoordinator.refreshOverlayBounds(getWidth(), getHeight());
     }
 
@@ -169,7 +174,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             return;
         }
         AppUiState current = uiStateMachine.current();
-        boolean settingsOverGameplay = current == AppUiState.SETTINGS && stateBeforeSettings == AppUiState.GAMEPLAY;
+        boolean settingsOverGameplay = settingsFlowCoordinator.settingsOverGameplay(current);
         boolean showGameplayOverlays = current == AppUiState.GAMEPLAY || settingsOverGameplay;
         if (showGameplayOverlays) {
             overlayManager.repositionAllOverlays();
@@ -414,13 +419,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void returnToMainMenuFromGameplay() {
-        sessionSaveCoordinator.saveCurrentWorld(engine, true);
-        removeSettingsOverlay();
+        sessionSaveCoordinator.saveCurrentWorld(engine, isGameplaySession());
+        settingsFlowCoordinator.closeForMenuReturn();
         sessionSaveCoordinator.stopAutoSave();
-        if (pausedForSettings && loopController != null) {
-            loopController.resume();
-        }
-        pausedForSettings = false;
         if (loopController != null && runtimeSpeedButton != null) {
             runtimeSpeedButton.setDisplayText(loopController.resetSpeedToDefault());
         }
@@ -463,7 +464,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (uiStateMachine.current() == AppUiState.SHUTDOWN) {
             return;
         }
-        if (settingsOverlay != null) removeSettingsOverlay();
+        settingsFlowCoordinator.clearOverlayAndResume();
         uiFlowCoordinator.clearSaveBrowser();
         if (engine == null || canvas == null) {
             startPreviewSession();
@@ -482,68 +483,19 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void showSettingsOverlay() {
-        if (settingsOverlay != null) return;
-        if (isGameplaySession()) {
-            sessionSaveCoordinator.saveCurrentWorld(engine, true);
-        }
-        stateBeforeSettings = uiStateMachine.current();
-        if (!transitionOrRecover(AppUiState.SETTINGS)) return;
-        pausedForSettings = loopController != null;
-        if (pausedForSettings) {
-            loopController.pause();
-        }
-        Runnable closeAction = this::returnToMainMenuFromGameplay;
-        settingsOverlay = new SettingsOverlay(settingsManager,
-                this::applySettingsAndClose,   // APPLY button
-                this::cancelSettingsAndClose,
-                closeAction);  // CLOSE
-        getLayeredPane().add(settingsOverlay, SETTINGS_LAYER);
-        int topY = getContentTopY();
-        settingsOverlay.setBounds(0, topY, getWidth(), Math.max(0, getHeight() - topY));
-        settingsOverlay.setVisible(true);
-        getLayeredPane().moveToFront(settingsOverlay);
-        settingsOverlay.requestFocusInWindow();
-        revalidate();
-        repaint();
+        settingsFlowCoordinator.showSettingsOverlay();
     }
 
-    /**
-     * Called when the user clicks APPLY – always re-applies display mode.
-     */
-    private void applySettingsAndClose() {
-        removeSettingsOverlay();
-        uiStateMachine.transitionTo(stateBeforeSettings);
+    private void applySettingsAfterOverlay() {
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
         if (loopController != null) loopController.setRenderFps(settingsManager.getSimulationFps());
-        applyDisplayMode();           // always – even if nothing changed
-        if (pausedForSettings && loopController != null) loopController.resume();
-        pausedForSettings = false;
-        revalidate();
-        repaint();
-    }
-
-    /**
-     * Called when the user clicks CANCEL or presses ESC – no display change.
-     */
-    private void cancelSettingsAndClose() {
-        removeSettingsOverlay();
-        uiStateMachine.transitionTo(stateBeforeSettings);
-        if (pausedForSettings && loopController != null) loopController.resume();
-        pausedForSettings = false;
-        revalidate();
-        repaint();
-    }
-
-    private void removeSettingsOverlay() {
-        if (settingsOverlay == null) return;
-        getLayeredPane().remove(settingsOverlay);
-        settingsOverlay = null;
+        applyDisplayMode();
     }
 
     private boolean isSelectionBlockedByUi() {
         return uiFlowCoordinator.hasBlockingOverlay()
-                || settingsOverlay != null
+                || settingsFlowCoordinator.isSettingsVisible()
                 || gameplayParkedInMenu;
     }
 
