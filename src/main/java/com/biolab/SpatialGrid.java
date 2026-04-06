@@ -19,6 +19,11 @@ public class SpatialGrid {
     private final int cols;
     private final int rows;
     private final ArrayList<List<FoodPellet>> cells;
+    /**
+     * Frame stamp per cell to avoid clearing every cell on every rebuild.
+     */
+    private final int[] cellFrameStamp;
+    private int currentFrameStamp = 1;
 
     /**
      * Creates a new spatial grid.
@@ -37,6 +42,7 @@ public class SpatialGrid {
 
         int totalCells = this.cols * this.rows;
         cells = new ArrayList<>(totalCells);
+        cellFrameStamp = new int[totalCells];
         for (int i = 0; i < totalCells; i++) {
             cells.add(new ArrayList<>(4)); // Small initial capacity – most cells will have few pellets
         }
@@ -49,9 +55,11 @@ public class SpatialGrid {
      * @param foodSnapshot immutable snapshot of food pellets for this frame
      */
     public void rebuild(List<FoodPellet> foodSnapshot) {
-        // Clear all cells
-        for (List<FoodPellet> cell : cells) {
-            cell.clear();
+        // Roll frame stamp to invalidate previous frame contents lazily.
+        currentFrameStamp++;
+        if (currentFrameStamp == Integer.MAX_VALUE) {
+            java.util.Arrays.fill(cellFrameStamp, 0);
+            currentFrameStamp = 1;
         }
 
         // Insert each pellet into its cell
@@ -62,7 +70,12 @@ public class SpatialGrid {
             int row = Math.min((int) (food.getY() / cellSize), rows - 1);
             col = Math.max(0, col);
             row = Math.max(0, row);
-            cells.get(row * cols + col).add(food);
+            int idx = row * cols + col;
+            if (cellFrameStamp[idx] != currentFrameStamp) {
+                cellFrameStamp[idx] = currentFrameStamp;
+                cells.get(idx).clear();
+            }
+            cells.get(idx).add(food);
         }
     }
 
@@ -97,7 +110,10 @@ public class SpatialGrid {
 
         for (int row = minRow; row <= maxRow; row++) {
             for (int col = minCol; col <= maxCol; col++) {
-                out.addAll(cells.get(row * cols + col));
+                int idx = row * cols + col;
+                if (cellFrameStamp[idx] == currentFrameStamp) {
+                    out.addAll(cells.get(idx));
+                }
             }
         }
     }

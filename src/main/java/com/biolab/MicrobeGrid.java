@@ -21,6 +21,11 @@ public class MicrobeGrid {
     private final int cols;
     private final int rows;
     private final ArrayList<List<Microbe>> cells;
+    /**
+     * Frame stamp per cell to avoid full-grid clear each rebuild.
+     */
+    private final int[] cellFrameStamp;
+    private int currentFrameStamp = 1;
 
     /**
      * Creates a new microbe spatial grid.
@@ -40,6 +45,7 @@ public class MicrobeGrid {
 
         int totalCells = this.cols * this.rows;
         cells = new ArrayList<>(totalCells);
+        cellFrameStamp = new int[totalCells];
         for (int i = 0; i < totalCells; i++) {
             cells.add(new ArrayList<>(8)); // Slightly larger initial capacity for microbes
         }
@@ -55,9 +61,10 @@ public class MicrobeGrid {
      * @param snapshot immutable snapshot of microbes for this frame
      */
     public void rebuild(List<Microbe> snapshot) {
-        // Clear all cells
-        for (List<Microbe> cell : cells) {
-            cell.clear();
+        currentFrameStamp++;
+        if (currentFrameStamp == Integer.MAX_VALUE) {
+            java.util.Arrays.fill(cellFrameStamp, 0);
+            currentFrameStamp = 1;
         }
 
         // Insert each living microbe into its cell
@@ -68,7 +75,12 @@ public class MicrobeGrid {
             int row = Math.min((int) (microbe.getY() / cellSize), rows - 1);
             col = Math.max(0, col);
             row = Math.max(0, row);
-            cells.get(row * cols + col).add(microbe);
+            int idx = row * cols + col;
+            if (cellFrameStamp[idx] != currentFrameStamp) {
+                cellFrameStamp[idx] = currentFrameStamp;
+                cells.get(idx).clear();
+            }
+            cells.get(idx).add(microbe);
         }
     }
 
@@ -89,7 +101,10 @@ public class MicrobeGrid {
 
         for (int row = minRow; row <= maxRow; row++) {
             for (int col = minCol; col <= maxCol; col++) {
-                out.addAll(cells.get(row * cols + col));
+                int idx = row * cols + col;
+                if (cellFrameStamp[idx] == currentFrameStamp) {
+                    out.addAll(cells.get(idx));
+                }
             }
         }
     }

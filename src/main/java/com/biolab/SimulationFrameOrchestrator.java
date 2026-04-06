@@ -19,6 +19,7 @@ final class SimulationFrameOrchestrator {
     private final MicrobeBehaviorSystem behaviorSystem;
     private final PopulationCommitSystem populationCommitSystem;
     private final Logger logger;
+    private final ArrayList<Future<?>> futureBuffer = new ArrayList<>();
 
     SimulationFrameOrchestrator(ExecutorService executorService,
                                 int threadCount,
@@ -50,17 +51,17 @@ final class SimulationFrameOrchestrator {
         microbeGrid.rebuild(microbeSnapshot);
 
         int chunkSize = Math.max(1, microbeCount / threadCount);
-        List<Future<?>> futures = new ArrayList<>();
+        futureBuffer.clear();
 
         for (int i = 0; i < microbeCount; i += chunkSize) {
             final int start = i;
             final int end = Math.min(i + chunkSize, microbeCount);
             Future<?> future = executorService.submit(() ->
                     behaviorSystem.processChunk(microbeSnapshot, spatialGrid, microbeGrid, start, end, temperature, toxicity));
-            futures.add(future);
+            futureBuffer.add(future);
         }
 
-        for (Future<?> future : futures) {
+        for (Future<?> future : futureBuffer) {
             try {
                 future.get();
             } catch (ExecutionException e) {
