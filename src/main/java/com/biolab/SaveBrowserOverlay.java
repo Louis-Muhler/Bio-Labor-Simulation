@@ -32,7 +32,7 @@ public class SaveBrowserOverlay extends JPanel {
     private final JSpinner maxPop = new JSpinner(new SpinnerNumberModel(20_000, 100, 500_000, 100));
     private final JSpinner temp = new JSpinner(new SpinnerNumberModel(0.3, 0.0, 1.0, 0.01));
     private final JSpinner tox = new JSpinner(new SpinnerNumberModel(0.3, 0.0, 1.0, 0.01));
-    private final JSpinner food = new JSpinner(new SpinnerNumberModel(0.75, 0.0, 1.0, 0.01));
+    private final JSpinner food = new JSpinner(new SpinnerNumberModel(0.75, 0.0, 200.0, 0.25));
     private final JLabel title = new JLabel("SELECT GAME", SwingConstants.CENTER);
 
     private static final Font FORM_LABEL_FONT = new Font("Segoe UI", Font.BOLD, 16);
@@ -204,7 +204,7 @@ public class SaveBrowserOverlay extends JPanel {
         addField(form, "Max Microbes", maxPop);
         addField(form, "Temperature", temp);
         addField(form, "Toxicity", tox);
-        addField(form, "Food Spawn Rate", food);
+        addField(form, "Food Spawn / Tick", food);
 
         JPanel formShell = createInnerFrame();
         formShell.add(form, BorderLayout.CENTER);

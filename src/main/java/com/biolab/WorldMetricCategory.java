@@ -5,9 +5,9 @@ package com.biolab;
  */
 public enum WorldMetricCategory {
     POPULATION("Population"),
-    FOOD("Food"),
     ENVIRONMENT("Environment"),
-    TRAITS("Traits");
+    TRAITS("Traits"),
+    FOOD("Food");
 
     private final String label;
 

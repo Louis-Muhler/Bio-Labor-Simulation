@@ -28,7 +28,11 @@ public record WorldConfig(
         }
         temperature = clamp01(temperature);
         toxicity = clamp01(toxicity);
-        foodSpawnRate = clamp01(foodSpawnRate);
+        foodSpawnRate = clampNonNegative(foodSpawnRate);
+    }
+
+    private static double clampNonNegative(double value) {
+        return Math.max(0.0, value);
     }
 
     private static double clamp01(double value) {

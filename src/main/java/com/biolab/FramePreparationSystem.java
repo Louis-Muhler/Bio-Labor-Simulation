@@ -40,9 +40,22 @@ final class FramePreparationSystem {
 
             ThreadLocalRandom random = ThreadLocalRandom.current();
             int spawnedFoodCount = 0;
-            if (random.nextDouble() < foodSpawnRate && foodPellets.size() < maxFoodPellets) {
-                foodPellets.add(FoodPellet.createRandom(worldWidth, worldHeight));
-                spawnedFoodCount = 1;
+            int freeFoodSlots = Math.max(0, maxFoodPellets - foodPellets.size());
+            if (freeFoodSlots > 0 && foodSpawnRate > 0.0) {
+                double clampedSpawnPerTick = Math.min(foodSpawnRate, freeFoodSlots);
+                int guaranteedSpawns = (int) Math.floor(clampedSpawnPerTick);
+                double fractionalSpawnChance = clampedSpawnPerTick - guaranteedSpawns;
+                spawnedFoodCount = guaranteedSpawns;
+                if (random.nextDouble() < fractionalSpawnChance) {
+                    spawnedFoodCount++;
+                }
+                if (spawnedFoodCount > freeFoodSlots) {
+                    spawnedFoodCount = freeFoodSlots;
+                }
+
+                for (int i = 0; i < spawnedFoodCount; i++) {
+                    foodPellets.add(FoodPellet.createRandom(worldWidth, worldHeight));
+                }
             }
 
             return new FrameBatch(new ArrayList<>(microbes), new ArrayList<>(foodPellets), spawnedFoodCount);

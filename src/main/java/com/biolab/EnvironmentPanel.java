@@ -4,12 +4,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.Locale;
 
 /**
- * Floating overlay panel that exposes three environment sliders to the user.
+ * Floating overlay panel that exposes two environment sliders plus one food-per-tick control.
  *
- * <p>All three parameters – Temperature, Toxicity, and Food Spawn Rate – map
- * directly to normalised [0.0, 1.0] values in the {@link SimulationEngine}.
+ * <p>Temperature and Toxicity map to normalised [0.0, 1.0] values.
+ * Food spawn is configured as a direct amount per tick (fractional allowed).
  * Slider positions are stored as {@link Rectangle} instances so mouse hit-tests
  * can be performed without re-computing layout on every event.</p>
  *
@@ -43,28 +44,30 @@ public class EnvironmentPanel extends JPanel {
     private static final BasicStroke STROKE_1_5 = new BasicStroke(1.5f);
     private static final BasicStroke STROKE_3 = new BasicStroke(3);
 
-    // ── Per-slider colours (order: Temperature, Toxicity, Food Spawn Rate) ─
+    // ── Per-slider colours (order: Temperature, Toxicity) ─
     private static final Color[] SLIDER_COLORS = {
             new Color(255, 100, 100),
-            new Color(100, 255, 100),
-            new Color(100, 150, 255)
+            new Color(100, 255, 100)
     };
     /**
      * Semi-transparent glow drawn 1 px outside the filled bar.
      */
     private static final Color[] SLIDER_GLOW_COLORS = {
             new Color(255, 100, 100, 60),
-            new Color(100, 255, 100, 60),
-            new Color(100, 150, 255, 60)
+            new Color(100, 255, 100, 60)
     };
     /** Glow ring drawn around the slider thumb. */
     private static final Color[] SLIDER_THUMB_GLOW_COLORS = {
             new Color(255, 100, 100, 80),
-            new Color(100, 255, 100, 80),
-            new Color(100, 150, 255, 80)
+            new Color(100, 255, 100, 80)
     };
 
-    private static final String[] SLIDER_LABELS = {"Temperature", "Toxicity", "Food Spawn Rate"};
+    private static final String[] SLIDER_LABELS = {"Temperature", "Toxicity"};
+    private static final String FOOD_LABEL = "Food Spawn / Tick";
+    private static final double FOOD_STEP_PER_CLICK = 0.25;
+    private static final double MAX_FOOD_SPAWN_PER_TICK = 200.0;
+    private static final int FOOD_BUTTON_W = 34;
+    private static final int FOOD_BUTTON_H = 22;
 
     // ── Slider layout constants ───────────────────────────────────────────
     private static final int BAR_HEIGHT = 12;
@@ -78,10 +81,12 @@ public class EnvironmentPanel extends JPanel {
     private static final int SLIDER_CORNER_RADIUS = 6;
 
     /**
-     * Bounding rectangles of the three slider bars, updated each paint cycle.
+     * Bounding rectangles of the two slider bars, updated each paint cycle.
      * Used for mouse hit-testing on press and drag events.
      */
-    private final Rectangle[] sliderBars = new Rectangle[3];
+    private final Rectangle[] sliderBars = new Rectangle[2];
+    private final Rectangle foodDecreaseButton = new Rectangle();
+    private final Rectangle foodIncreaseButton = new Rectangle();
 
     /**
      * Index of the slider currently being dragged, or -1 when idle.
@@ -101,14 +106,14 @@ public class EnvironmentPanel extends JPanel {
         setBackground(new Color(0, 0, 0, 0));
         setOpaque(false);
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < sliderBars.length; i++) {
             sliderBars[i] = new Rectangle();
         }
 
         MouseAdapter mouseHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                for (int i = 0; i < 3; i++) {
+                for (int i = 0; i < sliderBars.length; i++) {
                     // Expand the hit area by 5 px vertically for easier interaction
                     Rectangle hitArea = new Rectangle(
                         sliderBars[i].x, sliderBars[i].y - 5,
@@ -118,6 +123,13 @@ public class EnvironmentPanel extends JPanel {
                         draggingSlider = i;
                         updateSliderValue(i, e.getX());
                         break;
+                    }
+                }
+                if (draggingSlider < 0) {
+                    if (foodDecreaseButton.contains(e.getPoint())) {
+                        adjustFoodSpawnPerTick(-FOOD_STEP_PER_CLICK);
+                    } else if (foodIncreaseButton.contains(e.getPoint())) {
+                        adjustFoodSpawnPerTick(FOOD_STEP_PER_CLICK);
                     }
                 }
             }
@@ -155,9 +167,18 @@ public class EnvironmentPanel extends JPanel {
         switch (sliderIndex) {
             case 0 -> engine.enqueueCommand(SimulationCommand.setTemperature(value));
             case 1 -> engine.enqueueCommand(SimulationCommand.setToxicity(value));
-            case 2 -> engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(value));
             default -> {}
         }
+        repaint();
+    }
+
+    private static String formatFoodSpawnPerTick(double value) {
+        return String.format(Locale.ROOT, "%.2f / tick", value);
+    }
+
+    private void adjustFoodSpawnPerTick(double delta) {
+        double next = Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, engine.getFoodSpawnRate() + delta));
+        engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(next));
         repaint();
     }
 
@@ -166,7 +187,6 @@ public class EnvironmentPanel extends JPanel {
         return switch (index) {
             case 0 -> engine.getEnvironment().getTemperature();
             case 1 -> engine.getEnvironment().getToxicity();
-            case 2 -> engine.getFoodSpawnRate();
             default -> 0;
         };
     }
@@ -215,9 +235,10 @@ public class EnvironmentPanel extends JPanel {
             g2d.fillRect(x, y, contentWidth, 2);
             y += 14;
 
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < sliderBars.length; i++) {
                 y = drawSliderSection(g2d, x, y, contentWidth, i);
             }
+            drawFoodSpawnSection(g2d, x, y, contentWidth);
         } finally {
             g2d.dispose();
         }
@@ -287,5 +308,58 @@ public class EnvironmentPanel extends JPanel {
                 (THUMB_RADIUS - 1) * 2, (THUMB_RADIUS - 1) * 2);
 
         return y + BAR_HEIGHT + SLIDER_BOTTOM_SPACING;
+    }
+
+    private void drawFoodSpawnSection(Graphics2D g2d, int x, int y, int contentWidth) {
+        Color color = new Color(100, 150, 255);
+        double value = engine.getFoodSpawnRate();
+
+        g2d.setFont(LABEL_FONT);
+        g2d.setColor(color);
+        int[] xPts = {x, x + TRIANGLE_WIDTH, x};
+        int[] yPts = {y, y + TRIANGLE_HEIGHT / 2, y + TRIANGLE_HEIGHT};
+        g2d.fillPolygon(xPts, yPts, 3);
+        g2d.drawString(FOOD_LABEL, x + LABEL_OFFSET_X, y + 10);
+        y += LABEL_SPACING_Y;
+
+        g2d.setFont(VALUE_FONT);
+        g2d.setColor(ACCENT_COLOR);
+        g2d.drawString(formatFoodSpawnPerTick(value), x, y + 12);
+        y += VALUE_SPACING_Y;
+
+        int centerY = y + FOOD_BUTTON_H / 2;
+        foodDecreaseButton.setBounds(x, y, FOOD_BUTTON_W, FOOD_BUTTON_H);
+        foodIncreaseButton.setBounds(x + contentWidth - FOOD_BUTTON_W, y, FOOD_BUTTON_W, FOOD_BUTTON_H);
+
+        drawFoodAdjustButton(g2d, foodDecreaseButton, color, "-");
+        drawFoodAdjustButton(g2d, foodIncreaseButton, color, "+");
+
+        g2d.setColor(BAR_BG_COLOR);
+        int valueBoxX = foodDecreaseButton.x + foodDecreaseButton.width + 8;
+        int valueBoxW = Math.max(40, foodIncreaseButton.x - valueBoxX - 8);
+        g2d.fillRoundRect(valueBoxX, y, valueBoxW, FOOD_BUTTON_H, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
+        g2d.setColor(color);
+        g2d.drawRoundRect(valueBoxX, y, valueBoxW, FOOD_BUTTON_H, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
+
+        g2d.setColor(ACCENT_COLOR);
+        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
+        String compact = String.format(Locale.ROOT, "%.2f", value);
+        FontMetrics fm = g2d.getFontMetrics();
+        int tx = valueBoxX + (valueBoxW - fm.stringWidth(compact)) / 2;
+        int ty = centerY + (fm.getAscent() - fm.getDescent()) / 2;
+        g2d.drawString(compact, tx, ty);
+    }
+
+    private void drawFoodAdjustButton(Graphics2D g2d, Rectangle rect, Color color, String symbol) {
+        g2d.setColor(BAR_BG_COLOR);
+        g2d.fillRoundRect(rect.x, rect.y, rect.width, rect.height, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
+        g2d.setColor(color);
+        g2d.drawRoundRect(rect.x, rect.y, rect.width, rect.height, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
+
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        FontMetrics fm = g2d.getFontMetrics();
+        int tx = rect.x + (rect.width - fm.stringWidth(symbol)) / 2;
+        int ty = rect.y + (rect.height + fm.getAscent() - fm.getDescent()) / 2 - 1;
+        g2d.drawString(symbol, tx, ty);
     }
 }

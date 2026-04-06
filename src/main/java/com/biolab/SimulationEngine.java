@@ -48,6 +48,10 @@ public class SimulationEngine implements SimulationRuntime {
     private final SimulationEngineContext context;
     private final WorldStatsStore worldStatsStore;
     private final WorldStatsSampleAppender worldStatsAppender;
+    /**
+     * Desired average food spawn amount per simulation tick.
+     * Fractional values are supported (e.g. 0.75 means 3 pellets every 4 ticks on average).
+     */
     private volatile double foodSpawnRate = 0.75;
     private long simulationTick;
     private double foodSpawnedPerSecond;
@@ -145,25 +149,8 @@ public class SimulationEngine implements SimulationRuntime {
         return debugModeService.isEnabled();
     }
 
-    /**
-     * Main simulation update called every frame.
-     * Uses thread pool to process microbes concurrently.
-     * This method is always called from the SimulationLoop thread (single writer).
-     */
-    public void update() {
-        SimulationFrameResult frameResult = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
-        renderSnapshot = frameResult.snapshot();
-        simulationTick++;
-        spawnedSinceLastSample += Math.max(0, frameResult.spawnedFoodCount());
-        consumedSinceLastSample += Math.max(0, frameResult.consumedFoodCount());
-
-        if (simulationTick > 0 && simulationTick % 30L == 0L) {
-            foodSpawnedPerSecond = spawnedSinceLastSample;
-            foodConsumedPerSecond = consumedSinceLastSample;
-            worldStatsAppender.submit(buildWorldStatsSample(System.currentTimeMillis()));
-            spawnedSinceLastSample = 0;
-            consumedSinceLastSample = 0;
-        }
+    private static double perTickAverage(int countOverSampleWindow) {
+        return Math.max(0.0, countOverSampleWindow / 30.0);
     }
 
     /**
@@ -275,10 +262,25 @@ public class SimulationEngine implements SimulationRuntime {
     }
 
     /**
-     * Returns the current food spawn rate probability.
+     * Main simulation update called every frame.
+     * Uses thread pool to process microbes concurrently.
+     * This method is always called from the SimulationLoop thread (single writer).
      */
-    public double getFoodSpawnRate() {
-        return foodSpawnRate;
+    public void update() {
+        SimulationFrameResult frameResult = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
+        renderSnapshot = frameResult.snapshot();
+        simulationTick++;
+        spawnedSinceLastSample += Math.max(0, frameResult.spawnedFoodCount());
+        consumedSinceLastSample += Math.max(0, frameResult.consumedFoodCount());
+
+        if (simulationTick > 0 && simulationTick % 30L == 0L) {
+            // Keep variable names for binary compatibility; values are now stored as averages per tick.
+            foodSpawnedPerSecond = perTickAverage(spawnedSinceLastSample);
+            foodConsumedPerSecond = perTickAverage(consumedSinceLastSample);
+            worldStatsAppender.submit(buildWorldStatsSample(System.currentTimeMillis()));
+            spawnedSinceLastSample = 0;
+            consumedSinceLastSample = 0;
+        }
     }
 
     @Override
@@ -287,11 +289,10 @@ public class SimulationEngine implements SimulationRuntime {
     }
 
     /**
-     * Sets the food spawn probability per frame, clamped to [0.0, 1.0].
-     * May be called from any thread (volatile write).
+     * Returns the configured food spawn amount per tick (fractional allowed).
      */
-    public void setFoodSpawnRate(double rate) {
-        this.foodSpawnRate = Math.max(0.0, Math.min(1.0, rate));
+    public double getFoodSpawnRate() {
+        return foodSpawnRate;
     }
 
     private WorldStatsSample buildWorldStatsSample(long timestampMillis) {
@@ -371,6 +372,14 @@ public class SimulationEngine implements SimulationRuntime {
         WorldStatsSample sample = last.get(0);
         foodSpawnedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_SPAWNED_PER_SEC, 0.0);
         foodConsumedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_CONSUMED_PER_SEC, 0.0);
+    }
+
+    /**
+     * Sets the target food spawn amount per tick.
+     * May be called from any thread (volatile write).
+     */
+    public void setFoodSpawnRate(double rate) {
+        this.foodSpawnRate = Math.max(0.0, rate);
     }
 
     /**
