@@ -9,6 +9,8 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.text.NumberFormatter;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
@@ -51,13 +53,14 @@ public class WorldStatsPanel extends JPanel {
     private final JPanel leftColumn = new JPanel(new BorderLayout(0, 6));
     private final JPanel presetPanel = new JPanel();
     private final JPanel presetMainRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-    private final JPanel customRangeInlineRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel customRangeInlineRow = new JPanel(new GridBagLayout());
     private final JComboBox<WorldStatsRangePreset> rangePresetDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsRangePreset.values());
     private final ModernButton customRangeSettingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
     private final JSpinner customStartInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     private final JComboBox<WorldStatsTimeUnit> customStartUnitDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsTimeUnit.values());
     private final JSpinner customEndInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     private final JComboBox<WorldStatsTimeUnit> customEndUnitDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsTimeUnit.values());
+    private final JLabel customRangeSeparator = new JLabel("-");
     private final JPanel yAxisPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final ChartCanvas chartCanvas = new ChartCanvas();
 
@@ -80,6 +83,7 @@ public class WorldStatsPanel extends JPanel {
     private long currentRangeToTick;
     private boolean suppressCustomRangeEvents;
     private boolean customRangeInlineVisible;
+    private boolean customRangeLayoutListenerInstalled;
 
     private List<WorldStatsSample> currentSamples = List.of();
     private List<WorldMetricDefinition> currentDefinitions = List.of();
@@ -127,6 +131,7 @@ public class WorldStatsPanel extends JPanel {
         customRangeInlineRow.setOpaque(false);
 
         Dimension controlSize = new Dimension(computeRangeDropdownWidth(), 30);
+        Dimension unitControlSize = new Dimension(computeUnitDropdownWidth(), 30);
         rangePresetDropdown.setPreferredSize(controlSize);
         rangePresetDropdown.setSelectedItem(activePreset);
         rangePresetDropdown.setRenderer(new DefaultListCellRenderer() {
@@ -149,14 +154,14 @@ public class WorldStatsPanel extends JPanel {
         });
         rangePresetDropdown.addActionListener(e -> onPresetSelectionChanged());
 
-        customRangeSettingsButton.setPreferredSize(controlSize);
+        customRangeSettingsButton.setPreferredSize(new Dimension(30, 30));
         customRangeSettingsButton.setFont(new Font("Segoe UI", Font.BOLD, 11));
         customRangeSettingsButton.addActionListener(e -> toggleCustomRangeInlineRowFromButton());
 
         customStartInput.setPreferredSize(controlSize);
         customEndInput.setPreferredSize(controlSize);
-        customStartUnitDropdown.setPreferredSize(controlSize);
-        customEndUnitDropdown.setPreferredSize(controlSize);
+        customStartUnitDropdown.setPreferredSize(unitControlSize);
+        customEndUnitDropdown.setPreferredSize(unitControlSize);
         OverlayControlFactory.styleSpinner(customStartInput);
         OverlayControlFactory.styleSpinner(customEndInput);
         configureNumericSpinnerInput(customStartInput);
@@ -189,14 +194,7 @@ public class WorldStatsPanel extends JPanel {
         customStartUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
         customEndUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
 
-        customRangeInlineRow.removeAll();
-        customRangeInlineRow.add(customStartInput);
-        customRangeInlineRow.add(customStartUnitDropdown);
-        JLabel separator = new JLabel("-");
-        separator.setForeground(ACCENT_COLOR);
-        customRangeInlineRow.add(separator);
-        customRangeInlineRow.add(customEndInput);
-        customRangeInlineRow.add(customEndUnitDropdown);
+        customRangeSeparator.setForeground(ACCENT_COLOR);
 
         presetMainRow.removeAll();
         presetMainRow.add(rangePresetDropdown);
@@ -205,10 +203,73 @@ public class WorldStatsPanel extends JPanel {
         presetPanel.removeAll();
         presetPanel.add(presetMainRow);
         presetPanel.add(customRangeInlineRow);
+        if (!customRangeLayoutListenerInstalled) {
+            presetPanel.addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    updateCustomRangeInlineLayout();
+                }
+            });
+            customRangeLayoutListenerInstalled = true;
+        }
+        updateCustomRangeInlineLayout();
         setCustomRangeInlineVisible(false);
         syncCustomRangeSettingsButtonState();
         updateCurrentRangeLabel(0L, 0L);
         return presetPanel;
+    }
+
+    private int computeUnitDropdownWidth() {
+        FontMetrics fm = customStartUnitDropdown.getFontMetrics(customStartUnitDropdown.getFont());
+        int widest = fm.stringWidth(WorldStatsTimeUnit.HOUR.label());
+        return widest + 36;
+    }
+
+    private void updateCustomRangeInlineLayout() {
+        customRangeInlineRow.removeAll();
+
+        int gap = 6;
+        int startWidth = customStartInput.getPreferredSize().width;
+        int startUnitWidth = customStartUnitDropdown.getPreferredSize().width;
+        int endWidth = customEndInput.getPreferredSize().width;
+        int endUnitWidth = customEndUnitDropdown.getPreferredSize().width;
+        int separatorWidth = customRangeSeparator.getPreferredSize().width;
+
+        int neededSingleRow = startWidth + gap + startUnitWidth + gap + separatorWidth + gap + endWidth + gap + endUnitWidth;
+        int available = Math.max(0, presetPanel.getWidth() - 2);
+        boolean wrap = available > 0 && neededSingleRow > available;
+
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, 0, 0, gap);
+        c.gridy = 0;
+
+        c.gridx = 0;
+        customRangeInlineRow.add(customStartInput, c);
+        c.gridx = 1;
+        customRangeInlineRow.add(customStartUnitDropdown, c);
+        c.gridx = 2;
+        customRangeInlineRow.add(customRangeSeparator, c);
+
+        if (wrap) {
+            c.gridy = 1;
+            c.gridx = 0;
+            c.insets = new Insets(4, 0, 0, gap);
+            customRangeInlineRow.add(customEndInput, c);
+            c.gridx = 1;
+            c.insets = new Insets(4, 0, 0, 0);
+            customRangeInlineRow.add(customEndUnitDropdown, c);
+        } else {
+            c.gridy = 0;
+            c.gridx = 3;
+            customRangeInlineRow.add(customEndInput, c);
+            c.gridx = 4;
+            c.insets = new Insets(0, 0, 0, 0);
+            customRangeInlineRow.add(customEndUnitDropdown, c);
+        }
+
+        customRangeInlineRow.revalidate();
+        customRangeInlineRow.repaint();
     }
 
     public WorldStatsPanel(SimulationRuntime runtime) {
@@ -233,6 +294,7 @@ public class WorldStatsPanel extends JPanel {
         formatter.setAllowsInvalid(false);
         formatter.setCommitsOnValidEdit(true);
         textField.setFormatterFactory(new DefaultFormatterFactory(formatter));
+        textField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
         textField.addActionListener(e -> {
             try {
@@ -345,7 +407,10 @@ public class WorldStatsPanel extends JPanel {
         JPanel topControls = new JPanel(new GridLayout(2, 1, 0, 6));
         topControls.setOpaque(false);
         topControls.add(buildPresetPanel());
-        topControls.add(buildYAxisPanel());
+        JPanel yAxisSpacer = new JPanel();
+        yAxisSpacer.setOpaque(false);
+        yAxisSpacer.setPreferredSize(new Dimension(1, 1));
+        topControls.add(yAxisSpacer);
 
         JPanel right = new JPanel(new BorderLayout(0, 8));
         right.setOpaque(false);
@@ -448,6 +513,9 @@ public class WorldStatsPanel extends JPanel {
     private void setCustomRangeInlineVisible(boolean visible) {
         customRangeInlineVisible = visible && activePreset == WorldStatsRangePreset.CUSTOM;
         customRangeInlineRow.setVisible(customRangeInlineVisible);
+        if (customRangeInlineVisible) {
+            updateCustomRangeInlineLayout();
+        }
         presetPanel.revalidate();
         presetPanel.repaint();
         syncCustomRangeSettingsButtonState();
