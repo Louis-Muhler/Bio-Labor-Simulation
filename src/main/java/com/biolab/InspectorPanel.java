@@ -6,9 +6,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.TreeSet;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Inspector panel that displays live data for a selected {@link Microbe}.
@@ -33,6 +34,8 @@ import java.util.Objects;
  * small, the border fills the available space and the content canvas scrolls.</p>
  */
 public class InspectorPanel extends JPanel {
+
+    static final int MAX_VISIBLE_LINEAGE_POINTS = 10;
 
     // ── Frame geometry ────────────────────────────────────────────────────
     /**
@@ -125,6 +128,74 @@ public class InspectorPanel extends JPanel {
         contentCanvas.recalculatePreferredSize();
         scrollPane.revalidate();
         repaint();
+    }
+
+    static List<Integer> selectEvenlyDistributedIndices(int totalPoints, int maxVisiblePoints) {
+        if (totalPoints <= 0 || maxVisiblePoints <= 0) {
+            return List.of();
+        }
+
+        int targetCount = Math.min(totalPoints, maxVisiblePoints);
+        if (targetCount == totalPoints) {
+            List<Integer> all = new ArrayList<>(totalPoints);
+            for (int i = 0; i < totalPoints; i++) {
+                all.add(i);
+            }
+            return all;
+        }
+
+        TreeSet<Integer> selected = new TreeSet<>();
+        selected.add(0);
+        selected.add(totalPoints - 1);
+
+        for (int slot = 1; slot < targetCount - 1; slot++) {
+            double normalized = slot / (double) (targetCount - 1);
+            int idx = (int) Math.round(normalized * (totalPoints - 1));
+            selected.add(Math.max(0, Math.min(totalPoints - 1, idx)));
+        }
+
+        while (selected.size() < targetCount) {
+            Integer prev = null;
+            int bestLeft = -1;
+            int bestGap = 0;
+            for (Integer current : selected) {
+                if (prev != null) {
+                    int gap = current - prev;
+                    if (gap > bestGap) {
+                        bestGap = gap;
+                        bestLeft = prev;
+                    }
+                }
+                prev = current;
+            }
+            if (bestGap <= 1 || bestLeft < 0) {
+                break;
+            }
+            selected.add(bestLeft + bestGap / 2);
+        }
+
+        if (selected.size() < targetCount) {
+            for (int i = 0; i < totalPoints && selected.size() < targetCount; i++) {
+                selected.add(i);
+            }
+        }
+        return new ArrayList<>(selected);
+    }
+
+    static List<Integer> computeUniformSlotXPositions(int chartX, int chartW, int pointCount) {
+        if (pointCount <= 0) {
+            return List.of();
+        }
+        if (pointCount == 1) {
+            return List.of(chartX + chartW / 2);
+        }
+
+        List<Integer> xs = new ArrayList<>(pointCount);
+        for (int i = 0; i < pointCount; i++) {
+            int x = chartX + (int) Math.round(i * (double) chartW / (pointCount - 1));
+            xs.add(x);
+        }
+        return xs;
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -388,55 +459,38 @@ public class InspectorPanel extends JPanel {
             }
             g2.drawRect(chartX, chartY, chartW, CHART_HEIGHT);
 
-            List<DataPoint> heat = new ArrayList<>();
-            List<DataPoint> toxin = new ArrayList<>();
-            List<DataPoint> speed = new ArrayList<>();
-            List<DataPoint> diet = new ArrayList<>();
+            List<LineagePoint> fullTimeline = buildLineageTimeline(ancestry, microbe);
+            List<LineagePoint> visibleTimeline = downsampleForChart(fullTimeline);
 
-            for (AncestorSnapshot a : ancestry) {
-                heat.add(new DataPoint(a.generation(), a.heatResistance()));
-                toxin.add(new DataPoint(a.generation(), a.toxinResistance()));
-                speed.add(new DataPoint(a.generation(), a.speed()));
-                diet.add(new DataPoint(a.generation(), a.diet()));
+            List<ChartPoint> heat = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    LineagePoint::heatResistance);
+            List<ChartPoint> toxin = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    LineagePoint::toxinResistance);
+            List<ChartPoint> speed = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    LineagePoint::speed);
+            List<ChartPoint> diet = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    LineagePoint::diet);
+
+            for (int i = 0; i < visibleTimeline.size() && i < heat.size(); i++) {
+                LineagePoint point = visibleTimeline.get(i);
+                ChartPoint heatPoint = heat.get(i);
+                chartHitboxes.add(new ChartHitbox(
+                        heatPoint.screenX(),
+                        heatPoint.screenY(),
+                        chartY,
+                        chartY + CHART_HEIGHT,
+                        point.generation(),
+                        point.heatResistance(),
+                        point.toxinResistance(),
+                        point.speed(),
+                        point.diet()
+                ));
             }
 
-            int currentGen = microbe.getAbsoluteGeneration();
-            heat.add(new DataPoint(currentGen, microbe.getHeatResistance()));
-            toxin.add(new DataPoint(currentGen, microbe.getToxinResistance()));
-            speed.add(new DataPoint(currentGen, microbe.getSpeed()));
-            diet.add(new DataPoint(currentGen, microbe.getDiet()));
-
-            heat.sort(Comparator.comparingInt(DataPoint::generation));
-            toxin.sort(Comparator.comparingInt(DataPoint::generation));
-            speed.sort(Comparator.comparingInt(DataPoint::generation));
-            diet.sort(Comparator.comparingInt(DataPoint::generation));
-
-            // Build hitboxes: all series share the same generation → same X position.
-            // Y is taken from the heat series dot position as a consistent representative.
-            if (!heat.isEmpty()) {
-                int minGen = heat.get(0).generation();
-                int maxGen = heat.get(heat.size() - 1).generation();
-                int range = Math.max(1, maxGen - minGen);
-                for (int i = 0; i < heat.size(); i++) {
-                    int gen = heat.get(i).generation();
-                    int sx = chartX + (int) (chartW * (double) (gen - minGen) / range);
-                    int sy = chartY + CHART_HEIGHT - (int) (heat.get(i).value() * CHART_HEIGHT);
-                    chartHitboxes.add(new ChartHitbox(
-                            sx, sy,
-                            chartY, chartY + CHART_HEIGHT,   // vertical bounds for slice detection
-                            gen,
-                            heat.get(i).value(),
-                            toxin.get(i).value(),
-                            speed.get(i).value(),
-                            diet.get(i).value()
-                    ));
-                }
-            }
-
-            drawLineChart(g2, heat,  chartX, chartY, chartW, CHART_HEIGHT, CHART_HEAT);
-            drawLineChart(g2, toxin, chartX, chartY, chartW, CHART_HEIGHT, CHART_TOXIN);
-            drawLineChart(g2, speed, chartX, chartY, chartW, CHART_HEIGHT, CHART_SPEED);
-            drawLineChart(g2, diet,  chartX, chartY, chartW, CHART_HEIGHT, CHART_DIET);
+            drawLineChart(g2, heat, CHART_HEAT);
+            drawLineChart(g2, toxin, CHART_TOXIN);
+            drawLineChart(g2, speed, CHART_SPEED);
+            drawLineChart(g2, diet, CHART_DIET);
 
             y = chartY + CHART_HEIGHT + 15;
             g2.setFont(MONO_FONT);
@@ -494,19 +548,60 @@ public class InspectorPanel extends JPanel {
             return h;
         }
 
-        private void drawLineChart(Graphics2D g2, List<DataPoint> data,
-                                   int x, int y, int w, int h, Color color) {
-            if (data.size() < 2) return;
+        private List<LineagePoint> buildLineageTimeline(List<AncestorSnapshot> ancestry, Microbe microbe) {
+            List<LineagePoint> timeline = new ArrayList<>(ancestry.size() + 1);
+            for (AncestorSnapshot a : ancestry) {
+                timeline.add(new LineagePoint(
+                        a.generation(),
+                        a.heatResistance(),
+                        a.toxinResistance(),
+                        a.speed(),
+                        a.diet()
+                ));
+            }
+            timeline.add(new LineagePoint(
+                    microbe.getAbsoluteGeneration(),
+                    microbe.getHeatResistance(),
+                    microbe.getToxinResistance(),
+                    microbe.getSpeed(),
+                    microbe.getDiet()
+            ));
+            return timeline;
+        }
 
-            // X axis is proportional to the absolute generation timeline
-            int minGen = data.get(0).generation();
-            int maxGen = data.get(data.size() - 1).generation();
-            int range = Math.max(1, maxGen - minGen);
+        private List<LineagePoint> downsampleForChart(List<LineagePoint> timeline) {
+            List<Integer> visibleIndices = selectEvenlyDistributedIndices(
+                    timeline.size(),
+                    MAX_VISIBLE_LINEAGE_POINTS
+            );
+            List<LineagePoint> sampled = new ArrayList<>(visibleIndices.size());
+            for (Integer idx : visibleIndices) {
+                sampled.add(timeline.get(idx));
+            }
+            return sampled;
+        }
+
+        private List<ChartPoint> buildChartPoints(List<LineagePoint> points,
+                                                  int chartX, int chartY, int chartW, int chartH,
+                                                  ToDoubleFunction<LineagePoint> valueSelector) {
+            List<Integer> slotXs = computeUniformSlotXPositions(chartX, chartW, points.size());
+            List<ChartPoint> chartPoints = new ArrayList<>(points.size());
+            for (int i = 0; i < points.size(); i++) {
+                int x = slotXs.get(i);
+                double value = valueSelector.applyAsDouble(points.get(i));
+                int y = chartY + chartH - (int) Math.round(value * chartH);
+                chartPoints.add(new ChartPoint(x, y));
+            }
+            return chartPoints;
+        }
+
+        private void drawLineChart(Graphics2D g2, List<ChartPoint> data, Color color) {
+            if (data.size() < 2) return;
 
             Path2D path = new Path2D.Double();
             for (int i = 0; i < data.size(); i++) {
-                double px = x + w * (double) (data.get(i).generation() - minGen) / range;
-                double py = y + h - (data.get(i).value() * h);
+                double px = data.get(i).screenX();
+                double py = data.get(i).screenY();
                 if (i == 0) path.moveTo(px, py);
                 else path.lineTo(px, py);
             }
@@ -524,8 +619,8 @@ public class InspectorPanel extends JPanel {
             g2.draw(path);
 
             for (int i = 0; i < data.size(); i++) {
-                double px = x + w * (double) (data.get(i).generation() - minGen) / range;
-                double py = y + h - (data.get(i).value() * h);
+                double px = data.get(i).screenX();
+                double py = data.get(i).screenY();
 
                 g2.setComposite(DOT_GLOW_COMPOSITE);
                 g2.setColor(color);
@@ -698,7 +793,14 @@ public class InspectorPanel extends JPanel {
             );
         }
 
-        private record DataPoint(int generation, double value) {
+        private record LineagePoint(int generation,
+                                    double heatResistance,
+                                    double toxinResistance,
+                                    double speed,
+                                    double diet) {
+        }
+
+        private record ChartPoint(int screenX, int screenY) {
         }
     }
 }
