@@ -44,5 +44,25 @@ class WorldStatsExportServiceTest {
         assertTrue(Files.exists(out));
         assertTrue(Files.size(out) > 0);
     }
+
+    @Test
+    void jsonExportShouldContainMetricIds() throws Exception {
+        EnumMap<WorldMetricId, Double> values = new EnumMap<>(WorldMetricId.class);
+        values.put(WorldMetricId.POPULATION_ALIVE, 12.0);
+        values.put(WorldMetricId.TEMPERATURE, 44.0);
+        List<WorldStatsSample> samples = List.of(new WorldStatsSample(1_000L, 30L, values));
+        List<WorldMetricDefinition> defs = List.of(
+                WorldMetricRegistry.definition(WorldMetricId.POPULATION_ALIVE),
+                WorldMetricRegistry.definition(WorldMetricId.TEMPERATURE)
+        );
+
+        Path out = Files.createTempFile("world-stats-", ".json");
+        WorldStatsExportService.exportJson(out, samples, defs);
+        String text = Files.readString(out);
+
+        assertTrue(text.contains("\"samples\""));
+        assertTrue(text.contains(WorldMetricId.POPULATION_ALIVE.name()));
+        assertTrue(text.contains(WorldMetricId.TEMPERATURE.name()));
+    }
 }
 

@@ -32,7 +32,6 @@ public class SettingsManager {
     private static final String DEFAULT_WORLD_STATS_METRICS =
             WorldMetricId.POPULATION_ALIVE.name() + "," + WorldMetricId.FOOD_PELLETS_AVAILABLE.name();
     private static final String DEFAULT_WORLD_STATS_PRESET = WorldStatsRangePreset.SINCE_BEGINNING.name();
-    private static final String DEFAULT_WORLD_STATS_Y_AXIS_MODE = WorldStatsYAxisMode.RELATIV_PRO_SERIE.name();
     private static final long DEFAULT_WORLD_STATS_CUSTOM_START_VALUE = 0;
     private static final String DEFAULT_WORLD_STATS_CUSTOM_START_UNIT = WorldStatsTimeUnit.MIN.name();
     private static final long DEFAULT_WORLD_STATS_CUSTOM_END_VALUE = 150;
@@ -47,7 +46,6 @@ public class SettingsManager {
     private int worldStatsViewerHeight;
     private String worldStatsSelectedMetrics;
     private String worldStatsRangePreset;
-    private String worldStatsYAxisMode;
     private long worldStatsCustomStartValue;
     private String worldStatsCustomStartUnit;
     private long worldStatsCustomEndValue;
@@ -90,7 +88,6 @@ public class SettingsManager {
                 worldStatsViewerHeight = parseIntOrDefault(props.getProperty("worldstats.viewer.height"), DEFAULT_WORLD_STATS_HEIGHT);
                 worldStatsSelectedMetrics = props.getProperty("worldstats.metrics", DEFAULT_WORLD_STATS_METRICS);
                 worldStatsRangePreset = props.getProperty("worldstats.range.preset", DEFAULT_WORLD_STATS_PRESET);
-                worldStatsYAxisMode = props.getProperty("worldstats.yaxis.mode", DEFAULT_WORLD_STATS_Y_AXIS_MODE);
                 worldStatsCustomStartValue = parseLongOrDefault(props.getProperty("worldstats.custom.start.value"), DEFAULT_WORLD_STATS_CUSTOM_START_VALUE);
                 worldStatsCustomStartUnit = props.getProperty("worldstats.custom.start.unit", DEFAULT_WORLD_STATS_CUSTOM_START_UNIT);
                 worldStatsCustomEndValue = parseLongOrDefault(props.getProperty("worldstats.custom.end.value"), DEFAULT_WORLD_STATS_CUSTOM_END_VALUE);
@@ -124,7 +121,6 @@ public class SettingsManager {
         props.setProperty("worldstats.viewer.height", String.valueOf(worldStatsViewerHeight));
         props.setProperty("worldstats.metrics", worldStatsSelectedMetrics == null ? DEFAULT_WORLD_STATS_METRICS : worldStatsSelectedMetrics);
         props.setProperty("worldstats.range.preset", worldStatsRangePreset == null ? DEFAULT_WORLD_STATS_PRESET : worldStatsRangePreset);
-        props.setProperty("worldstats.yaxis.mode", worldStatsYAxisMode == null ? DEFAULT_WORLD_STATS_Y_AXIS_MODE : worldStatsYAxisMode);
         props.setProperty("worldstats.custom.start.value", String.valueOf(worldStatsCustomStartValue));
         props.setProperty("worldstats.custom.start.unit", worldStatsCustomStartUnit == null ? DEFAULT_WORLD_STATS_CUSTOM_START_UNIT : worldStatsCustomStartUnit);
         props.setProperty("worldstats.custom.end.value", String.valueOf(worldStatsCustomEndValue));
@@ -159,7 +155,6 @@ public class SettingsManager {
         worldStatsViewerHeight = DEFAULT_WORLD_STATS_HEIGHT;
         worldStatsSelectedMetrics = DEFAULT_WORLD_STATS_METRICS;
         worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
-        worldStatsYAxisMode = DEFAULT_WORLD_STATS_Y_AXIS_MODE;
         worldStatsCustomStartValue = DEFAULT_WORLD_STATS_CUSTOM_START_VALUE;
         worldStatsCustomStartUnit = DEFAULT_WORLD_STATS_CUSTOM_START_UNIT;
         worldStatsCustomEndValue = DEFAULT_WORLD_STATS_CUSTOM_END_VALUE;
@@ -191,9 +186,6 @@ public class SettingsManager {
         }
         if (!isValidEnum(WorldStatsRangePreset.class, worldStatsRangePreset)) {
             worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
-        }
-        if (!isValidEnum(WorldStatsYAxisMode.class, worldStatsYAxisMode)) {
-            worldStatsYAxisMode = DEFAULT_WORLD_STATS_Y_AXIS_MODE;
         }
         if (!isValidEnum(WorldStatsTimeUnit.class, worldStatsCustomStartUnit)) {
             worldStatsCustomStartUnit = DEFAULT_WORLD_STATS_CUSTOM_START_UNIT;
@@ -342,13 +334,6 @@ public class SettingsManager {
         this.worldStatsRangePreset = rangePreset;
     }
 
-    public synchronized String getWorldStatsYAxisMode() {
-        return worldStatsYAxisMode;
-    }
-
-    public synchronized void setWorldStatsYAxisMode(String yAxisMode) {
-        this.worldStatsYAxisMode = yAxisMode;
-    }
 
     public synchronized long getWorldStatsCustomStartValue() {
         return worldStatsCustomStartValue;

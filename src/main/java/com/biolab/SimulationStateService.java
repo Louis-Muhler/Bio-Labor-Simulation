@@ -14,7 +14,6 @@ import java.util.List;
 public class SimulationStateService {
     private static final int MAGIC = 0x424C5331; // BLS1
     private static final int FORMAT_VERSION = 2;
-    private static final int FORMAT_VERSION_V1 = 1;
 
     private static void writeState(DataOutputStream out, SimulationState state) throws IOException {
         out.writeInt(MAGIC);
@@ -85,7 +84,7 @@ public class SimulationStateService {
         }
 
         int version = in.readInt();
-        if (version != FORMAT_VERSION && version != FORMAT_VERSION_V1) {
+        if (version != FORMAT_VERSION) {
             throw new IOException("Unsupported save format version: " + version);
         }
 
@@ -94,7 +93,7 @@ public class SimulationStateService {
         double temperature = in.readDouble();
         double toxicity = in.readDouble();
         double foodSpawnRate = in.readDouble();
-        long simulationTick = version >= 2 ? in.readLong() : 0L;
+        long simulationTick = in.readLong();
         boolean debugMode = in.readBoolean();
 
         int microbeCount = in.readInt();
@@ -181,29 +180,27 @@ public class SimulationStateService {
         }
 
         List<WorldStatsSample> worldStatsHistory = new ArrayList<>();
-        if (version >= 2) {
-            int sampleCount = in.readInt();
-            if (sampleCount < 0) {
-                throw new IOException("Invalid world stats sample count: " + sampleCount);
+        int sampleCount = in.readInt();
+        if (sampleCount < 0) {
+            throw new IOException("Invalid world stats sample count: " + sampleCount);
+        }
+        for (int i = 0; i < sampleCount; i++) {
+            long timestampMillis = in.readLong();
+            long tick = in.readLong();
+            int metricCount = in.readInt();
+            if (metricCount < 0 || metricCount > WorldMetricId.values().length) {
+                throw new IOException("Invalid world stats metric count: " + metricCount);
             }
-            for (int i = 0; i < sampleCount; i++) {
-                long timestampMillis = in.readLong();
-                long tick = in.readLong();
-                int metricCount = in.readInt();
-                if (metricCount < 0 || metricCount > WorldMetricId.values().length) {
-                    throw new IOException("Invalid world stats metric count: " + metricCount);
-                }
-                java.util.EnumMap<WorldMetricId, Double> values = new java.util.EnumMap<>(WorldMetricId.class);
-                WorldMetricId[] ids = WorldMetricId.values();
-                int readCount = Math.min(metricCount, ids.length);
-                for (int m = 0; m < readCount; m++) {
-                    values.put(ids[m], in.readDouble());
-                }
-                for (int m = readCount; m < metricCount; m++) {
-                    in.readDouble();
-                }
-                worldStatsHistory.add(new WorldStatsSample(timestampMillis, tick, values));
+            java.util.EnumMap<WorldMetricId, Double> values = new java.util.EnumMap<>(WorldMetricId.class);
+            WorldMetricId[] ids = WorldMetricId.values();
+            int readCount = Math.min(metricCount, ids.length);
+            for (int m = 0; m < readCount; m++) {
+                values.put(ids[m], in.readDouble());
             }
+            for (int m = readCount; m < metricCount; m++) {
+                in.readDouble();
+            }
+            worldStatsHistory.add(new WorldStatsSample(timestampMillis, tick, values));
         }
 
         return new SimulationState(

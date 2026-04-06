@@ -96,7 +96,7 @@ class SimulationStateServiceTest {
     }
 
     @Test
-    void loadShouldSupportLegacyFormatWithoutWorldStats() throws IOException {
+    void loadShouldRejectLegacyFormatV1() throws IOException {
         Path file = Files.createTempFile("biolab-legacy-v1-", ".bin");
         try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(file)))) {
             out.writeInt(0x424C5331); // MAGIC
@@ -112,10 +112,7 @@ class SimulationStateServiceTest {
         }
 
         SimulationStateService service = new SimulationStateService();
-        SimulationState loaded = service.load(file);
-
-        assertEquals(0L, loaded.simulationTick());
-        assertTrue(loaded.worldStatsHistory().isEmpty());
+        assertThrows(IOException.class, () -> service.load(file));
     }
 }
 
