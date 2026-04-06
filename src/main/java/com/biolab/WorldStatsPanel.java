@@ -43,6 +43,7 @@ public class WorldStatsPanel extends JPanel {
     private static final Color BG_COLOR = OverlayTheme.PANEL_BG_ALPHA;
     private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
+    private static final Color SEPARATOR_COLOR = new Color(40, 40, 50);
     private static final Color TEXT_COLOR = new Color(220, 220, 220);
 
     private final WorldStatsStore store;
@@ -380,21 +381,31 @@ public class WorldStatsPanel extends JPanel {
     }
 
     private JPanel buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(8, 0));
+        JPanel header = new JPanel(new BorderLayout(0, 6));
         header.setOpaque(false);
 
-        JLabel title = new JLabel("WORLD STATISTICS");
+        JPanel titleRow = new JPanel(new BorderLayout());
+        titleRow.setOpaque(false);
+
+        JLabel title = new JLabel("WORLD STATISTICS", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
         title.setFont(new Font("Segoe UI", Font.BOLD, 16));
 
-        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         exportButtons.setOpaque(false);
 
         setupExportMenuIfNeeded();
         exportButtons.add(exportMenuButton);
 
-        header.add(title, BorderLayout.WEST);
-        header.add(exportButtons, BorderLayout.EAST);
+        titleRow.add(title, BorderLayout.CENTER);
+        titleRow.add(exportButtons, BorderLayout.EAST);
+
+        JSeparator separator = new JSeparator(SwingConstants.HORIZONTAL);
+        separator.setForeground(SEPARATOR_COLOR);
+        separator.setBackground(SEPARATOR_COLOR);
+
+        header.add(titleRow, BorderLayout.NORTH);
+        header.add(separator, BorderLayout.SOUTH);
         return header;
     }
 
@@ -585,15 +596,41 @@ public class WorldStatsPanel extends JPanel {
             JMenuItem jsonItem = new JMenuItem("JSON");
             jsonItem.addActionListener(e -> exportJson());
 
+            styleExportMenuItem(pngItem);
+            styleExportMenuItem(csvItem);
+            styleExportMenuItem(jsonItem);
+
             exportMenu.add(pngItem);
             exportMenu.add(csvItem);
             exportMenu.add(jsonItem);
 
-            exportMenuButton.setPreferredSize(new Dimension(42, 34));
+            exportMenu.setBorder(BorderFactory.createLineBorder(ACCENT_COLOR, 1));
+            exportMenu.setBackground(OverlayTheme.CONTROL_BG);
+
+            exportMenuButton.setPreferredSize(new Dimension(34, 34));
             exportMenuButton.setToolTipText("Export");
             exportMenuButton.addActionListener(e -> exportMenu.show(exportMenuButton, 0, exportMenuButton.getHeight()));
             exportMenuInitialized = true;
         }
+    }
+
+    private void styleExportMenuItem(JMenuItem item) {
+        item.setOpaque(true);
+        item.setForeground(ACCENT_COLOR);
+        item.setBackground(OverlayTheme.CONTROL_BG);
+        item.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        item.setBorder(new EmptyBorder(6, 10, 6, 10));
+        item.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                item.setBackground(OverlayTheme.CONTROL_HOVER);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                item.setBackground(OverlayTheme.CONTROL_BG);
+            }
+        });
     }
 
     private void refreshChart() {
