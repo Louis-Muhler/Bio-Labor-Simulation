@@ -53,7 +53,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Fractional values are supported (e.g. 0.75 means 3 pellets every 4 ticks on average).
      */
     private volatile double foodSpawnRate = 0.75;
-    private long simulationTick;
+    private volatile long simulationTick;
     private double foodSpawnedPerSecond;
     private double foodConsumedPerSecond;
     private int spawnedSinceLastSample;
@@ -372,6 +372,13 @@ public class SimulationEngine implements SimulationRuntime {
         WorldStatsSample sample = last.get(0);
         foodSpawnedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_SPAWNED_PER_SEC, 0.0);
         foodConsumedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_CONSUMED_PER_SEC, 0.0);
+    }
+
+    /**
+     * Returns the current absolute simulation tick counter.
+     */
+    public long getSimulationTick() {
+        return simulationTick;
     }
 
     /**

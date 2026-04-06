@@ -37,8 +37,13 @@ public class SimulationCanvas extends JPanel {
     private static final Color DEBUG_FORAGE_LINE_COLOR = new Color(120, 255, 120);
     private static final Color DEBUG_VISION_COLOR = new Color(255, 255, 255, 30);
     private static final Color DEBUG_ID_COLOR = new Color(220, 220, 220);
+    private static final Color DEBUG_STATS_BG = new Color(10, 10, 12, 170);
+    private static final Color DEBUG_STATS_BORDER = new Color(0, 255, 255, 140);
+    private static final Color DEBUG_STATS_TEXT = new Color(220, 240, 255);
     private static final Font DEBUG_ID_FONT = new Font("Monospaced", Font.PLAIN, 9);
+    private static final Font DEBUG_STATS_FONT = new Font("Consolas", Font.BOLD, 12);
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
+    private static final double SIM_TICKS_PER_SIM_SECOND = 30.0;
 
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
     // Avoids AlphaComposite.getInstance() per frame for debug overlays.
@@ -112,6 +117,11 @@ public class SimulationCanvas extends JPanel {
     // ── Mouse drag state ──────────────────────────────────────────────────
     private int lastMouseX;
     private boolean isDragging = false;
+    private long simRateWindowStartNs = System.nanoTime();
+    private long previousObservedSimulationTick = -1L;
+    private long accumulatedSimTicksInWindow;
+    private double measuredSimTicksPerSecond;
+    private double measuredSimSecondsPerSecond;
 
     // ─────────────────────────────────────────────────────────────────────
     // Construction
@@ -294,6 +304,8 @@ public class SimulationCanvas extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
+        updateSimulationRateCounter();
+
         // ── Camera follow update (runs once per frame, in sync with rendering) ──
         Microbe target = followTarget;
         if (target != null) {
@@ -461,10 +473,64 @@ public class SimulationCanvas extends JPanel {
             // ── Restore screen-space transform ────────────────────────────
             g2d.setTransform(originalTransform);
 
+            if (debugOn) {
+                drawDebugStats(g2d);
+            }
+
 
         } finally {
             g2d.dispose();
         }
+    }
+
+    private void updateSimulationRateCounter() {
+        long currentTick = readCurrentSimulationTick();
+        long now = System.nanoTime();
+        if (previousObservedSimulationTick < 0L) {
+            previousObservedSimulationTick = currentTick;
+            simRateWindowStartNs = now;
+            return;
+        }
+
+        long tickDelta = Math.max(0L, currentTick - previousObservedSimulationTick);
+        previousObservedSimulationTick = currentTick;
+        accumulatedSimTicksInWindow += tickDelta;
+
+        long elapsed = now - simRateWindowStartNs;
+        if (elapsed >= 1_000_000_000L) {
+            measuredSimTicksPerSecond = accumulatedSimTicksInWindow * (1_000_000_000.0 / elapsed);
+            measuredSimSecondsPerSecond = measuredSimTicksPerSecond / SIM_TICKS_PER_SIM_SECOND;
+            accumulatedSimTicksInWindow = 0L;
+            simRateWindowStartNs = now;
+        }
+    }
+
+    private long readCurrentSimulationTick() {
+        if (engine instanceof SimulationEngine simulationEngine) {
+            return simulationEngine.getSimulationTick();
+        }
+        return 0L;
+    }
+
+    private void drawDebugStats(Graphics2D g2d) {
+        String line1 = String.format("Sim ticks: %.0f/s", measuredSimTicksPerSecond);
+        String line2 = String.format("Sim time: %.2f s/s", measuredSimSecondsPerSecond);
+        g2d.setFont(DEBUG_STATS_FONT);
+        FontMetrics fm = g2d.getFontMetrics();
+        int boxW = Math.max(fm.stringWidth(line1), fm.stringWidth(line2)) + 14;
+        int boxH = fm.getHeight() * 2 + 10;
+        int x = Math.max(8, getWidth() - boxW - 12);
+        int y = 10;
+
+        g2d.setColor(DEBUG_STATS_BG);
+        g2d.fillRoundRect(x, y, boxW, boxH, 8, 8);
+        g2d.setColor(DEBUG_STATS_BORDER);
+        g2d.setStroke(STROKE_1);
+        g2d.drawRoundRect(x, y, boxW, boxH, 8, 8);
+
+        g2d.setColor(DEBUG_STATS_TEXT);
+        g2d.drawString(line1, x + 7, y + 4 + fm.getAscent());
+        g2d.drawString(line2, x + 7, y + 6 + fm.getHeight() + fm.getAscent());
     }
 
     // ─────────────────────────────────────────────────────────────────────
