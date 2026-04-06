@@ -4,6 +4,8 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import java.awt.*;
+import java.util.HashSet;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -156,8 +158,8 @@ class MicrobeTest {
 
         var ancestry = current.getAncestry();
         assertFalse(ancestry.isEmpty(), "Deep lineage should retain ancestry snapshots");
-        assertTrue(ancestry.size() <= 10,
-                "Ancestry should be limited to MAX_SNAPSHOTS (10), was: " + ancestry.size());
+        assertTrue(ancestry.size() <= 32,
+                "Ancestry should be limited to MAX_SNAPSHOTS (32), was: " + ancestry.size());
 
         int patientZeroGeneration = ancestry.get(0).generation();
         assertTrue(patientZeroGeneration == 0 || patientZeroGeneration == 1,
@@ -170,6 +172,30 @@ class MicrobeTest {
         for (int i = 1; i < ancestry.size(); i++) {
             assertTrue(ancestry.get(i).generation() > ancestry.get(i - 1).generation(),
                     "Smart-thinned ancestry must stay in strictly increasing absolute-generation order");
+        }
+    }
+
+    @Test
+    void ancestryOverflowShouldRemapToFixedThirtyTwoWithGlobalCoverageInvariants() {
+        Microbe current = new Microbe(100, 100);
+        for (int i = 0; i < 900; i++) {
+            current = new Microbe(current, 100, 100);
+        }
+
+        List<AncestorSnapshot> ancestry = current.getAncestry();
+        assertEquals(32, ancestry.size(), "Bei tiefer Linie muss auf 32 Snapshots remapped werden");
+        assertEquals(1, ancestry.get(0).generation(), "Erste Generation muss als Anchor erhalten bleiben");
+        assertEquals(current.getAbsoluteGeneration() - 1, ancestry.get(ancestry.size() - 1).generation(),
+                "Letzter Snapshot muss der direkte Parent sein");
+
+        HashSet<Integer> generations = new HashSet<>();
+        for (int i = 0; i < ancestry.size(); i++) {
+            int gen = ancestry.get(i).generation();
+            assertTrue(generations.add(gen), "Keine doppelten Generationen in der remappten Ancestry");
+            if (i > 0) {
+                assertTrue(gen > ancestry.get(i - 1).generation(),
+                        "Remap muss strikt aufsteigende absolute Generationen liefern");
+            }
         }
     }
 

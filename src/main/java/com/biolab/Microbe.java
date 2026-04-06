@@ -4,6 +4,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -42,7 +43,7 @@ public class Microbe {
      * The smart-thinning algorithm keeps exactly this many snapshots, evenly
      * distributed across the absolute generation timeline.
      */
-    private static final int MAX_SNAPSHOTS = 10;
+    private static final int MAX_SNAPSHOTS = 32;
 
     // Genetic traits – immutable after construction
     private final double heatResistance;
@@ -251,27 +252,10 @@ public class Microbe {
                 parent.absoluteGeneration   // absolute, not relative
         ));
 
-        // If we have too many snapshots, drop the internal point whose removal
-        // causes the least deviation from an ideally-even distribution across
-        // the full absolute generation timeline (index 0 and the last entry
-        // are always preserved as anchors).
+        // On overflow, globally remap to a deterministic evenly-covered set.
+        // Anchors (oldest/newest) are always preserved.
         if (newAncestry.size() > MAX_SNAPSHOTS) {
-            // Ideal gap between consecutive kept snapshots
-            double idealGap = (double) parent.absoluteGeneration
-                    / (MAX_SNAPSHOTS - 1);
-            double minCost = Double.MAX_VALUE;
-            int indexToRemove = 1; // fallback: always a valid internal index
-
-            for (int i = 1; i < newAncestry.size() - 1; i++) {
-                int gapIfRemoved = newAncestry.get(i + 1).generation()
-                        - newAncestry.get(i - 1).generation();
-                double cost = Math.abs(gapIfRemoved - idealGap);
-                if (cost < minCost) {
-                    minCost = cost;
-                    indexToRemove = i;
-                }
-            }
-            newAncestry.remove(indexToRemove);
+            newAncestry = remapAncestrySnapshots(newAncestry, MAX_SNAPSHOTS);
         }
 
         this.ancestry = newAncestry;
@@ -279,6 +263,73 @@ public class Microbe {
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
         randomizeVelocity();
+    }
+
+    private static List<AncestorSnapshot> remapAncestrySnapshots(List<AncestorSnapshot> snapshots, int capacity) {
+        if (snapshots.size() <= capacity) {
+            return snapshots;
+        }
+
+        int lastIndex = snapshots.size() - 1;
+        int firstGen = snapshots.get(0).generation();
+        int lastGen = snapshots.get(lastIndex).generation();
+        int targetCount = Math.max(2, capacity);
+
+        TreeSet<Integer> selected = new TreeSet<>();
+        selected.add(0);
+        selected.add(lastIndex);
+
+        // Pick slots by global generation quantiles so old and new eras are covered evenly.
+        for (int slot = 1; slot < targetCount - 1; slot++) {
+            int targetGen = firstGen + (int) Math.round(slot * (double) (lastGen - firstGen) / (targetCount - 1));
+            int bestIdx = -1;
+            int bestDistance = Integer.MAX_VALUE;
+            for (int i = 1; i < lastIndex; i++) {
+                if (selected.contains(i)) {
+                    continue;
+                }
+                int distance = Math.abs(snapshots.get(i).generation() - targetGen);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx >= 0) {
+                selected.add(bestIdx);
+            }
+        }
+
+        while (selected.size() < targetCount) {
+            Integer prev = null;
+            int bestLeft = -1;
+            int bestGap = 0;
+            for (Integer current : selected) {
+                if (prev != null) {
+                    int gap = current - prev;
+                    if (gap > bestGap) {
+                        bestGap = gap;
+                        bestLeft = prev;
+                    }
+                }
+                prev = current;
+            }
+            if (bestGap <= 1 || bestLeft < 0) {
+                break;
+            }
+            selected.add(bestLeft + bestGap / 2);
+        }
+
+        if (selected.size() < targetCount) {
+            for (int i = 0; i <= lastIndex && selected.size() < targetCount; i++) {
+                selected.add(i);
+            }
+        }
+
+        List<AncestorSnapshot> remapped = new ArrayList<>(targetCount);
+        for (Integer index : selected) {
+            remapped.add(snapshots.get(index));
+        }
+        return remapped;
     }
 
     /**
