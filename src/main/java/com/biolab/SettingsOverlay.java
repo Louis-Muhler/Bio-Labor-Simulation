@@ -148,16 +148,7 @@ public class SettingsOverlay extends JPanel {
      * painting and {@link DarkComboListRenderer} for the dropdown items.
      */
     private static JComboBox<String> createStyledComboBox(String[] items) {
-        JComboBox<String> combo = new JComboBox<>(items);
-        combo.setFont(BODY_FONT);
-        combo.setForeground(ACCENT);
-        combo.setBackground(CONTROL_BG);
-        combo.setMaximumRowCount(8);
-        combo.setUI(new DarkComboBoxUI());
-        combo.setRenderer(new DarkComboListRenderer());
-        combo.setBorder(null);
-        combo.setOpaque(false);
-        return combo;
+        return OverlayControlFactory.createStyledComboBox(items);
     }
 
     // ────────────────────────────────────────────────────────────────────

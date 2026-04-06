@@ -20,7 +20,7 @@ class WorldStatsRangeLabelFormatterTest {
 
         String label = WorldStatsRangeLabelFormatter.formatCurrentRange(WorldStatsRangePreset.CUSTOM, fromTick, toTick);
 
-        assertEquals("Custom: 2m - 5m", label);
+        assertEquals("2m - 5m", label);
     }
 
     @Test

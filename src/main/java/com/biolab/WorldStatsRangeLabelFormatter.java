@@ -18,7 +18,7 @@ public final class WorldStatsRangeLabelFormatter {
             return "-";
         }
         if (preset == WorldStatsRangePreset.CUSTOM) {
-            return "Custom: " + formatTickRangeValue(fromTick) + " - " + formatTickRangeValue(toTick);
+            return formatTickRangeValue(fromTick) + " - " + formatTickRangeValue(toTick);
         }
         return preset.label();
     }
