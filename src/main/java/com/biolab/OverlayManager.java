@@ -22,7 +22,7 @@ public class OverlayManager {
      * Uniform margin between the window edge and any overlay panel or button.
      */
     private static final int OVERLAY_EDGE_MARGIN = 15;
-    private static final int SPEED_BUTTON_WIDTH = 100;
+    private static final int SPEED_BUTTON_WIDTH = 112;
     private static final int SPEED_BUTTON_HEIGHT = 45;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;

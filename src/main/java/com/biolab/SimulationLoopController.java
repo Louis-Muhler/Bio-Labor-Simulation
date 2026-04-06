@@ -22,7 +22,7 @@ public class SimulationLoopController {
 
     // ── Tick-speed (simulation updates / second) ──────────────────────────
     private static final int BASE_TPS = 30;
-    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100};
+    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000};
     private int currentSpeedIndex = 0;
 
     private final SimulationRuntime engine;
