@@ -129,6 +129,9 @@ public class WorldStatsPanel extends JPanel {
         presetPanel.setLayout(new BoxLayout(presetPanel, BoxLayout.Y_AXIS));
         presetMainRow.setOpaque(false);
         customRangeInlineRow.setOpaque(false);
+        presetMainRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        customRangeInlineRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        customRangeInlineRow.setBorder(new EmptyBorder(10, 0, 0, 0));
 
         Dimension controlSize = new Dimension(computeRangeDropdownWidth(), 30);
         Dimension unitControlSize = new Dimension(computeUnitDropdownWidth(), 30);
@@ -222,7 +225,8 @@ public class WorldStatsPanel extends JPanel {
     private int computeUnitDropdownWidth() {
         FontMetrics fm = customStartUnitDropdown.getFontMetrics(customStartUnitDropdown.getFont());
         int widest = fm.stringWidth(WorldStatsTimeUnit.HOUR.label());
-        return widest + 36;
+        int twoChars = fm.stringWidth("00");
+        return widest + 36 + twoChars;
     }
 
     private void updateCustomRangeInlineLayout() {
@@ -243,6 +247,7 @@ public class WorldStatsPanel extends JPanel {
         c.anchor = GridBagConstraints.WEST;
         c.insets = new Insets(0, 0, 0, gap);
         c.gridy = 0;
+        c.weightx = 0;
 
         c.gridx = 0;
         customRangeInlineRow.add(customStartInput, c);
@@ -254,10 +259,10 @@ public class WorldStatsPanel extends JPanel {
         if (wrap) {
             c.gridy = 1;
             c.gridx = 0;
-            c.insets = new Insets(4, 0, 0, gap);
+            c.insets = new Insets(8, 0, 0, gap);
             customRangeInlineRow.add(customEndInput, c);
             c.gridx = 1;
-            c.insets = new Insets(4, 0, 0, 0);
+            c.insets = new Insets(8, 0, 0, 0);
             customRangeInlineRow.add(customEndUnitDropdown, c);
         } else {
             c.gridy = 0;
@@ -295,6 +300,7 @@ public class WorldStatsPanel extends JPanel {
         formatter.setCommitsOnValidEdit(true);
         textField.setFormatterFactory(new DefaultFormatterFactory(formatter));
         textField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        textField.setBorder(new EmptyBorder(4, 10, 4, 10));
 
         textField.addActionListener(e -> {
             try {
@@ -404,13 +410,11 @@ public class WorldStatsPanel extends JPanel {
         leftColumn.add(searchField, BorderLayout.NORTH);
         leftColumn.add(metricListContainer, BorderLayout.CENTER);
 
-        JPanel topControls = new JPanel(new GridLayout(2, 1, 0, 6));
+        JPanel topControls = new JPanel();
+        topControls.setLayout(new BoxLayout(topControls, BoxLayout.Y_AXIS));
         topControls.setOpaque(false);
         topControls.add(buildPresetPanel());
-        JPanel yAxisSpacer = new JPanel();
-        yAxisSpacer.setOpaque(false);
-        yAxisSpacer.setPreferredSize(new Dimension(1, 1));
-        topControls.add(yAxisSpacer);
+        topControls.add(Box.createVerticalStrut(2));
 
         JPanel right = new JPanel(new BorderLayout(0, 8));
         right.setOpaque(false);
