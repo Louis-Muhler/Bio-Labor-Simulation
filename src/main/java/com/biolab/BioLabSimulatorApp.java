@@ -55,7 +55,12 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
         settingsManager = new SettingsManager();
         saveRepository = new SaveGameRepository();
-        sessionSaveCoordinator = new SessionSaveCoordinator(saveRepository, new AsyncSaveService(), LOGGER);
+        sessionSaveCoordinator = new SessionSaveCoordinator(
+                saveRepository,
+                new AsyncSaveService(),
+                LOGGER,
+                settingsManager.getAutosaveIntervalSeconds()
+        );
         uiStateMachine = new AppUiStateMachine(AppUiState.BOOT);
         uiFlowCoordinator = new UiFlowCoordinator(
                 this,
@@ -493,6 +498,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private void applySettingsAfterOverlay() {
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
+        sessionSaveCoordinator.setAutosaveIntervalSeconds(settingsManager.getAutosaveIntervalSeconds());
         if (loopController != null) loopController.setRenderFps(settingsManager.getSimulationFps());
         applyDisplayMode();
     }

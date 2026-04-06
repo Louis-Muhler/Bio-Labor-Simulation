@@ -5,8 +5,12 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicComboBoxUI;
 import javax.swing.plaf.basic.BasicComboPopup;
 import javax.swing.plaf.basic.ComboPopup;
+import javax.swing.text.DefaultFormatterFactory;
+import javax.swing.text.NumberFormatter;
 import java.awt.*;
 import java.awt.event.*;
+import java.text.DecimalFormat;
+import java.text.ParseException;
 import java.util.*;
 import java.util.List;
 
@@ -86,6 +90,7 @@ public class SettingsOverlay extends JPanel {
      */
     private static final int[] FPS_PRESETS = {15, 30, 60, 120, 144, 240};
     private JComboBox<String> fpsCombo;
+    private JSpinner autosaveIntervalSpinner;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -374,6 +379,20 @@ public class SettingsOverlay extends JPanel {
         card.add(fpsCombo, c);
 
         c.gridy++;
+        c.fill = GridBagConstraints.NONE;
+        c.insets = new Insets(0, 0, 6, 0);
+        card.add(createSectionLabel("AUTOSAVE INTERVAL"), c);
+
+        c.gridy++;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.insets = new Insets(0, 0, 24, 0);
+        autosaveIntervalSpinner = new JSpinner(new SpinnerNumberModel(8, 1, 3600, 1));
+        OverlayControlFactory.styleSpinner(autosaveIntervalSpinner);
+        configureIntegerSpinnerInput(autosaveIntervalSpinner);
+        autosaveIntervalSpinner.setToolTipText("Autosave interval in seconds");
+        card.add(autosaveIntervalSpinner, c);
+
+        c.gridy++;
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1.0;
         c.anchor = GridBagConstraints.WEST;
@@ -429,6 +448,35 @@ public class SettingsOverlay extends JPanel {
             }
         }
         fpsCombo.setSelectedIndex(bestIdx);
+        autosaveIntervalSpinner.setValue(settingsManager.getAutosaveIntervalSeconds());
+    }
+
+    private void configureIntegerSpinnerInput(JSpinner spinner) {
+        JComponent editor = spinner.getEditor();
+        if (!(editor instanceof JSpinner.DefaultEditor defaultEditor)) {
+            return;
+        }
+
+        JFormattedTextField textField = defaultEditor.getTextField();
+        textField.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
+
+        DecimalFormat integerFormat = new DecimalFormat("#");
+        integerFormat.setGroupingUsed(false);
+        NumberFormatter formatter = new NumberFormatter(integerFormat);
+        formatter.setValueClass(Integer.class);
+        formatter.setMinimum(1);
+        formatter.setMaximum(3600);
+        formatter.setAllowsInvalid(false);
+        formatter.setCommitsOnValidEdit(true);
+        textField.setFormatterFactory(new DefaultFormatterFactory(formatter));
+
+        textField.addActionListener(e -> {
+            try {
+                textField.commitEdit();
+            } catch (ParseException ex) {
+                textField.setValue(spinner.getValue());
+            }
+        });
     }
 
     /**
@@ -461,6 +509,7 @@ public class SettingsOverlay extends JPanel {
         if (fpsIdx >= 0 && fpsIdx < FPS_PRESETS.length) {
             settingsManager.setSimulationFps(FPS_PRESETS[fpsIdx]);
         }
+        settingsManager.setAutosaveIntervalSeconds(((Number) autosaveIntervalSpinner.getValue()).intValue());
         settingsManager.saveSettings();
         if (onApply != null) onApply.run();
     }

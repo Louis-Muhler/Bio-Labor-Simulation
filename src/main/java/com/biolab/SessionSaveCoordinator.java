@@ -14,7 +14,8 @@ import java.util.logging.Logger;
  * Centralizes save/autosave lifecycle for one gameplay session.
  */
 final class SessionSaveCoordinator {
-    private static final long AUTOSAVE_INTERVAL_SECONDS = 8L;
+    private static final long MIN_AUTOSAVE_INTERVAL_SECONDS = 1L;
+    private static final long MAX_AUTOSAVE_INTERVAL_SECONDS = 3600L;
 
     private final SaveGameRepository saveRepository;
     private final AsyncSaveService asyncSaveService;
@@ -25,13 +26,22 @@ final class SessionSaveCoordinator {
     private long sessionStartMillis;
     private ScheduledExecutorService autosaveExecutor;
     private ScheduledFuture<?> autosaveTask;
+    private Supplier<SimulationRuntime> autosaveEngineSupplier;
+    private BooleanSupplier autosaveGameplaySessionSupplier;
+    private long autosaveIntervalSeconds;
 
     SessionSaveCoordinator(SaveGameRepository saveRepository,
                            AsyncSaveService asyncSaveService,
-                           Logger logger) {
+                           Logger logger,
+                           long autosaveIntervalSeconds) {
         this.saveRepository = saveRepository;
         this.asyncSaveService = asyncSaveService;
         this.logger = logger;
+        this.autosaveIntervalSeconds = clampAutosaveIntervalSeconds(autosaveIntervalSeconds);
+    }
+
+    private static long clampAutosaveIntervalSeconds(long seconds) {
+        return Math.max(MIN_AUTOSAVE_INTERVAL_SECONDS, Math.min(MAX_AUTOSAVE_INTERVAL_SECONDS, seconds));
     }
 
     synchronized void markSessionStarted(String worldName, SaveGameMetadata save) {
@@ -99,15 +109,31 @@ final class SessionSaveCoordinator {
     synchronized void startAutoSave(Supplier<SimulationRuntime> engineSupplier,
                                     BooleanSupplier gameplaySessionSupplier) {
         stopAutoSave();
+        autosaveEngineSupplier = engineSupplier;
+        autosaveGameplaySessionSupplier = gameplaySessionSupplier;
         autosaveExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "BioLab-Autosave");
             t.setDaemon(true);
             return t;
         });
+        scheduleAutosaveTask();
+    }
+
+    synchronized void setAutosaveIntervalSeconds(long seconds) {
+        autosaveIntervalSeconds = clampAutosaveIntervalSeconds(seconds);
+        if (autosaveExecutor != null && autosaveEngineSupplier != null && autosaveGameplaySessionSupplier != null) {
+            if (autosaveTask != null) {
+                autosaveTask.cancel(false);
+            }
+            scheduleAutosaveTask();
+        }
+    }
+
+    private void scheduleAutosaveTask() {
         autosaveTask = autosaveExecutor.scheduleAtFixedRate(
-                () -> saveCurrentWorld(engineSupplier.get(), gameplaySessionSupplier.getAsBoolean()),
-                AUTOSAVE_INTERVAL_SECONDS,
-                AUTOSAVE_INTERVAL_SECONDS,
+                () -> saveCurrentWorld(autosaveEngineSupplier.get(), autosaveGameplaySessionSupplier.getAsBoolean()),
+                autosaveIntervalSeconds,
+                autosaveIntervalSeconds,
                 TimeUnit.SECONDS
         );
     }
@@ -121,6 +147,8 @@ final class SessionSaveCoordinator {
             autosaveExecutor.shutdownNow();
             autosaveExecutor = null;
         }
+        autosaveEngineSupplier = null;
+        autosaveGameplaySessionSupplier = null;
     }
 
     synchronized void shutdown() {

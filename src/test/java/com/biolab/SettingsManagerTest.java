@@ -29,6 +29,7 @@ class SettingsManagerTest {
         SettingsManager sm = newIsolatedManager();
         assertTrue(sm.getWindowWidth() >= 800, "Default width should be >= 800");
         assertTrue(sm.getWindowHeight() >= 600, "Default height should be >= 600");
+        assertEquals(8, sm.getAutosaveIntervalSeconds());
         assertEquals(0L, sm.getWorldStatsCustomStartValue());
         assertEquals(WorldStatsTimeUnit.MIN.name(), sm.getWorldStatsCustomStartUnit());
         assertEquals(150L, sm.getWorldStatsCustomEndValue());
@@ -41,10 +42,12 @@ class SettingsManagerTest {
         sm.setWindowWidth(999);
         sm.setWindowHeight(777);
         sm.setFullscreen(true);
+        sm.setAutosaveIntervalSeconds(30);
         sm.setDefaults();
         assertEquals(1920, sm.getWindowWidth());
         assertEquals(1080, sm.getWindowHeight());
         assertFalse(sm.isFullscreen());
+        assertEquals(8, sm.getAutosaveIntervalSeconds());
     }
 
     // ===== Getters/Setters =====
@@ -60,6 +63,8 @@ class SettingsManagerTest {
         assertTrue(sm.isFullscreen());
         sm.setFullscreen(false);
         assertFalse(sm.isFullscreen());
+        sm.setAutosaveIntervalSeconds(22);
+        assertEquals(22, sm.getAutosaveIntervalSeconds());
     }
 
     // ===== Save/Load Cycle =====
@@ -76,12 +81,14 @@ class SettingsManagerTest {
         sm1.setWindowWidth(1600);
         sm1.setWindowHeight(900);
         sm1.setFullscreen(false);
+        sm1.setAutosaveIntervalSeconds(17);
         sm1.saveSettings();
 
         SettingsManager sm2 = new SettingsManager(dir);
         assertEquals(1600, sm2.getWindowWidth());
         assertEquals(900, sm2.getWindowHeight());
         assertFalse(sm2.isFullscreen());
+        assertEquals(17, sm2.getAutosaveIntervalSeconds());
 
         sm2.setDefaults();
         sm2.saveSettings();
@@ -125,6 +132,16 @@ class SettingsManagerTest {
 
         sm2.setDefaults();
         sm2.saveSettings();
+    }
+
+    @Test
+    void autosaveIntervalSetterShouldClampToAllowedRange() {
+        SettingsManager sm = newIsolatedManager();
+        sm.setAutosaveIntervalSeconds(0);
+        assertEquals(1, sm.getAutosaveIntervalSeconds());
+
+        sm.setAutosaveIntervalSeconds(10_000);
+        assertEquals(3600, sm.getAutosaveIntervalSeconds());
     }
 
     // ===== Thread-Safety =====

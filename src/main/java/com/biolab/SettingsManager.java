@@ -29,6 +29,9 @@ public class SettingsManager {
     private static final int DEFAULT_SIMULATION_FPS = 60;
     private static final int DEFAULT_WORLD_STATS_WIDTH = 640;
     private static final int DEFAULT_WORLD_STATS_HEIGHT = 420;
+    private static final int DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 8;
+    private static final int MIN_AUTOSAVE_INTERVAL_SECONDS = 1;
+    private static final int MAX_AUTOSAVE_INTERVAL_SECONDS = 3600;
     private static final String DEFAULT_WORLD_STATS_METRICS =
             WorldMetricId.POPULATION_ALIVE.name() + "," + WorldMetricId.FOOD_PELLETS_AVAILABLE.name();
     private static final String DEFAULT_WORLD_STATS_PRESET = WorldStatsRangePreset.SINCE_BEGINNING.name();
@@ -44,6 +47,7 @@ public class SettingsManager {
     private int simulationFps;
     private int worldStatsViewerWidth;
     private int worldStatsViewerHeight;
+    private int autosaveIntervalSeconds;
     private String worldStatsSelectedMetrics;
     private String worldStatsRangePreset;
     private long worldStatsCustomStartValue;
@@ -86,6 +90,7 @@ public class SettingsManager {
                 simulationFps = parseIntOrDefault(props.getProperty("simulation.fps"), DEFAULT_SIMULATION_FPS);
                 worldStatsViewerWidth = parseIntOrDefault(props.getProperty("worldstats.viewer.width"), DEFAULT_WORLD_STATS_WIDTH);
                 worldStatsViewerHeight = parseIntOrDefault(props.getProperty("worldstats.viewer.height"), DEFAULT_WORLD_STATS_HEIGHT);
+                autosaveIntervalSeconds = parseIntOrDefault(props.getProperty("autosave.interval.seconds"), DEFAULT_AUTOSAVE_INTERVAL_SECONDS);
                 worldStatsSelectedMetrics = props.getProperty("worldstats.metrics", DEFAULT_WORLD_STATS_METRICS);
                 worldStatsRangePreset = props.getProperty("worldstats.range.preset", DEFAULT_WORLD_STATS_PRESET);
                 worldStatsCustomStartValue = parseLongOrDefault(props.getProperty("worldstats.custom.start.value"), DEFAULT_WORLD_STATS_CUSTOM_START_VALUE);
@@ -119,6 +124,7 @@ public class SettingsManager {
         props.setProperty("simulation.fps", String.valueOf(simulationFps));
         props.setProperty("worldstats.viewer.width", String.valueOf(worldStatsViewerWidth));
         props.setProperty("worldstats.viewer.height", String.valueOf(worldStatsViewerHeight));
+        props.setProperty("autosave.interval.seconds", String.valueOf(autosaveIntervalSeconds));
         props.setProperty("worldstats.metrics", worldStatsSelectedMetrics == null ? DEFAULT_WORLD_STATS_METRICS : worldStatsSelectedMetrics);
         props.setProperty("worldstats.range.preset", worldStatsRangePreset == null ? DEFAULT_WORLD_STATS_PRESET : worldStatsRangePreset);
         props.setProperty("worldstats.custom.start.value", String.valueOf(worldStatsCustomStartValue));
@@ -153,6 +159,7 @@ public class SettingsManager {
         simulationFps = DEFAULT_SIMULATION_FPS;
         worldStatsViewerWidth = DEFAULT_WORLD_STATS_WIDTH;
         worldStatsViewerHeight = DEFAULT_WORLD_STATS_HEIGHT;
+        autosaveIntervalSeconds = DEFAULT_AUTOSAVE_INTERVAL_SECONDS;
         worldStatsSelectedMetrics = DEFAULT_WORLD_STATS_METRICS;
         worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
         worldStatsCustomStartValue = DEFAULT_WORLD_STATS_CUSTOM_START_VALUE;
@@ -183,6 +190,9 @@ public class SettingsManager {
         }
         if (worldStatsViewerHeight < 280 || worldStatsViewerHeight > 3000) {
             worldStatsViewerHeight = DEFAULT_WORLD_STATS_HEIGHT;
+        }
+        if (autosaveIntervalSeconds < MIN_AUTOSAVE_INTERVAL_SECONDS || autosaveIntervalSeconds > MAX_AUTOSAVE_INTERVAL_SECONDS) {
+            autosaveIntervalSeconds = DEFAULT_AUTOSAVE_INTERVAL_SECONDS;
         }
         if (!isValidEnum(WorldStatsRangePreset.class, worldStatsRangePreset)) {
             worldStatsRangePreset = DEFAULT_WORLD_STATS_PRESET;
@@ -316,6 +326,15 @@ public class SettingsManager {
 
     public synchronized void setWorldStatsViewerHeight(int height) {
         this.worldStatsViewerHeight = height;
+    }
+
+    public synchronized int getAutosaveIntervalSeconds() {
+        return autosaveIntervalSeconds;
+    }
+
+    public synchronized void setAutosaveIntervalSeconds(int seconds) {
+        this.autosaveIntervalSeconds = Math.max(MIN_AUTOSAVE_INTERVAL_SECONDS,
+                Math.min(MAX_AUTOSAVE_INTERVAL_SECONDS, seconds));
     }
 
     public synchronized String getWorldStatsSelectedMetrics() {
