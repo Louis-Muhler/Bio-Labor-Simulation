@@ -6,6 +6,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.plaf.basic.BasicMenuItemUI;
 import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.text.NumberFormatter;
 import java.awt.*;
@@ -653,6 +654,14 @@ public class WorldStatsPanel extends JPanel {
     }
 
     private void styleExportMenuItem(JMenuItem item) {
+        item.setUI(new BasicMenuItemUI() {
+            @Override
+            protected void installDefaults() {
+                super.installDefaults();
+                selectionBackground = OverlayTheme.CONTROL_HOVER;
+                selectionForeground = ACCENT_COLOR;
+            }
+        });
         item.setOpaque(true);
         item.setForeground(ACCENT_COLOR);
         item.setBackground(OverlayTheme.CONTROL_BG);
