@@ -64,7 +64,7 @@ public class WorldStatsPanel extends JPanel {
     private final JLabel customRangeSeparator = new JLabel("-");
     private final ChartCanvas chartCanvas = new ChartCanvas();
 
-    private final ModernButton exportMenuButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
+    private final ModernButton exportMenuButton = new ModernButton("", WorldStatsPanel::drawExportShareIcon);
     private final JPopupMenu exportMenu = new JPopupMenu();
 
     private final Map<WorldMetricId, JCheckBox> metricCheckboxes = new EnumMap<>(WorldMetricId.class);
@@ -380,33 +380,14 @@ public class WorldStatsPanel extends JPanel {
         return autoRange == null ? new double[]{0.0, 1.0} : autoRange;
     }
 
-    private JPanel buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(0, 6));
-        header.setOpaque(false);
-
-        JPanel titleRow = new JPanel(new BorderLayout());
-        titleRow.setOpaque(false);
-
-        JLabel title = new JLabel("WORLD STATISTICS", SwingConstants.CENTER);
-        title.setForeground(ACCENT_COLOR);
-        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
-
-        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        exportButtons.setOpaque(false);
-
-        setupExportMenuIfNeeded();
-        exportButtons.add(exportMenuButton);
-
-        titleRow.add(title, BorderLayout.CENTER);
-        titleRow.add(exportButtons, BorderLayout.EAST);
-
-        JSeparator separator = new JSeparator(SwingConstants.HORIZONTAL);
-        separator.setForeground(SEPARATOR_COLOR);
-        separator.setBackground(SEPARATOR_COLOR);
-
-        header.add(titleRow, BorderLayout.NORTH);
-        header.add(separator, BorderLayout.SOUTH);
-        return header;
+    private static void drawExportShareIcon(Graphics2D g2, Point pos) {
+        int x = pos.x;
+        int y = pos.y;
+        g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawRoundRect(x - 8, y + 2, 14, 9, 3, 3);
+        g2.drawLine(x - 1, y + 6, x + 6, y - 1);
+        g2.drawLine(x + 6, y - 1, x + 6, y + 3);
+        g2.drawLine(x + 6, y - 1, x + 2, y - 1);
     }
 
     private JPanel buildContent() {
@@ -612,6 +593,41 @@ public class WorldStatsPanel extends JPanel {
             exportMenuButton.addActionListener(e -> exportMenu.show(exportMenuButton, 0, exportMenuButton.getHeight()));
             exportMenuInitialized = true;
         }
+    }
+
+    private JPanel buildHeader() {
+        JPanel header = new JPanel(new BorderLayout(0, 6));
+        header.setOpaque(false);
+
+        JPanel titleRow = new JPanel(new BorderLayout());
+        titleRow.setOpaque(false);
+
+        JLabel title = new JLabel("WORLD STATISTICS", SwingConstants.CENTER);
+        title.setForeground(ACCENT_COLOR);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
+
+        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        exportButtons.setOpaque(false);
+
+        setupExportMenuIfNeeded();
+        exportButtons.add(exportMenuButton);
+
+        JPanel leftBalance = new JPanel();
+        leftBalance.setOpaque(false);
+        leftBalance.setPreferredSize(new Dimension(exportMenuButton.getPreferredSize().width, exportMenuButton.getPreferredSize().height));
+
+        titleRow.add(leftBalance, BorderLayout.WEST);
+        titleRow.add(title, BorderLayout.CENTER);
+        titleRow.add(exportButtons, BorderLayout.EAST);
+
+        JPanel separator = new JPanel();
+        separator.setOpaque(true);
+        separator.setBackground(SEPARATOR_COLOR);
+        separator.setPreferredSize(new Dimension(1, 1));
+
+        header.add(titleRow, BorderLayout.NORTH);
+        header.add(separator, BorderLayout.SOUTH);
+        return header;
     }
 
     private void styleExportMenuItem(JMenuItem item) {
