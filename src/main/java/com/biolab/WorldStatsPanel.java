@@ -6,13 +6,18 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.DefaultFormatterFactory;
+import javax.swing.text.NumberFormatter;
 import java.awt.*;
-import java.awt.event.AWTEventListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.text.DecimalFormat;
+import java.text.ParseException;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,7 +54,6 @@ public class WorldStatsPanel extends JPanel {
     private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final JComboBox<WorldStatsRangePreset> rangePresetDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsRangePreset.values());
     private final ModernButton customRangeSettingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
-    private final JPopupMenu customRangePopup = new JPopupMenu();
     private final JPanel customRangePopupPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     private final JSpinner customStartInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     private final JComboBox<WorldStatsTimeUnit> customStartUnitDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsTimeUnit.values());
@@ -76,13 +80,8 @@ public class WorldStatsPanel extends JPanel {
     private long currentRangeFromTick;
     private long currentRangeToTick;
     private boolean suppressCustomRangeEvents;
-    private boolean customRangePopupListenerInstalled;
-    void hidePanel() {
-        setVisible(false);
-        refreshTimer.stop();
-        hideCustomRangePopup();
-        persistUiSettings(true);
-    }    private final AWTEventListener customRangePopupOutsideClickListener = this::handleGlobalMouseEvent;
+    private Popup customRangePopupWindow;
+    private boolean customRangePopupVisible;
 
     private List<WorldStatsSample> currentSamples = List.of();
     private List<WorldMetricDefinition> currentDefinitions = List.of();
@@ -91,6 +90,53 @@ public class WorldStatsPanel extends JPanel {
     private ResizeEdge resizeEdge = ResizeEdge.NONE;
     private Point dragStart;
     private Dimension sizeAtDragStart;
+
+    public WorldStatsPanel(SimulationRuntime runtime, SettingsManager settingsManager) {
+        this.store = runtime.getWorldStatsStore();
+        this.settingsManager = settingsManager;
+
+        loadUiSettings();
+
+        setOpaque(false);
+        setBackground(new Color(0, 0, 0, 0));
+        setPreferredSize(new Dimension(panelWidth, panelHeight));
+        setVisible(false);
+        setLayout(new BorderLayout(10, 8));
+        setBorder(new EmptyBorder(35, 35, 35, 35));
+
+        add(buildHeader(), BorderLayout.NORTH);
+        add(buildContent(), BorderLayout.CENTER);
+
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentMoved(ComponentEvent e) {
+                if (customRangePopupVisible) {
+                    positionCustomRangePopup();
+                }
+            }
+
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (customRangePopupVisible) {
+                    positionCustomRangePopup();
+                }
+            }
+        });
+
+        rebuildMetricOptions();
+        refreshChart();
+
+        refreshTimer = new Timer(350, e -> refreshChart());
+        refreshTimer.setRepeats(true);
+        installResizeHandler();
+    }
+
+    void hidePanel() {
+        setVisible(false);
+        refreshTimer.stop();
+        hideCustomRangePopup();
+        persistUiSettings(true);
+    }
 
     private JPanel buildPresetPanel() {
         presetPanel.setOpaque(false);
@@ -125,6 +171,8 @@ public class WorldStatsPanel extends JPanel {
         customEndInput.setPreferredSize(new Dimension(120, 34));
         OverlayControlFactory.styleSpinner(customStartInput);
         OverlayControlFactory.styleSpinner(customEndInput);
+        configureNumericSpinnerInput(customStartInput);
+        configureNumericSpinnerInput(customEndInput);
         customStartInput.setValue((int) customStartValue);
         customEndInput.setValue((int) customEndValue);
         customStartUnitDropdown.setSelectedItem(customStartUnit);
@@ -165,8 +213,10 @@ public class WorldStatsPanel extends JPanel {
         customRangePopupPanel.add(Box.createHorizontalStrut(4));
         customRangePopupPanel.add(customEndInput);
         customRangePopupPanel.add(customEndUnitDropdown);
-        customRangePopup.setBorder(BorderFactory.createLineBorder(ACCENT_COLOR, 1));
-        customRangePopup.add(customRangePopupPanel);
+        customRangePopupPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ACCENT_COLOR, 1),
+                new EmptyBorder(6, 6, 6, 6)
+        ));
 
         presetPanel.add(rangePresetDropdown);
         presetPanel.add(customRangeSettingsButton);
@@ -176,67 +226,36 @@ public class WorldStatsPanel extends JPanel {
         return presetPanel;
     }
 
-    private void handleGlobalMouseEvent(AWTEvent event) {
-        if (!customRangePopup.isVisible()) {
-            return;
-        }
-        if (!(event instanceof MouseEvent mouseEvent) || mouseEvent.getID() != MouseEvent.MOUSE_PRESSED) {
-            return;
-        }
-        Component source = mouseEvent.getComponent();
-        if (source == null) {
-            return;
-        }
-        if (!SwingUtilities.isDescendingFrom(source, this)) {
-            return;
-        }
-        JPopupMenu popupAncestor = (JPopupMenu) SwingUtilities.getAncestorOfClass(JPopupMenu.class, source);
-        if (popupAncestor != null) {
-            Component invoker = popupAncestor.getInvoker();
-            if (invoker == rangePresetDropdown
-                    || invoker == customStartUnitDropdown
-                    || invoker == customEndUnitDropdown) {
-                return;
-            }
-        }
-        if (SwingUtilities.isDescendingFrom(source, customRangePopup)
-                || SwingUtilities.isDescendingFrom(source, customRangeSettingsButton)
-                || SwingUtilities.isDescendingFrom(source, rangePresetDropdown)
-                || SwingUtilities.isDescendingFrom(source, customStartInput)
-                || SwingUtilities.isDescendingFrom(source, customEndInput)
-                || SwingUtilities.isDescendingFrom(source, customStartUnitDropdown)
-                || SwingUtilities.isDescendingFrom(source, customEndUnitDropdown)) {
-            return;
-        }
-        hideCustomRangePopup();
-    }
-
     public WorldStatsPanel(SimulationRuntime runtime) {
         this(runtime, null);
     }
 
-    public WorldStatsPanel(SimulationRuntime runtime, SettingsManager settingsManager) {
-        this.store = runtime.getWorldStatsStore();
-        this.settingsManager = settingsManager;
+    private void configureNumericSpinnerInput(JSpinner spinner) {
+        JComponent editor = spinner.getEditor();
+        if (!(editor instanceof JSpinner.DefaultEditor defaultEditor)) {
+            return;
+        }
 
-        loadUiSettings();
+        JFormattedTextField textField = defaultEditor.getTextField();
+        textField.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
 
-        setOpaque(false);
-        setBackground(new Color(0, 0, 0, 0));
-        setPreferredSize(new Dimension(panelWidth, panelHeight));
-        setVisible(false);
-        setLayout(new BorderLayout(10, 8));
-        setBorder(new EmptyBorder(35, 35, 35, 35));
+        DecimalFormat integerFormat = new DecimalFormat("#");
+        integerFormat.setGroupingUsed(false);
+        NumberFormatter formatter = new NumberFormatter(integerFormat);
+        formatter.setValueClass(Integer.class);
+        formatter.setMinimum(0);
+        formatter.setMaximum(Integer.MAX_VALUE);
+        formatter.setAllowsInvalid(false);
+        formatter.setCommitsOnValidEdit(true);
+        textField.setFormatterFactory(new DefaultFormatterFactory(formatter));
 
-        add(buildHeader(), BorderLayout.NORTH);
-        add(buildContent(), BorderLayout.CENTER);
-
-        rebuildMetricOptions();
-        refreshChart();
-
-        refreshTimer = new Timer(350, e -> refreshChart());
-        refreshTimer.setRepeats(true);
-        installResizeHandler();
+        textField.addActionListener(e -> {
+            try {
+                textField.commitEdit();
+            } catch (ParseException ex) {
+                textField.setValue(spinner.getValue());
+            }
+        });
     }
 
     void showPanel() {
@@ -410,7 +429,7 @@ public class WorldStatsPanel extends JPanel {
         if (activePreset != WorldStatsRangePreset.CUSTOM) {
             return;
         }
-        if (customRangePopup.isVisible()) {
+        if (customRangePopupVisible) {
             hideCustomRangePopup();
         } else {
             showCustomRangePopup();
@@ -443,7 +462,7 @@ public class WorldStatsPanel extends JPanel {
         persistUiSettings(false);
         refreshChart();
         rangePresetDropdown.repaint();
-        if (customRangePopup.isVisible()) {
+        if (customRangePopupVisible) {
             positionCustomRangePopup();
         }
     }
@@ -453,7 +472,6 @@ public class WorldStatsPanel extends JPanel {
             return;
         }
         positionCustomRangePopup();
-        ensureCustomRangePopupOutsideClickListener(true);
         syncCustomRangeSettingsButtonState();
     }
 
@@ -526,26 +544,34 @@ public class WorldStatsPanel extends JPanel {
     }
 
     private void positionCustomRangePopup() {
-        Dimension popupSize = customRangePopup.getPreferredSize();
-        if (popupSize.width <= 0 || popupSize.height <= 0) {
-            customRangePopupPanel.doLayout();
-            popupSize = customRangePopup.getPreferredSize();
+        if (!customRangeSettingsButton.isShowing()) {
+            return;
         }
-        int x = (customRangeSettingsButton.getWidth() - popupSize.width) / 2;
-        int y = customRangeSettingsButton.getHeight() + 6;
-        customRangePopup.show(customRangeSettingsButton, x, y);
+
+        Dimension popupSize = customRangePopupPanel.getPreferredSize();
+        Point buttonOnScreen = customRangeSettingsButton.getLocationOnScreen();
+        int x = buttonOnScreen.x + (customRangeSettingsButton.getWidth() - popupSize.width) / 2;
+        int y = buttonOnScreen.y + customRangeSettingsButton.getHeight() + 6;
+
+        if (customRangePopupWindow != null) {
+            customRangePopupWindow.hide();
+        }
+        customRangePopupWindow = PopupFactory.getSharedInstance().getPopup(customRangeSettingsButton, customRangePopupPanel, x, y);
+        customRangePopupWindow.show();
+        customRangePopupVisible = true;
     }
 
     private void hideCustomRangePopup() {
-        if (customRangePopup.isVisible()) {
-            customRangePopup.setVisible(false);
+        if (customRangePopupWindow != null) {
+            customRangePopupWindow.hide();
+            customRangePopupWindow = null;
         }
-        ensureCustomRangePopupOutsideClickListener(false);
+        customRangePopupVisible = false;
         syncCustomRangeSettingsButtonState();
     }
 
     private void syncCustomRangeSettingsButtonState() {
-        boolean dimmed = activePreset != WorldStatsRangePreset.CUSTOM || customRangePopup.isVisible();
+        boolean dimmed = activePreset != WorldStatsRangePreset.CUSTOM || customRangePopupVisible;
         customRangeSettingsButton.setDimmed(dimmed);
     }
 
@@ -559,7 +585,7 @@ public class WorldStatsPanel extends JPanel {
         private static final int LEGEND_ITEM_GAP = 22;
         private static final int LEGEND_RIGHT_WRAP_PADDING = RIGHT_PAD;
         private static final int AXIS_AND_GAP_HEIGHT = 30;
-        private static final int LEGEND_BOTTOM_GAP = 4;
+        private static final int LEGEND_BOTTOM_GAP = 0;
         private static final int MIN_PLOT_HEIGHT = 80;
         private static final int HOVER_TOOLTIP_OFFSET = 12;
 
@@ -655,10 +681,11 @@ public class WorldStatsPanel extends JPanel {
         private int computeDynamicBottomPad() {
             FontMetrics fm = getFontMetrics(new Font("Segoe UI", Font.PLAIN, 11));
             int rows = computeLegendRows(Math.max(1, getWidth() - LEFT_PAD - RIGHT_PAD), fm);
-            int legendHeight = Math.max(0, rows) * fm.getHeight();
+            int legendHeight = rows <= 0 ? 0 : (fm.getAscent() + Math.max(0, rows - 1) * fm.getHeight());
             int preferred = AXIS_AND_GAP_HEIGHT + legendHeight + LEGEND_BOTTOM_GAP;
-            int maxAllowed = Math.max(AXIS_AND_GAP_HEIGHT + fm.getHeight(), getHeight() - TOP_PAD - MIN_PLOT_HEIGHT);
-            return Math.max(AXIS_AND_GAP_HEIGHT + fm.getHeight(), Math.min(preferred, maxAllowed));
+            int minPad = AXIS_AND_GAP_HEIGHT + LEGEND_BOTTOM_GAP;
+            int maxAllowed = Math.max(minPad, getHeight() - TOP_PAD - MIN_PLOT_HEIGHT);
+            return Math.max(minPad, Math.min(preferred, maxAllowed));
         }
 
         private int computeLegendRows(int plotWidth, FontMetrics fm) {
@@ -828,18 +855,6 @@ public class WorldStatsPanel extends JPanel {
             }
         }
     }
-
-    private void ensureCustomRangePopupOutsideClickListener(boolean install) {
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
-        if (install && !customRangePopupListenerInstalled) {
-            toolkit.addAWTEventListener(customRangePopupOutsideClickListener, AWTEvent.MOUSE_EVENT_MASK);
-            customRangePopupListenerInstalled = true;
-        } else if (!install && customRangePopupListenerInstalled) {
-            toolkit.removeAWTEventListener(customRangePopupOutsideClickListener);
-            customRangePopupListenerInstalled = false;
-        }
-    }
-
 
 
     private void refreshChart() {
