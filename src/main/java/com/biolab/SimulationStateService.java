@@ -13,7 +13,7 @@ import java.util.List;
  */
 public class SimulationStateService {
     private static final int MAGIC = 0x424C5331; // BLS1
-    private static final int FORMAT_VERSION = 3;
+    private static final int FORMAT_VERSION = 5;
 
     private static void writeState(DataOutputStream out, SimulationState state) throws IOException {
         out.writeInt(MAGIC);
@@ -58,6 +58,8 @@ public class SimulationStateService {
                 out.writeDouble(a.toxinResistance());
                 out.writeDouble(a.speed());
                 out.writeDouble(a.diet());
+                out.writeDouble(a.maxHealth());
+                out.writeDouble(a.maxEnergy());
                 out.writeInt(a.generation());
             }
         }
@@ -141,6 +143,8 @@ public class SimulationStateService {
             List<AncestorSnapshot> ancestry = new ArrayList<>(ancestryCount);
             for (int a = 0; a < ancestryCount; a++) {
                 ancestry.add(new AncestorSnapshot(
+                        in.readDouble(),
+                        in.readDouble(),
                         in.readDouble(),
                         in.readDouble(),
                         in.readDouble(),

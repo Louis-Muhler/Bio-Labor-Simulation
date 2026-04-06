@@ -290,6 +290,8 @@ public class InspectorPanel extends JPanel {
         private static final Color CHART_TOXIN = new Color(100, 255, 100);
         private static final Color CHART_SPEED = new Color(100, 150, 255);
         private static final Color CHART_DIET = new Color(255, 180, 50);
+        private static final Color CHART_MAX_HEALTH = new Color(255, 120, 180);
+        private static final Color CHART_MAX_ENERGY = new Color(120, 200, 255);
         // ── Cached strokes ──────────────────────────────────────────────
         private static final BasicStroke STROKE_1 = new BasicStroke(1);
         private static final BasicStroke STROKE_2 = new BasicStroke(2);
@@ -355,28 +357,20 @@ public class InspectorPanel extends JPanel {
             });
         }
 
-        /**
-         * Finds the nearest chart column within X_SLICE pixels of {@code p}
-         * whose chart area also contains the mouse Y. Returns null if none.
-         */
-        private HoveredPoint findHoveredPoint(Point p) {
-            if (p == null) return null;
-            final int X_SLICE = 10;
-            ChartHitbox best = null;
-            int bestDx = Integer.MAX_VALUE;
-            for (ChartHitbox hb : chartHitboxes) {
-                // Mouse must be inside the chart's vertical range
-                if (p.y < hb.chartTop() || p.y > hb.chartBottom()) continue;
-                int dx = Math.abs(p.x - hb.screenX());
-                if (dx <= X_SLICE && dx < bestDx) {
-                    bestDx = dx;
-                    best = hb;
-                }
+        private static double[] resolveLineageRange(List<LineagePoint> points) {
+            double min = Double.POSITIVE_INFINITY;
+            double max = Double.NEGATIVE_INFINITY;
+            for (LineagePoint point : points) {
+                min = Math.min(min, Math.min(point.maxHealth(), point.maxEnergy()));
+                max = Math.max(max, Math.max(point.maxHealth(), point.maxEnergy()));
             }
-            if (best == null) return null;
-            return new HoveredPoint(best.screenX(), best.screenY(),
-                    best.chartTop(), best.chartBottom(),
-                    best.generation(), best.heat(), best.toxin(), best.speed(), best.diet());
+            if (!Double.isFinite(min) || !Double.isFinite(max)) {
+                return new double[]{0.0, 1.0};
+            }
+            if (max <= min) {
+                return new double[]{min, min + 1.0};
+            }
+            return new double[]{min, max};
         }
 
         @Override
@@ -441,6 +435,57 @@ public class InspectorPanel extends JPanel {
             }
         }
 
+        private static double normalize(double value, double min, double max) {
+            if (max <= min) {
+                return 0.0;
+            }
+            double n = (value - min) / (max - min);
+            return Math.max(0.0, Math.min(1.0, n));
+        }
+
+        private static int sectionHeight() {
+            return sectionHeight(3);
+        }
+
+        private static int sectionHeight(int dataLines) {
+            return LINE_H + dataLines * LINE_H;
+        }
+
+        private static void drawCentered(Graphics2D g2, String text, int x, int y) {
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(text, x - fm.stringWidth(text) / 2, y);
+        }
+
+        void recalculatePreferredSize() {
+            setPreferredSize(new Dimension(CW, computeContentHeight()));
+        }
+
+        /**
+         * Finds the nearest chart column within X_SLICE pixels of {@code p}
+         * whose chart area also contains the mouse Y. Returns null if none.
+         */
+        private HoveredPoint findHoveredPoint(Point p) {
+            if (p == null) return null;
+            final int X_SLICE = 10;
+            ChartHitbox best = null;
+            int bestDx = Integer.MAX_VALUE;
+            for (ChartHitbox hb : chartHitboxes) {
+                // Mouse must be inside the chart's vertical range
+                if (p.y < hb.chartTop() || p.y > hb.chartBottom()) continue;
+                int dx = Math.abs(p.x - hb.screenX());
+                if (dx <= X_SLICE && dx < bestDx) {
+                    bestDx = dx;
+                    best = hb;
+                }
+            }
+            if (best == null) return null;
+            return new HoveredPoint(best.screenX(), best.screenY(),
+                    best.chartTop(), best.chartBottom(),
+                    best.generation(),
+                    best.heatResistance(), best.toxinResistance(), best.speed(), best.diet(),
+                    best.maxHealth(), best.maxEnergy());
+        }
+
         private int drawAncestrySection(Graphics2D g2, int y,
                                         List<AncestorSnapshot> ancestry, Microbe microbe) {
             g2.setColor(ACCENT);
@@ -467,28 +512,39 @@ public class InspectorPanel extends JPanel {
             List<LineagePoint> fullTimeline = buildLineageTimeline(ancestry, microbe);
             List<LineagePoint> visibleTimeline = downsampleForChart(fullTimeline);
 
-            List<ChartPoint> heat = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
-                    LineagePoint::heatResistance);
-            List<ChartPoint> toxin = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
-                    LineagePoint::toxinResistance);
-            List<ChartPoint> speed = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
-                    LineagePoint::speed);
-            List<ChartPoint> diet = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
-                    LineagePoint::diet);
+            double[] chartRange = resolveLineageRange(visibleTimeline);
+            double percentMin = 0.0;
+            double percentMax = 1.0;
 
-            for (int i = 0; i < visibleTimeline.size() && i < heat.size(); i++) {
+            List<ChartPoint> heat = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    percentMin, percentMax, LineagePoint::heatResistance);
+            List<ChartPoint> toxin = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    percentMin, percentMax, LineagePoint::toxinResistance);
+            List<ChartPoint> speed = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    percentMin, percentMax, LineagePoint::speed);
+            List<ChartPoint> diet = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    percentMin, percentMax, LineagePoint::diet);
+
+            List<ChartPoint> maxHealth = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    chartRange[0], chartRange[1], LineagePoint::maxHealth);
+            List<ChartPoint> maxEnergy = buildChartPoints(visibleTimeline, chartX, chartY, chartW, CHART_HEIGHT,
+                    chartRange[0], chartRange[1], LineagePoint::maxEnergy);
+
+            for (int i = 0; i < visibleTimeline.size() && i < maxHealth.size(); i++) {
                 LineagePoint point = visibleTimeline.get(i);
-                ChartPoint heatPoint = heat.get(i);
+                ChartPoint healthPoint = maxHealth.get(i);
                 chartHitboxes.add(new ChartHitbox(
-                        heatPoint.screenX(),
-                        heatPoint.screenY(),
+                        healthPoint.screenX(),
+                        healthPoint.screenY(),
                         chartY,
                         chartY + CHART_HEIGHT,
                         point.generation(),
                         point.heatResistance(),
                         point.toxinResistance(),
                         point.speed(),
-                        point.diet()
+                        point.diet(),
+                        point.maxHealth(),
+                        point.maxEnergy()
                 ));
             }
 
@@ -496,32 +552,32 @@ public class InspectorPanel extends JPanel {
             drawLineChart(g2, toxin, CHART_TOXIN);
             drawLineChart(g2, speed, CHART_SPEED);
             drawLineChart(g2, diet, CHART_DIET);
+            drawLineChart(g2, maxHealth, CHART_MAX_HEALTH);
+            drawLineChart(g2, maxEnergy, CHART_MAX_ENERGY);
 
             y = chartY + CHART_HEIGHT + 15;
             g2.setFont(MONO_FONT);
-            drawLegendItem(g2, 5, y, CHART_HEAT,  "Heat");
-            drawLegendItem(g2,  60, y, CHART_TOXIN, "Toxin");
-            drawLegendItem(g2, 120, y, CHART_SPEED, "Speed");
-            drawLegendItem(g2, 185, y, CHART_DIET,  "Diet");
+            drawLegendItem(g2, 5, y, CHART_MAX_HEALTH, "Health");
+            drawLegendItem(g2, 80, y, CHART_MAX_ENERGY, "Energy");
+            drawLegendItem(g2, 165, y, CHART_HEAT, "Heat");
+            y += 14;
+            drawLegendItem(g2, 5, y, CHART_DIET, "Diet");
+            drawLegendItem(g2, 80, y, CHART_TOXIN, "Toxin");
+            drawLegendItem(g2, 165, y, CHART_SPEED, "Speed");
 
             return y + 10;
         }
 
-        private static int sectionHeight() {
-            return sectionHeight(3);
-        }
-
-        private static int sectionHeight(int dataLines) {
-            return LINE_H + dataLines * LINE_H;
-        }
-
-        private static void drawCentered(Graphics2D g2, String text, int x, int y) {
-            FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(text, x - fm.stringWidth(text) / 2, y);
-        }
-
-        void recalculatePreferredSize() {
-            setPreferredSize(new Dimension(CW, computeContentHeight()));
+        private List<LineagePoint> downsampleForChart(List<LineagePoint> timeline) {
+            List<Integer> visibleIndices = selectEvenlyDistributedIndices(
+                    timeline.size(),
+                    MAX_VISIBLE_LINEAGE_POINTS
+            );
+            List<LineagePoint> sampled = new ArrayList<>(visibleIndices.size());
+            for (Integer idx : visibleIndices) {
+                sampled.add(timeline.get(idx));
+            }
+            return sampled;
         }
 
         private int computeContentHeight() {
@@ -541,7 +597,7 @@ public class InspectorPanel extends JPanel {
                 h += LINE_H + 5;   // section header + gap
                 h += CHART_HEIGHT;
                 h += 15;           // gap before legend
-                h += LINE_H;       // legend
+                h += LINE_H * 2;   // legend (2 rows)
                 h += COLOR_CODE_GAP; // extra breath after chart legend
             }
 
@@ -561,7 +617,9 @@ public class InspectorPanel extends JPanel {
                         a.heatResistance(),
                         a.toxinResistance(),
                         a.speed(),
-                        a.diet()
+                        a.diet(),
+                        a.maxHealth(),
+                        a.maxEnergy()
                 ));
             }
             timeline.add(new LineagePoint(
@@ -569,32 +627,24 @@ public class InspectorPanel extends JPanel {
                     microbe.getHeatResistance(),
                     microbe.getToxinResistance(),
                     microbe.getSpeed(),
-                    microbe.getDiet()
+                    microbe.getDiet(),
+                    microbe.getMaxHealth(),
+                    microbe.getMaxEnergy()
             ));
             return timeline;
         }
 
-        private List<LineagePoint> downsampleForChart(List<LineagePoint> timeline) {
-            List<Integer> visibleIndices = selectEvenlyDistributedIndices(
-                    timeline.size(),
-                    MAX_VISIBLE_LINEAGE_POINTS
-            );
-            List<LineagePoint> sampled = new ArrayList<>(visibleIndices.size());
-            for (Integer idx : visibleIndices) {
-                sampled.add(timeline.get(idx));
-            }
-            return sampled;
-        }
-
         private List<ChartPoint> buildChartPoints(List<LineagePoint> points,
                                                   int chartX, int chartY, int chartW, int chartH,
+                                                  double minValue, double maxValue,
                                                   ToDoubleFunction<LineagePoint> valueSelector) {
             List<Integer> slotXs = computeUniformSlotXPositions(chartX, chartW, points.size());
             List<ChartPoint> chartPoints = new ArrayList<>(points.size());
             for (int i = 0; i < points.size(); i++) {
                 int x = slotXs.get(i);
                 double value = valueSelector.applyAsDouble(points.get(i));
-                int y = chartY + chartH - (int) Math.round(value * chartH);
+                double normalized = normalize(value, minValue, maxValue);
+                int y = chartY + chartH - (int) Math.round(normalized * chartH);
                 chartPoints.add(new ChartPoint(x, y));
             }
             return chartPoints;
@@ -680,10 +730,12 @@ public class InspectorPanel extends JPanel {
 
             String[] lines = {
                     String.format("Gen:   %d", hp.generation()),
-                    String.format("Heat:  %.1f %%", hp.heat() * 100),
-                    String.format("Toxin: %.1f %%", hp.toxin() * 100),
-                    String.format("Speed: %.1f %%", hp.speed() * 100),
-                    String.format("Diet:  %.1f %%", hp.diet() * 100)
+                    String.format("Health:     %.1f", hp.maxHealth()),
+                    String.format("Energy:     %.1f", hp.maxEnergy()),
+                    String.format("Heat:       %.1f %%", hp.heatResistance() * 100),
+                    String.format("Toxin:      %.1f %%", hp.toxinResistance() * 100),
+                    String.format("Speed:      %.1f %%", hp.speed() * 100),
+                    String.format("Diet:       %.1f %%", hp.diet() * 100)
             };
 
             int lineH = fm.getHeight();
@@ -715,7 +767,7 @@ public class InspectorPanel extends JPanel {
             // Text lines – Gen row in accent colour, gene rows in their chart colours
             int textX = tx + PAD;
             int textY = ty + PAD + fm.getAscent();
-            Color[] lineColors = {ACCENT, CHART_HEAT, CHART_TOXIN, CHART_SPEED, CHART_DIET};
+            Color[] lineColors = {ACCENT, CHART_HEAT, CHART_TOXIN, CHART_SPEED, CHART_DIET, CHART_MAX_HEALTH, CHART_MAX_ENERGY};
             for (int i = 0; i < lines.length; i++) {
                 g2.setColor(lineColors[i]);
                 g2.drawString(lines[i], textX, textY);
@@ -729,7 +781,8 @@ public class InspectorPanel extends JPanel {
         private record ChartHitbox(int screenX, int screenY,
                                    int chartTop, int chartBottom,
                                    int generation,
-                                   double heat, double toxin, double speed, double diet) {
+                                   double heatResistance, double toxinResistance, double speed, double diet,
+                                   double maxHealth, double maxEnergy) {
         }
 
         /**
@@ -738,7 +791,8 @@ public class InspectorPanel extends JPanel {
         private record HoveredPoint(int screenX, int screenY,
                                     int chartTop, int chartBottom,
                                     int generation,
-                                    double heat, double toxin, double speed, double diet) {
+                                    double heatResistance, double toxinResistance, double speed, double diet,
+                                    double maxHealth, double maxEnergy) {
         }
 
         private void drawLegendItem(Graphics2D g2, int x, int y, Color color, String label) {
@@ -802,7 +856,9 @@ public class InspectorPanel extends JPanel {
                                     double heatResistance,
                                     double toxinResistance,
                                     double speed,
-                                    double diet) {
+                                    double diet,
+                                    double maxHealth,
+                                    double maxEnergy) {
         }
 
         private record ChartPoint(int screenX, int screenY) {

@@ -260,6 +260,8 @@ public class Microbe {
                 parent.toxinResistance,
                 parent.speed,
                 parent.diet,
+                parent.maxHealth,
+                parent.maxEnergy,
                 parent.absoluteGeneration   // absolute, not relative
         ));
 
