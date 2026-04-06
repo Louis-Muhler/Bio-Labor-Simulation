@@ -43,5 +43,24 @@ class WorldStatsRangePresetTest {
         assertEquals(2_700L, resolvedStart);
         assertEquals(3_600L, resolvedEnd);
     }
+
+    @Test
+    void customDefaultRangeShouldMapToTwoPointFiveMinutes() {
+        long startTicks = WorldStatsTimeUnit.MIN.toTicks(0);
+        long endTicks = WorldStatsTimeUnit.SEC.toTicks(150);
+
+        long resolvedStart = WorldStatsRangePreset.CUSTOM.resolveStartTick(100_000L, 0L, startTicks, endTicks);
+        long resolvedEnd = WorldStatsRangePreset.CUSTOM.resolveEndTick(100_000L, startTicks, endTicks);
+
+        assertEquals(0L, resolvedStart);
+        assertEquals(WorldStatsTimeUnit.MIN.toTicks(2) + WorldStatsTimeUnit.SEC.toTicks(30), resolvedEnd);
+    }
+
+    @Test
+    void rangeFormatterShouldProduceCompactReadableValues() {
+        assertEquals("Since beginning", WorldStatsRangePreset.SINCE_BEGINNING.label());
+        assertEquals("2.5m", WorldStatsRangeLabelFormatter.formatTickRangeValue(WorldStatsTimeUnit.SEC.toTicks(150)));
+        assertEquals("400s", WorldStatsRangeLabelFormatter.formatTickRangeValue(WorldStatsTimeUnit.SEC.toTicks(400)));
+    }
 }
 

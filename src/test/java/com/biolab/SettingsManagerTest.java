@@ -29,6 +29,10 @@ class SettingsManagerTest {
         SettingsManager sm = newIsolatedManager();
         assertTrue(sm.getWindowWidth() >= 800, "Default width should be >= 800");
         assertTrue(sm.getWindowHeight() >= 600, "Default height should be >= 600");
+        assertEquals(0L, sm.getWorldStatsCustomStartValue());
+        assertEquals(WorldStatsTimeUnit.MIN.name(), sm.getWorldStatsCustomStartUnit());
+        assertEquals(150L, sm.getWorldStatsCustomEndValue());
+        assertEquals(WorldStatsTimeUnit.SEC.name(), sm.getWorldStatsCustomEndUnit());
     }
 
     @Test

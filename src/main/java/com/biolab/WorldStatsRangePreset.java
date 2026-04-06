@@ -4,12 +4,12 @@ package com.biolab;
  * Time-window presets for the world statistics chart.
  */
 public enum WorldStatsRangePreset {
-    SINCE_BEGINNING(-1L, "Seit Beginn"),
-    LAST_1_MIN(30L * 60L, "1m"),
-    LAST_5_MIN(30L * 60L * 5L, "5m"),
-    LAST_10_MIN(30L * 60L * 10L, "10m"),
-    LAST_30_MIN(30L * 60L * 30L, "30m"),
-    LAST_60_MIN(30L * 60L * 60L, "60m"),
+    SINCE_BEGINNING(-1L, "Since beginning"),
+    LAST_1_MIN(30L * 60L, "Last 1m"),
+    LAST_5_MIN(30L * 60L * 5L, "Last 5m"),
+    LAST_10_MIN(30L * 60L * 10L, "Last 10m"),
+    LAST_30_MIN(30L * 60L * 30L, "Last 30m"),
+    LAST_60_MIN(30L * 60L * 60L, "Last 60m"),
     CUSTOM(null, "Custom");
 
     private final Long durationTicks;

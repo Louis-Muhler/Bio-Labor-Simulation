@@ -3,6 +3,7 @@ package com.biolab;
 import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
@@ -45,6 +46,13 @@ public class WorldStatsPanel extends JPanel {
     private final JPanel metricListPanel = new JPanel();
     private final JPanel leftColumn = new JPanel(new BorderLayout(0, 6));
     private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JComboBox<WorldStatsRangePreset> rangePresetDropdown = new JComboBox<>(WorldStatsRangePreset.values());
+    private final JLabel currentRangeLabel = new JLabel();
+    private final JPanel customRangeInlinePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    private final JSpinner customStartInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
+    private final JComboBox<WorldStatsTimeUnit> customStartUnitDropdown = new JComboBox<>(WorldStatsTimeUnit.values());
+    private final JSpinner customEndInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
+    private final JComboBox<WorldStatsTimeUnit> customEndUnitDropdown = new JComboBox<>(WorldStatsTimeUnit.values());
     private final JPanel yAxisPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final ChartCanvas chartCanvas = new ChartCanvas();
 
@@ -54,16 +62,16 @@ public class WorldStatsPanel extends JPanel {
 
     private final Map<WorldMetricId, JCheckBox> metricCheckboxes = new EnumMap<>(WorldMetricId.class);
     private final Set<WorldMetricId> selectedMetrics = new LinkedHashSet<>();
-    private final Map<WorldStatsRangePreset, ModernButton> presetButtons = new EnumMap<>(WorldStatsRangePreset.class);
     private final Map<WorldStatsYAxisMode, ModernButton> yAxisButtons = new EnumMap<>(WorldStatsYAxisMode.class);
 
     private WorldStatsRangePreset activePreset = WorldStatsRangePreset.SINCE_BEGINNING;
     private final Timer refreshTimer;
     private WorldStatsYAxisMode yAxisMode = WorldStatsYAxisMode.RELATIV_PRO_SERIE;
-    private long customStartValue = 10;
+    private long customStartValue = 0;
     private WorldStatsTimeUnit customStartUnit = WorldStatsTimeUnit.MIN;
-    private long customEndValue = 0;
-    private WorldStatsTimeUnit customEndUnit = WorldStatsTimeUnit.MIN;
+    private long customEndValue = 150;
+    private WorldStatsTimeUnit customEndUnit = WorldStatsTimeUnit.SEC;
+    private boolean suppressCustomRangeEvents;
     private List<WorldStatsSample> currentSamples = List.of();
     private List<WorldMetricDefinition> currentDefinitions = List.of();
     private int panelWidth = PANEL_WIDTH;
@@ -198,18 +206,8 @@ public class WorldStatsPanel extends JPanel {
         return content;
     }
 
-    private JPanel buildPresetPanel() {
-        presetPanel.setOpaque(false);
-        for (WorldStatsRangePreset preset : WorldStatsRangePreset.values()) {
-            ModernButton button = new ModernButton(preset.label());
-            button.setPreferredSize(new Dimension(90, 34));
-            button.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            button.addActionListener(e -> onPresetClicked(preset));
-            presetButtons.put(preset, button);
-            presetPanel.add(button);
-        }
-        syncPresetButtons();
-        return presetPanel;
+    static String formatTickRangeValue(long ticks) {
+        return WorldStatsRangeLabelFormatter.formatTickRangeValue(ticks);
     }
 
     private JPanel buildYAxisPanel() {
@@ -257,57 +255,86 @@ public class WorldStatsPanel extends JPanel {
         button.setFont(new Font("Segoe UI", Font.BOLD, 12));
     }
 
-    private void onPresetClicked(WorldStatsRangePreset preset) {
-        WorldStatsRangePreset previous = activePreset;
-        activePreset = preset;
-        if (preset == WorldStatsRangePreset.CUSTOM && !showCustomRangeDialog()) {
-            activePreset = previous;
-        }
-        syncPresetButtons();
+    static Rectangle computeHoverTooltipBounds(Rectangle plot, Point mouse, int tooltipWidth, int tooltipHeight, int offset) {
+        return WorldStatsTooltipLayout.computeBounds(plot, mouse, tooltipWidth, tooltipHeight, offset);
+    }
+
+    private JPanel buildPresetPanel() {
+        presetPanel.setOpaque(false);
+
+        JLabel timeLabel = new JLabel("Range:");
+        timeLabel.setForeground(ACCENT_COLOR);
+        timeLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+
+        rangePresetDropdown.setPreferredSize(new Dimension(150, 30));
+        rangePresetDropdown.setSelectedItem(activePreset);
+        rangePresetDropdown.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof WorldStatsRangePreset preset) {
+                    label.setText(preset.label());
+                }
+                return label;
+            }
+        });
+        rangePresetDropdown.addActionListener(e -> onPresetSelectionChanged());
+
+        currentRangeLabel.setForeground(TEXT_COLOR);
+        currentRangeLabel.setFont(new Font("Consolas", Font.PLAIN, 12));
+
+        customStartInput.setPreferredSize(new Dimension(64, 28));
+        customEndInput.setPreferredSize(new Dimension(64, 28));
+        customStartInput.setValue((int) customStartValue);
+        customEndInput.setValue((int) customEndValue);
+        customStartUnitDropdown.setSelectedItem(customStartUnit);
+        customEndUnitDropdown.setSelectedItem(customEndUnit);
+
+        DefaultListCellRenderer unitRenderer = new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof WorldStatsTimeUnit unit) {
+                    label.setText(unit.label());
+                }
+                return label;
+            }
+        };
+        customStartUnitDropdown.setRenderer(unitRenderer);
+        customEndUnitDropdown.setRenderer(unitRenderer);
+
+        ChangeListener customChange = e -> onCustomRangeInputChanged();
+        customStartInput.addChangeListener(customChange);
+        customEndInput.addChangeListener(customChange);
+        customStartUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
+        customEndUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
+
+        customRangeInlinePanel.setOpaque(false);
+        customRangeInlinePanel.add(customStartInput);
+        customRangeInlinePanel.add(customStartUnitDropdown);
+        customRangeInlinePanel.add(new JLabel("-"));
+        customRangeInlinePanel.add(customEndInput);
+        customRangeInlinePanel.add(customEndUnitDropdown);
+
+        presetPanel.add(timeLabel);
+        presetPanel.add(rangePresetDropdown);
+        presetPanel.add(customRangeInlinePanel);
+        presetPanel.add(currentRangeLabel);
+
+        setCustomRangePanelVisible(activePreset == WorldStatsRangePreset.CUSTOM);
+        updateCurrentRangeLabel(0L, 0L);
+        return presetPanel;
+    }
+
+    private void onPresetSelectionChanged() {
+        WorldStatsRangePreset selected = (WorldStatsRangePreset) rangePresetDropdown.getSelectedItem();
+        if (selected == null || selected == activePreset) return;
+        activePreset = selected;
+        setCustomRangePanelVisible(activePreset == WorldStatsRangePreset.CUSTOM);
         persistUiSettings(false);
         refreshChart();
-    }
-
-    private boolean showCustomRangeDialog() {
-        JSpinner startValue = new JSpinner(new SpinnerNumberModel((int) customStartValue, 0, Integer.MAX_VALUE, 1));
-        JSpinner endValue = new JSpinner(new SpinnerNumberModel((int) customEndValue, 0, Integer.MAX_VALUE, 1));
-        JComboBox<WorldStatsTimeUnit> startUnit = new JComboBox<>(WorldStatsTimeUnit.values());
-        JComboBox<WorldStatsTimeUnit> endUnit = new JComboBox<>(WorldStatsTimeUnit.values());
-        startUnit.setSelectedItem(customStartUnit);
-        endUnit.setSelectedItem(customEndUnit);
-
-        JPanel panel = new JPanel(new GridLayout(2, 4, 8, 6));
-        panel.add(new JLabel("Start"));
-        panel.add(startValue);
-        panel.add(new JLabel("Einheit"));
-        panel.add(startUnit);
-        panel.add(new JLabel("Ende"));
-        panel.add(endValue);
-        panel.add(new JLabel("Einheit"));
-        panel.add(endUnit);
-
-        int result = JOptionPane.showConfirmDialog(this, panel, "Custom Zeitbereich (Tick-basiert)",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result != JOptionPane.OK_OPTION) return false;
-
-        customStartValue = ((Number) startValue.getValue()).longValue();
-        customStartUnit = (WorldStatsTimeUnit) startUnit.getSelectedItem();
-        customEndValue = ((Number) endValue.getValue()).longValue();
-        customEndUnit = (WorldStatsTimeUnit) endUnit.getSelectedItem();
-
-        long startTick = customStartUnit.toTicks(customStartValue);
-        long endTick = customEndUnit.toTicks(customEndValue);
-        if (endTick < startTick) {
-            customEndValue = customStartValue;
-            customEndUnit = customStartUnit;
-        }
-        return true;
-    }
-
-    private void syncPresetButtons() {
-        for (Map.Entry<WorldStatsRangePreset, ModernButton> e : presetButtons.entrySet()) {
-            e.getValue().setDimmed(e.getKey() != activePreset);
-        }
     }
 
     private void syncYAxisButtons() {
@@ -378,14 +405,42 @@ public class WorldStatsPanel extends JPanel {
         return Math.max(LEFT_COL_MIN_WIDTH, Math.min(desired, LEFT_COL_MAX_WIDTH));
     }
 
+    private void onCustomRangeInputChanged() {
+        if (suppressCustomRangeEvents) return;
+        customStartValue = ((Number) customStartInput.getValue()).longValue();
+        customEndValue = ((Number) customEndInput.getValue()).longValue();
+        customStartUnit = (WorldStatsTimeUnit) customStartUnitDropdown.getSelectedItem();
+        customEndUnit = (WorldStatsTimeUnit) customEndUnitDropdown.getSelectedItem();
+
+        if (customStartUnit == null || customEndUnit == null) return;
+
+        long startTick = customStartUnit.toTicks(customStartValue);
+        long endTick = customEndUnit.toTicks(customEndValue);
+        if (endTick < startTick) {
+            suppressCustomRangeEvents = true;
+            try {
+                customEndValue = customStartValue;
+                customEndUnit = customStartUnit;
+                customEndInput.setValue((int) customEndValue);
+                customEndUnitDropdown.setSelectedItem(customEndUnit);
+            } finally {
+                suppressCustomRangeEvents = false;
+            }
+        }
+
+        persistUiSettings(false);
+        refreshChart();
+    }
+
+    private void setCustomRangePanelVisible(boolean visible) {
+        customRangeInlinePanel.setVisible(visible);
+        presetPanel.revalidate();
+        presetPanel.repaint();
+    }
 
     private void refreshChart() {
-        if (selectedMetrics.isEmpty()) {
-            currentSamples = List.of();
-            currentDefinitions = List.of();
-            chartCanvas.setChartData(currentSamples, currentDefinitions, yAxisMode);
-            return;
-        }
+        if (customStartUnit == null) customStartUnit = WorldStatsTimeUnit.MIN;
+        if (customEndUnit == null) customEndUnit = WorldStatsTimeUnit.SEC;
 
         long latestTick = store.lastTick();
         long earliestTick = store.firstTick();
@@ -395,6 +450,14 @@ public class WorldStatsPanel extends JPanel {
         long fromTick = activePreset.resolveStartTick(latestTick, earliestTick, customStartTick, customEndTick);
         long toTick = activePreset.resolveEndTick(latestTick, customStartTick, customEndTick);
         if (toTick < fromTick) toTick = fromTick;
+        updateCurrentRangeLabel(fromTick, toTick);
+
+        if (selectedMetrics.isEmpty()) {
+            currentSamples = List.of();
+            currentDefinitions = List.of();
+            chartCanvas.setChartData(currentSamples, currentDefinitions, yAxisMode);
+            return;
+        }
 
         int maxPoints = Math.max(80, chartCanvas.getWidth() - 280);
         currentSamples = store.queryRangeByTick(selectedMetrics, fromTick, toTick, maxPoints);
@@ -404,6 +467,10 @@ public class WorldStatsPanel extends JPanel {
                 .toList();
 
         chartCanvas.setChartData(currentSamples, currentDefinitions, yAxisMode);
+    }
+
+    private void updateCurrentRangeLabel(long fromTick, long toTick) {
+        currentRangeLabel.setText(WorldStatsRangeLabelFormatter.formatCurrentRange(activePreset, fromTick, toTick));
     }
 
     private void exportCsv() {
@@ -425,7 +492,7 @@ public class WorldStatsPanel extends JPanel {
         try {
             consumer.accept(chooser.getSelectedFile().toPath());
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Export fehlgeschlagen: " + ex.getMessage(),
+            JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(),
                     "Export Error", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -484,9 +551,9 @@ public class WorldStatsPanel extends JPanel {
         settingsManager.setWorldStatsRangePreset(activePreset.name());
         settingsManager.setWorldStatsYAxisMode(yAxisMode.name());
         settingsManager.setWorldStatsCustomStartValue(customStartValue);
-        settingsManager.setWorldStatsCustomStartUnit(customStartUnit.name());
+        settingsManager.setWorldStatsCustomStartUnit((customStartUnit == null ? WorldStatsTimeUnit.MIN : customStartUnit).name());
         settingsManager.setWorldStatsCustomEndValue(customEndValue);
-        settingsManager.setWorldStatsCustomEndUnit(customEndUnit.name());
+        settingsManager.setWorldStatsCustomEndUnit((customEndUnit == null ? WorldStatsTimeUnit.SEC : customEndUnit).name());
         if (save) settingsManager.saveSettings();
     }
 
@@ -609,11 +676,13 @@ public class WorldStatsPanel extends JPanel {
         private static final int TOP_PAD = 16;
         private static final int BOTTOM_PAD = 60;
         private static final int RIGHT_PAD = 210;
+        private static final int HOVER_TOOLTIP_OFFSET = 12;
 
         private List<WorldStatsSample> samples = List.of();
         private List<WorldMetricDefinition> definitions = List.of();
         private WorldStatsYAxisMode yAxisMode = WorldStatsYAxisMode.RELATIV_PRO_SERIE;
         private int hoveredIndex = -1;
+        private Point hoverMouse;
 
         ChartCanvas() {
             setOpaque(false);
@@ -622,21 +691,25 @@ public class WorldStatsPanel extends JPanel {
                 public void mouseMoved(MouseEvent e) {
                     Rectangle plot = plotRect();
                     if (!plot.contains(e.getPoint())) {
+                        hoverMouse = null;
                         hoveredIndex = -1;
                         repaint();
                         return;
                     }
+                    hoverMouse = e.getPoint();
                     hoveredIndex = findNearestIndex(e.getX(), plot);
                     repaint();
                 }
 
                 @Override
                 public void mouseExited(MouseEvent e) {
+                    hoverMouse = null;
                     hoveredIndex = -1;
                     repaint();
                 }
             };
             addMouseMotionListener(adapter);
+            addMouseListener(adapter);
         }
 
         void setChartData(List<WorldStatsSample> samples, List<WorldMetricDefinition> definitions, WorldStatsYAxisMode mode) {
@@ -661,7 +734,7 @@ public class WorldStatsPanel extends JPanel {
 
                 if (samples.isEmpty() || definitions.isEmpty()) {
                     g2.setColor(AXIS_TEXT);
-                    g2.drawString("Keine Daten im gewahlten Bereich", plot.x + 8, plot.y + 20);
+                    g2.drawString("No data in selected range", plot.x + 8, plot.y + 20);
                     return;
                 }
 
@@ -679,8 +752,8 @@ public class WorldStatsPanel extends JPanel {
 
                 drawAxisLabels(g2, plot, minTick, maxTick);
                 drawLegend(g2, plot);
-                if (hoveredIndex >= 0 && hoveredIndex < samples.size()) {
-                    drawHover(g2, plot, hoveredIndex, minTick, span);
+                if (hoveredIndex >= 0 && hoveredIndex < samples.size() && hoverMouse != null && plot.contains(hoverMouse)) {
+                    drawHover(g2, plot, hoveredIndex, minTick, span, hoverMouse);
                 }
             } finally {
                 g2.dispose();
@@ -779,7 +852,7 @@ public class WorldStatsPanel extends JPanel {
             String end = WorldStatsTimeUnit.formatTickDuration(maxTick);
             int w = g2.getFontMetrics().stringWidth(end);
             g2.drawString(end, plot.x + plot.width - w, plot.y + plot.height + 16);
-            g2.drawString("X: Simulationszeit (Tick-basiert)", plot.x, plot.y - 2);
+            g2.drawString("X: Simulation time (tick-based)", plot.x, plot.y - 2);
         }
 
         private void drawLegend(Graphics2D g2, Rectangle plot) {
@@ -799,7 +872,7 @@ public class WorldStatsPanel extends JPanel {
             }
         }
 
-        private void drawHover(Graphics2D g2, Rectangle plot, int index, long minTick, long span) {
+        private void drawHover(Graphics2D g2, Rectangle plot, int index, long minTick, long span, Point mouse) {
             WorldStatsSample sample = samples.get(index);
             int x = plot.x + (int) (((sample.tick() - minTick) * 1.0 / span) * plot.width);
             g2.setColor(new Color(255, 255, 255, 70));
@@ -812,23 +885,32 @@ public class WorldStatsPanel extends JPanel {
                 lines.add(def.label() + ": " + String.format(Locale.ROOT, "%.2f", v) + " " + def.unit());
             }
 
-            int ttX = plot.x + plot.width + 10;
-            int ttY = plot.y + 8;
             g2.setFont(new Font("Consolas", Font.PLAIN, 11));
             FontMetrics fm = g2.getFontMetrics();
-            int width = 190;
+            int width = 0;
+            for (String line : lines) {
+                width = Math.max(width, fm.stringWidth(line));
+            }
+            width += 14;
             int height = lines.size() * fm.getHeight() + 10;
 
+            Rectangle tooltipBounds = computeHoverTooltipBounds(plot, mouse, width, height, HOVER_TOOLTIP_OFFSET);
+            int ttX = tooltipBounds.x;
+            int ttY = tooltipBounds.y;
+
             g2.setColor(new Color(18, 18, 18, 235));
-            g2.fillRoundRect(ttX, ttY, width, height, 8, 8);
+            g2.fillRoundRect(ttX, ttY, tooltipBounds.width, tooltipBounds.height, 8, 8);
             g2.setColor(ACCENT_COLOR);
-            g2.drawRoundRect(ttX, ttY, width, height, 8, 8);
+            g2.drawRoundRect(ttX, ttY, tooltipBounds.width, tooltipBounds.height, 8, 8);
 
             int y = ttY + fm.getAscent() + 5;
             for (int i = 0; i < lines.size(); i++) {
                 g2.setColor(i == 0 ? ACCENT_COLOR : TEXT_COLOR);
                 g2.drawString(lines.get(i), ttX + 6, y);
                 y += fm.getHeight();
+                if (y > ttY + tooltipBounds.height - 2) {
+                    break;
+                }
             }
         }
     }

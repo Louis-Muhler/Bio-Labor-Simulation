@@ -33,10 +33,10 @@ public class SettingsManager {
             WorldMetricId.POPULATION_ALIVE.name() + "," + WorldMetricId.FOOD_PELLETS_AVAILABLE.name();
     private static final String DEFAULT_WORLD_STATS_PRESET = WorldStatsRangePreset.SINCE_BEGINNING.name();
     private static final String DEFAULT_WORLD_STATS_Y_AXIS_MODE = WorldStatsYAxisMode.RELATIV_PRO_SERIE.name();
-    private static final long DEFAULT_WORLD_STATS_CUSTOM_START_VALUE = 10;
+    private static final long DEFAULT_WORLD_STATS_CUSTOM_START_VALUE = 0;
     private static final String DEFAULT_WORLD_STATS_CUSTOM_START_UNIT = WorldStatsTimeUnit.MIN.name();
-    private static final long DEFAULT_WORLD_STATS_CUSTOM_END_VALUE = 0;
-    private static final String DEFAULT_WORLD_STATS_CUSTOM_END_UNIT = WorldStatsTimeUnit.MIN.name();
+    private static final long DEFAULT_WORLD_STATS_CUSTOM_END_VALUE = 150;
+    private static final String DEFAULT_WORLD_STATS_CUSTOM_END_UNIT = WorldStatsTimeUnit.SEC.name();
 
     // Settings
     private int windowWidth;
