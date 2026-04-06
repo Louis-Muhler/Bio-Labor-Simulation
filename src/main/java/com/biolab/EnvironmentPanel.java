@@ -1,6 +1,8 @@
 package com.biolab;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicSpinnerUI;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -63,11 +65,11 @@ public class EnvironmentPanel extends JPanel {
     };
 
     private static final String[] SLIDER_LABELS = {"Temperature", "Toxicity"};
-    private static final String FOOD_LABEL = "Food Spawn / Tick";
+    private static final String FOOD_LABEL = "Food Spawn/Tick";
     private static final double FOOD_STEP_PER_CLICK = 0.25;
-    private static final double MAX_FOOD_SPAWN_PER_TICK = 200.0;
-    private static final int FOOD_BUTTON_W = 34;
-    private static final int FOOD_BUTTON_H = 22;
+    private static final double MAX_FOOD_SPAWN_PER_TICK = 1000000;
+    private static final int FOOD_SPINNER_HEIGHT = 30;
+    private static final Color FOOD_SPINNER_BORDER = new Color(95, 145, 255, 220);
 
     // ── Slider layout constants ───────────────────────────────────────────
     private static final int BAR_HEIGHT = 12;
@@ -85,8 +87,8 @@ public class EnvironmentPanel extends JPanel {
      * Used for mouse hit-testing on press and drag events.
      */
     private final Rectangle[] sliderBars = new Rectangle[2];
-    private final Rectangle foodDecreaseButton = new Rectangle();
-    private final Rectangle foodIncreaseButton = new Rectangle();
+    private final JSpinner foodSpawnSpinner;
+    private boolean syncingFoodSpinner;
 
     /**
      * Index of the slider currently being dragged, or -1 when idle.
@@ -105,6 +107,23 @@ public class EnvironmentPanel extends JPanel {
         setPreferredSize(new Dimension(PANEL_WIDTH, 310));
         setBackground(new Color(0, 0, 0, 0));
         setOpaque(false);
+        setLayout(null);
+
+        foodSpawnSpinner = new JSpinner(new SpinnerNumberModel(
+                Math.max(0.0, engine.getFoodSpawnRate()),
+                0.0,
+                MAX_FOOD_SPAWN_PER_TICK,
+                FOOD_STEP_PER_CLICK
+        ));
+        styleFoodSpinner(foodSpawnSpinner);
+        foodSpawnSpinner.addChangeListener(e -> {
+            if (syncingFoodSpinner) {
+                return;
+            }
+            double next = ((Number) foodSpawnSpinner.getValue()).doubleValue();
+            engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(next));
+        });
+        add(foodSpawnSpinner);
 
         for (int i = 0; i < sliderBars.length; i++) {
             sliderBars[i] = new Rectangle();
@@ -123,13 +142,6 @@ public class EnvironmentPanel extends JPanel {
                         draggingSlider = i;
                         updateSliderValue(i, e.getX());
                         break;
-                    }
-                }
-                if (draggingSlider < 0) {
-                    if (foodDecreaseButton.contains(e.getPoint())) {
-                        adjustFoodSpawnPerTick(-FOOD_STEP_PER_CLICK);
-                    } else if (foodIncreaseButton.contains(e.getPoint())) {
-                        adjustFoodSpawnPerTick(FOOD_STEP_PER_CLICK);
                     }
                 }
             }
@@ -172,14 +184,24 @@ public class EnvironmentPanel extends JPanel {
         repaint();
     }
 
-    private static String formatFoodSpawnPerTick(double value) {
-        return String.format(Locale.ROOT, "%.2f / tick", value);
-    }
+    private static void styleFoodSpinner(JSpinner spinner) {
+        spinner.setUI(new BlueSpinnerUI());
+        spinner.setOpaque(false);
+        spinner.setBorder(BorderFactory.createEmptyBorder());
+        spinner.setBackground(OverlayTheme.CONTROL_BG);
 
-    private void adjustFoodSpawnPerTick(double delta) {
-        double next = Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, engine.getFoodSpawnRate() + delta));
-        engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(next));
-        repaint();
+        JComponent editor = spinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
+            JTextField field = defaultEditor.getTextField();
+            field.setFont(new Font("Consolas", Font.BOLD, 13));
+            field.setForeground(OverlayTheme.ACCENT);
+            field.setCaretColor(OverlayTheme.ACCENT);
+            field.setOpaque(false);
+            field.setHorizontalAlignment(SwingConstants.LEFT);
+            field.setBorder(new EmptyBorder(6, 10, 6, 10));
+            defaultEditor.setBorder(BorderFactory.createEmptyBorder());
+            defaultEditor.setOpaque(false);
+        }
     }
 
     /** Returns the current normalised value for the given slider index. */
@@ -195,52 +217,17 @@ public class EnvironmentPanel extends JPanel {
     // Painting
     // ────────────────────────────────────────────────────────────────────
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2d = (Graphics2D) g.create();
+    private void syncFoodSpinnerFromEngine() {
+        double runtimeValue = Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, engine.getFoodSpawnRate()));
+        double spinnerValue = ((Number) foodSpawnSpinner.getValue()).doubleValue();
+        if (Math.abs(runtimeValue - spinnerValue) < 0.0001) {
+            return;
+        }
+        syncingFoodSpinner = true;
         try {
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-            int panelW = getWidth() - 2 * MARGIN;
-            int panelH = getHeight() - 2 * MARGIN;
-
-            // Dark rounded background
-            g2d.setColor(BG_COLOR);
-            g2d.fillRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
-
-            // Outer glow, then crisp cyan border
-            g2d.setColor(BORDER_GLOW_COLOR);
-            g2d.setStroke(STROKE_3);
-            g2d.drawRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
-            g2d.setColor(ACCENT_COLOR);
-            g2d.setStroke(STROKE_1);
-            g2d.drawRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
-
-            int x = MARGIN + CONTENT_PADDING;
-            int y = MARGIN + CONTENT_PADDING;
-            int contentWidth = panelW - 2 * CONTENT_PADDING;
-
-            // Centred title
-            g2d.setFont(TITLE_FONT);
-            g2d.setColor(ACCENT_COLOR);
-            FontMetrics fm = g2d.getFontMetrics();
-            String titleStr = "ENVIRONMENT SETTINGS";
-            g2d.drawString(titleStr, MARGIN + (panelW - fm.stringWidth(titleStr)) / 2, y + 15);
-            y += 25;
-
-            // 2 px separator
-            g2d.setColor(SEPARATOR_COLOR);
-            g2d.fillRect(x, y, contentWidth, 2);
-            y += 14;
-
-            for (int i = 0; i < sliderBars.length; i++) {
-                y = drawSliderSection(g2d, x, y, contentWidth, i);
-            }
-            drawFoodSpawnSection(g2d, x, y, contentWidth);
+            foodSpawnSpinner.setValue(runtimeValue);
         } finally {
-            g2d.dispose();
+            syncingFoodSpinner = false;
         }
     }
 
@@ -310,9 +297,58 @@ public class EnvironmentPanel extends JPanel {
         return y + BAR_HEIGHT + SLIDER_BOTTOM_SPACING;
     }
 
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2d = (Graphics2D) g.create();
+        try {
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            int panelW = getWidth() - 2 * MARGIN;
+            int panelH = getHeight() - 2 * MARGIN;
+
+            // Dark rounded background
+            g2d.setColor(BG_COLOR);
+            g2d.fillRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
+
+            // Outer glow, then crisp cyan border
+            g2d.setColor(BORDER_GLOW_COLOR);
+            g2d.setStroke(STROKE_3);
+            g2d.drawRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
+            g2d.setColor(ACCENT_COLOR);
+            g2d.setStroke(STROKE_1);
+            g2d.drawRoundRect(MARGIN, MARGIN, panelW, panelH, 15, 15);
+
+            int x = MARGIN + CONTENT_PADDING;
+            int y = MARGIN + CONTENT_PADDING;
+            int contentWidth = panelW - 2 * CONTENT_PADDING;
+
+            // Centred title
+            g2d.setFont(TITLE_FONT);
+            g2d.setColor(ACCENT_COLOR);
+            FontMetrics fm = g2d.getFontMetrics();
+            String titleStr = "ENVIRONMENT SETTINGS";
+            g2d.drawString(titleStr, MARGIN + (panelW - fm.stringWidth(titleStr)) / 2, y + 15);
+            y += 25;
+
+            // 2 px separator
+            g2d.setColor(SEPARATOR_COLOR);
+            g2d.fillRect(x, y, contentWidth, 2);
+            y += 14;
+
+            for (int i = 0; i < sliderBars.length; i++) {
+                y = drawSliderSection(g2d, x, y, contentWidth, i);
+            }
+            drawFoodSpawnSection(g2d, x, y, contentWidth);
+            syncFoodSpinnerFromEngine();
+        } finally {
+            g2d.dispose();
+        }
+    }
+
     private void drawFoodSpawnSection(Graphics2D g2d, int x, int y, int contentWidth) {
         Color color = new Color(100, 150, 255);
-        double value = engine.getFoodSpawnRate();
 
         g2d.setFont(LABEL_FONT);
         g2d.setColor(color);
@@ -324,42 +360,78 @@ public class EnvironmentPanel extends JPanel {
 
         g2d.setFont(VALUE_FONT);
         g2d.setColor(ACCENT_COLOR);
-        g2d.drawString(formatFoodSpawnPerTick(value), x, y + 12);
+        g2d.drawString(String.format(Locale.ROOT, "%.2f / tick", engine.getFoodSpawnRate()), x, y + 12);
         y += VALUE_SPACING_Y;
 
-        int centerY = y + FOOD_BUTTON_H / 2;
-        foodDecreaseButton.setBounds(x, y, FOOD_BUTTON_W, FOOD_BUTTON_H);
-        foodIncreaseButton.setBounds(x + contentWidth - FOOD_BUTTON_W, y, FOOD_BUTTON_W, FOOD_BUTTON_H);
-
-        drawFoodAdjustButton(g2d, foodDecreaseButton, color, "-");
-        drawFoodAdjustButton(g2d, foodIncreaseButton, color, "+");
-
-        g2d.setColor(BAR_BG_COLOR);
-        int valueBoxX = foodDecreaseButton.x + foodDecreaseButton.width + 8;
-        int valueBoxW = Math.max(40, foodIncreaseButton.x - valueBoxX - 8);
-        g2d.fillRoundRect(valueBoxX, y, valueBoxW, FOOD_BUTTON_H, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
-        g2d.setColor(color);
-        g2d.drawRoundRect(valueBoxX, y, valueBoxW, FOOD_BUTTON_H, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
-
-        g2d.setColor(ACCENT_COLOR);
-        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
-        String compact = String.format(Locale.ROOT, "%.2f", value);
-        FontMetrics fm = g2d.getFontMetrics();
-        int tx = valueBoxX + (valueBoxW - fm.stringWidth(compact)) / 2;
-        int ty = centerY + (fm.getAscent() - fm.getDescent()) / 2;
-        g2d.drawString(compact, tx, ty);
+        foodSpawnSpinner.setBounds(x, y, contentWidth, FOOD_SPINNER_HEIGHT);
     }
 
-    private void drawFoodAdjustButton(Graphics2D g2d, Rectangle rect, Color color, String symbol) {
-        g2d.setColor(BAR_BG_COLOR);
-        g2d.fillRoundRect(rect.x, rect.y, rect.width, rect.height, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
-        g2d.setColor(color);
-        g2d.drawRoundRect(rect.x, rect.y, rect.width, rect.height, SLIDER_CORNER_RADIUS, SLIDER_CORNER_RADIUS);
+    private static final class BlueSpinnerUI extends BasicSpinnerUI {
+        @Override
+        public void installUI(JComponent c) {
+            super.installUI(c);
+            c.setOpaque(false);
+        }
 
-        g2d.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        FontMetrics fm = g2d.getFontMetrics();
-        int tx = rect.x + (rect.width - fm.stringWidth(symbol)) / 2;
-        int ty = rect.y + (rect.height + fm.getAscent() - fm.getDescent()) / 2 - 1;
-        g2d.drawString(symbol, tx, ty);
+        @Override
+        public void paint(Graphics g, JComponent c) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = c.getWidth();
+            int h = c.getHeight();
+            g2.setColor(OverlayTheme.CONTROL_BG);
+            g2.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.setColor(FOOD_SPINNER_BORDER);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.dispose();
+            super.paint(g, c);
+        }
+
+        @Override
+        protected Component createNextButton() {
+            JButton button = createArrowButton(true);
+            button.setName("Spinner.nextButton");
+            installNextButtonListeners(button);
+            return button;
+        }
+
+        @Override
+        protected Component createPreviousButton() {
+            JButton button = createArrowButton(false);
+            button.setName("Spinner.previousButton");
+            installPreviousButtonListeners(button);
+            return button;
+        }
+
+        private JButton createArrowButton(boolean up) {
+            JButton btn = new JButton() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(FOOD_SPINNER_BORDER);
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+                    int aw = 4;
+                    int ah = 3;
+                    if (up) {
+                        g2.drawLine(cx - aw, cy + ah, cx, cy - ah);
+                        g2.drawLine(cx, cy - ah, cx + aw, cy + ah);
+                    } else {
+                        g2.drawLine(cx - aw, cy - ah, cx, cy + ah);
+                        g2.drawLine(cx, cy + ah, cx + aw, cy - ah);
+                    }
+                    g2.dispose();
+                }
+            };
+            btn.setOpaque(false);
+            btn.setContentAreaFilled(false);
+            btn.setBorderPainted(false);
+            btn.setFocusPainted(false);
+            btn.setPreferredSize(new Dimension(24, 14));
+            return btn;
+        }
     }
 }

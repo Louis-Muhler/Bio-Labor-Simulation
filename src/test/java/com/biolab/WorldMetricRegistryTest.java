@@ -8,15 +8,20 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WorldMetricRegistryTest {
+    private static final Set<WorldMetricId> NON_CHARTED_IDS = EnumSet.of(
+            WorldMetricId.FOOD_SPAWNED_PER_SEC
+    );
 
     @Test
-    void registryShouldContainDefinitionForEachMetricId() {
+    void registryShouldContainDefinitionForEachChartedMetricId() {
         Set<WorldMetricId> definedIds = WorldMetricRegistry.definitions().stream()
                 .map(WorldMetricDefinition::id)
                 .collect(java.util.stream.Collectors.toSet());
 
-        assertEquals(EnumSet.allOf(WorldMetricId.class), definedIds,
-                "Alle Metrik-IDs muessen in der Registry definiert sein");
+        Set<WorldMetricId> expectedCharted = EnumSet.allOf(WorldMetricId.class);
+        expectedCharted.removeAll(NON_CHARTED_IDS);
+        assertEquals(expectedCharted, definedIds,
+                "Alle chartbaren Metrik-IDs muessen in der Registry definiert sein");
     }
 
     @Test
