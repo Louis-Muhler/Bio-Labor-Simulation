@@ -165,6 +165,10 @@ public class WorldStatsPanel extends JPanel {
         customEndInput.setPreferredSize(controlSize);
         customStartUnitDropdown.setPreferredSize(unitControlSize);
         customEndUnitDropdown.setPreferredSize(unitControlSize);
+        customStartUnitDropdown.setMinimumSize(unitControlSize);
+        customStartUnitDropdown.setMaximumSize(unitControlSize);
+        customEndUnitDropdown.setMinimumSize(unitControlSize);
+        customEndUnitDropdown.setMaximumSize(unitControlSize);
         OverlayControlFactory.styleSpinner(customStartInput);
         OverlayControlFactory.styleSpinner(customEndInput);
         configureNumericSpinnerInput(customStartInput);
@@ -272,6 +276,15 @@ public class WorldStatsPanel extends JPanel {
             c.insets = new Insets(0, 0, 0, 0);
             customRangeInlineRow.add(customEndUnitDropdown, c);
         }
+
+        // Keep the complete custom row left-aligned even when the row panel is wider.
+        GridBagConstraints spacer = new GridBagConstraints();
+        spacer.gridx = 99;
+        spacer.gridy = 0;
+        spacer.gridheight = wrap ? 2 : 1;
+        spacer.weightx = 1.0;
+        spacer.fill = GridBagConstraints.HORIZONTAL;
+        customRangeInlineRow.add(Box.createHorizontalStrut(0), spacer);
 
         customRangeInlineRow.revalidate();
         customRangeInlineRow.repaint();
