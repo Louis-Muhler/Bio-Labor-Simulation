@@ -45,6 +45,9 @@ public class WorldStatsPanel extends JPanel {
     private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
     private static final Color SEPARATOR_COLOR = new Color(40, 40, 50);
     private static final Color TEXT_COLOR = new Color(220, 220, 220);
+    private static final int HEADER_TITLE_HEIGHT = 25;
+    private static final int HEADER_SEPARATOR_HEIGHT = 2;
+    private static final int HEADER_TO_CONTENT_GAP = 6;
 
     private final WorldStatsStore store;
     private final SettingsManager settingsManager;
@@ -383,11 +386,20 @@ public class WorldStatsPanel extends JPanel {
     private static void drawExportShareIcon(Graphics2D g2, Point pos) {
         int x = pos.x;
         int y = pos.y;
-        g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2.drawRoundRect(x - 8, y + 2, 14, 9, 3, 3);
-        g2.drawLine(x - 1, y + 6, x + 6, y - 1);
-        g2.drawLine(x + 6, y - 1, x + 6, y + 3);
-        g2.drawLine(x + 6, y - 1, x + 2, y - 1);
+        int r = 2;
+        int leftX = x - 6;
+        int rightTopX = x + 4;
+        int rightTopY = y - 4;
+        int rightBottomX = x + 4;
+        int rightBottomY = y + 4;
+
+        g2.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.drawLine(leftX, y, rightTopX, rightTopY);
+        g2.drawLine(leftX, y, rightBottomX, rightBottomY);
+
+        g2.fillOval(leftX - r, y - r, r * 2, r * 2);
+        g2.fillOval(rightTopX - r, rightTopY - r, r * 2, r * 2);
+        g2.fillOval(rightBottomX - r, rightBottomY - r, r * 2, r * 2);
     }
 
     private JPanel buildContent() {
@@ -596,25 +608,31 @@ public class WorldStatsPanel extends JPanel {
     }
 
     private JPanel buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(0, 6));
+        JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
+        header.setBorder(new EmptyBorder(0, 0, HEADER_TO_CONTENT_GAP, 0));
 
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
+        titleRow.setPreferredSize(new Dimension(1, HEADER_TITLE_HEIGHT));
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, HEADER_TITLE_HEIGHT));
 
         JLabel title = new JLabel("WORLD STATISTICS", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
         title.setFont(new Font("Segoe UI", Font.BOLD, 16));
 
-        JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        JPanel exportButtons = new JPanel(new BorderLayout());
         exportButtons.setOpaque(false);
 
         setupExportMenuIfNeeded();
-        exportButtons.add(exportMenuButton);
+        exportButtons.add(exportMenuButton, BorderLayout.EAST);
 
         JPanel leftBalance = new JPanel();
         leftBalance.setOpaque(false);
-        leftBalance.setPreferredSize(new Dimension(exportMenuButton.getPreferredSize().width, exportMenuButton.getPreferredSize().height));
+        int sideSlotWidth = exportMenuButton.getPreferredSize().width;
+        int sideSlotHeight = exportMenuButton.getPreferredSize().height;
+        leftBalance.setPreferredSize(new Dimension(sideSlotWidth, sideSlotHeight));
+        exportButtons.setPreferredSize(new Dimension(sideSlotWidth, sideSlotHeight));
 
         titleRow.add(leftBalance, BorderLayout.WEST);
         titleRow.add(title, BorderLayout.CENTER);
@@ -623,7 +641,8 @@ public class WorldStatsPanel extends JPanel {
         JPanel separator = new JPanel();
         separator.setOpaque(true);
         separator.setBackground(SEPARATOR_COLOR);
-        separator.setPreferredSize(new Dimension(1, 1));
+        separator.setPreferredSize(new Dimension(1, HEADER_SEPARATOR_HEIGHT));
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, HEADER_SEPARATOR_HEIGHT));
 
         header.add(titleRow, BorderLayout.NORTH);
         header.add(separator, BorderLayout.SOUTH);
