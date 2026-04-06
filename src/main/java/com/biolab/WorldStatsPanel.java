@@ -9,8 +9,6 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.text.NumberFormatter;
 import java.awt.*;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
@@ -51,10 +49,11 @@ public class WorldStatsPanel extends JPanel {
     private final JTextField searchField = new JTextField();
     private final JPanel metricListPanel = new JPanel();
     private final JPanel leftColumn = new JPanel(new BorderLayout(0, 6));
-    private final JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel presetPanel = new JPanel();
+    private final JPanel presetMainRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel customRangeInlineRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final JComboBox<WorldStatsRangePreset> rangePresetDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsRangePreset.values());
     private final ModernButton customRangeSettingsButton = new ModernButton("", ModernButton.ButtonIcon.GEAR);
-    private final JPanel customRangePopupPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     private final JSpinner customStartInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     private final JComboBox<WorldStatsTimeUnit> customStartUnitDropdown = OverlayControlFactory.createStyledComboBox(WorldStatsTimeUnit.values());
     private final JSpinner customEndInput = new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
@@ -80,8 +79,7 @@ public class WorldStatsPanel extends JPanel {
     private long currentRangeFromTick;
     private long currentRangeToTick;
     private boolean suppressCustomRangeEvents;
-    private Popup customRangePopupWindow;
-    private boolean customRangePopupVisible;
+    private boolean customRangeInlineVisible;
 
     private List<WorldStatsSample> currentSamples = List.of();
     private List<WorldMetricDefinition> currentDefinitions = List.of();
@@ -107,22 +105,6 @@ public class WorldStatsPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildContent(), BorderLayout.CENTER);
 
-        addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentMoved(ComponentEvent e) {
-                if (customRangePopupVisible) {
-                    positionCustomRangePopup();
-                }
-            }
-
-            @Override
-            public void componentResized(ComponentEvent e) {
-                if (customRangePopupVisible) {
-                    positionCustomRangePopup();
-                }
-            }
-        });
-
         rebuildMetricOptions();
         refreshChart();
 
@@ -134,14 +116,18 @@ public class WorldStatsPanel extends JPanel {
     void hidePanel() {
         setVisible(false);
         refreshTimer.stop();
-        hideCustomRangePopup();
+        setCustomRangeInlineVisible(false);
         persistUiSettings(true);
     }
 
     private JPanel buildPresetPanel() {
         presetPanel.setOpaque(false);
+        presetPanel.setLayout(new BoxLayout(presetPanel, BoxLayout.Y_AXIS));
+        presetMainRow.setOpaque(false);
+        customRangeInlineRow.setOpaque(false);
 
-        rangePresetDropdown.setPreferredSize(new Dimension(computeRangeDropdownWidth(), 30));
+        Dimension controlSize = new Dimension(computeRangeDropdownWidth(), 30);
+        rangePresetDropdown.setPreferredSize(controlSize);
         rangePresetDropdown.setSelectedItem(activePreset);
         rangePresetDropdown.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -163,12 +149,14 @@ public class WorldStatsPanel extends JPanel {
         });
         rangePresetDropdown.addActionListener(e -> onPresetSelectionChanged());
 
-        customRangeSettingsButton.setPreferredSize(new Dimension(30, 30));
+        customRangeSettingsButton.setPreferredSize(controlSize);
         customRangeSettingsButton.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        customRangeSettingsButton.addActionListener(e -> toggleCustomRangePopupFromButton());
+        customRangeSettingsButton.addActionListener(e -> toggleCustomRangeInlineRowFromButton());
 
-        customStartInput.setPreferredSize(new Dimension(120, 34));
-        customEndInput.setPreferredSize(new Dimension(120, 34));
+        customStartInput.setPreferredSize(controlSize);
+        customEndInput.setPreferredSize(controlSize);
+        customStartUnitDropdown.setPreferredSize(controlSize);
+        customEndUnitDropdown.setPreferredSize(controlSize);
         OverlayControlFactory.styleSpinner(customStartInput);
         OverlayControlFactory.styleSpinner(customEndInput);
         configureNumericSpinnerInput(customStartInput);
@@ -201,26 +189,23 @@ public class WorldStatsPanel extends JPanel {
         customStartUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
         customEndUnitDropdown.addActionListener(e -> onCustomRangeInputChanged());
 
-        customRangePopupPanel.setOpaque(true);
-        customRangePopupPanel.setBackground(OverlayTheme.PANEL_BG);
-        customRangePopupPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
-        customRangePopupPanel.add(customStartInput);
-        customRangePopupPanel.add(customStartUnitDropdown);
+        customRangeInlineRow.removeAll();
+        customRangeInlineRow.add(customStartInput);
+        customRangeInlineRow.add(customStartUnitDropdown);
         JLabel separator = new JLabel("-");
         separator.setForeground(ACCENT_COLOR);
-        customRangePopupPanel.add(Box.createHorizontalStrut(4));
-        customRangePopupPanel.add(separator);
-        customRangePopupPanel.add(Box.createHorizontalStrut(4));
-        customRangePopupPanel.add(customEndInput);
-        customRangePopupPanel.add(customEndUnitDropdown);
-        customRangePopupPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(ACCENT_COLOR, 1),
-                new EmptyBorder(6, 6, 6, 6)
-        ));
+        customRangeInlineRow.add(separator);
+        customRangeInlineRow.add(customEndInput);
+        customRangeInlineRow.add(customEndUnitDropdown);
 
-        presetPanel.add(rangePresetDropdown);
-        presetPanel.add(customRangeSettingsButton);
-        hideCustomRangePopup();
+        presetMainRow.removeAll();
+        presetMainRow.add(rangePresetDropdown);
+        presetMainRow.add(customRangeSettingsButton);
+
+        presetPanel.removeAll();
+        presetPanel.add(presetMainRow);
+        presetPanel.add(customRangeInlineRow);
+        setCustomRangeInlineVisible(false);
         syncCustomRangeSettingsButtonState();
         updateCurrentRangeLabel(0L, 0L);
         return presetPanel;
@@ -279,7 +264,7 @@ public class WorldStatsPanel extends JPanel {
         if (selected == null || selected == activePreset) return;
         activePreset = selected;
         if (activePreset != WorldStatsRangePreset.CUSTOM) {
-            hideCustomRangePopup();
+            setCustomRangeInlineVisible(false);
         }
         syncCustomRangeSettingsButtonState();
         persistUiSettings(false);
@@ -425,15 +410,11 @@ public class WorldStatsPanel extends JPanel {
         return WorldStatsTooltipLayout.computeBounds(plot, mouse, tooltipWidth, tooltipHeight, offset);
     }
 
-    private void toggleCustomRangePopupFromButton() {
+    private void toggleCustomRangeInlineRowFromButton() {
         if (activePreset != WorldStatsRangePreset.CUSTOM) {
             return;
         }
-        if (customRangePopupVisible) {
-            hideCustomRangePopup();
-        } else {
-            showCustomRangePopup();
-        }
+        setCustomRangeInlineVisible(!customRangeInlineVisible);
     }
 
     private void onCustomRangeInputChanged() {
@@ -462,16 +443,13 @@ public class WorldStatsPanel extends JPanel {
         persistUiSettings(false);
         refreshChart();
         rangePresetDropdown.repaint();
-        if (customRangePopupVisible) {
-            positionCustomRangePopup();
-        }
     }
 
-    private void showCustomRangePopup() {
-        if (activePreset != WorldStatsRangePreset.CUSTOM || !customRangeSettingsButton.isShowing()) {
-            return;
-        }
-        positionCustomRangePopup();
+    private void setCustomRangeInlineVisible(boolean visible) {
+        customRangeInlineVisible = visible && activePreset == WorldStatsRangePreset.CUSTOM;
+        customRangeInlineRow.setVisible(customRangeInlineVisible);
+        presetPanel.revalidate();
+        presetPanel.repaint();
         syncCustomRangeSettingsButtonState();
     }
 
@@ -543,35 +521,8 @@ public class WorldStatsPanel extends JPanel {
         return Math.max(LEFT_COL_MIN_WIDTH, Math.min(desired, LEFT_COL_MAX_WIDTH));
     }
 
-    private void positionCustomRangePopup() {
-        if (!customRangeSettingsButton.isShowing()) {
-            return;
-        }
-
-        Dimension popupSize = customRangePopupPanel.getPreferredSize();
-        Point buttonOnScreen = customRangeSettingsButton.getLocationOnScreen();
-        int x = buttonOnScreen.x + (customRangeSettingsButton.getWidth() - popupSize.width) / 2;
-        int y = buttonOnScreen.y + customRangeSettingsButton.getHeight() + 6;
-
-        if (customRangePopupWindow != null) {
-            customRangePopupWindow.hide();
-        }
-        customRangePopupWindow = PopupFactory.getSharedInstance().getPopup(customRangeSettingsButton, customRangePopupPanel, x, y);
-        customRangePopupWindow.show();
-        customRangePopupVisible = true;
-    }
-
-    private void hideCustomRangePopup() {
-        if (customRangePopupWindow != null) {
-            customRangePopupWindow.hide();
-            customRangePopupWindow = null;
-        }
-        customRangePopupVisible = false;
-        syncCustomRangeSettingsButtonState();
-    }
-
     private void syncCustomRangeSettingsButtonState() {
-        boolean dimmed = activePreset != WorldStatsRangePreset.CUSTOM || customRangePopupVisible;
+        boolean dimmed = activePreset != WorldStatsRangePreset.CUSTOM || customRangeInlineVisible;
         customRangeSettingsButton.setDimmed(dimmed);
     }
 
