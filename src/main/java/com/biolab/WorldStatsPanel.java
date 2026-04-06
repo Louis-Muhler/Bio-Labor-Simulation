@@ -45,9 +45,10 @@ public class WorldStatsPanel extends JPanel {
     private static final Color ACCENT_COLOR = OverlayTheme.ACCENT;
     private static final Color SEPARATOR_COLOR = new Color(40, 40, 50);
     private static final Color TEXT_COLOR = new Color(220, 220, 220);
-    private static final int HEADER_TITLE_HEIGHT = 25;
+    private static final int HEADER_TITLE_HEIGHT = 34;
     private static final int HEADER_SEPARATOR_HEIGHT = 2;
     private static final int HEADER_TO_CONTENT_GAP = 6;
+    private static final int HEADER_TITLE_BOTTOM_INSET = 6;
 
     private final WorldStatsStore store;
     private final SettingsManager settingsManager;
@@ -620,6 +621,8 @@ public class WorldStatsPanel extends JPanel {
         JLabel title = new JLabel("WORLD STATISTICS", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
         title.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        // Nudge the title slightly upward to match the other overlay headers.
+        title.setBorder(new EmptyBorder(0, 0, HEADER_TITLE_BOTTOM_INSET, 0));
 
         JPanel exportButtons = new JPanel(new BorderLayout());
         exportButtons.setOpaque(false);
