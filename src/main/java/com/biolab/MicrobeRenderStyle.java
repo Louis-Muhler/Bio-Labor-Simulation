@@ -99,19 +99,28 @@ final class MicrobeRenderStyle {
         }
 
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
-        if (clampedStrength > 0.45f) {
-            int spikes = 4 + (int) Math.round(clampedStrength * 4.0);
-            int outerR = (int) Math.round(size * 0.65 + 2 + clampedStrength * 3.0);
+        float clampedDefenseForSpikes = (float) Math.max(0.0, Math.min(1.0, defense));
+        float spikeIntensity = (float) Math.max(0.0, Math.min(1.0,
+                clampedStrength * 0.70f + clampedDefenseForSpikes * 0.30f));
+        if (spikeIntensity > 0.35f) {
+            int spikes = 4 + (int) Math.round(spikeIntensity * 6.0);
+            int outerR = (int) Math.round(size * 0.62 + 2 + spikeIntensity * 4.0);
             int innerR = Math.max(2, outerR - 3);
             int cx = (int) centerX;
             int cy = (int) centerY;
-            g2d.setColor(STRENGTH_SPIKE_COLOR);
+            int alpha = Math.max(90, Math.min(230, (int) (95 + spikeIntensity * 135)));
+            g2d.setColor(new Color(
+                    STRENGTH_SPIKE_COLOR.getRed(),
+                    STRENGTH_SPIKE_COLOR.getGreen(),
+                    STRENGTH_SPIKE_COLOR.getBlue(),
+                    alpha
+            ));
             for (int s = 0; s < spikes; s++) {
                 double angle = (Math.PI * 2.0 * s) / spikes;
                 int x1 = cx + (int) Math.round(Math.cos(angle) * innerR);
                 int y1 = cy + (int) Math.round(Math.sin(angle) * innerR);
-                int x2 = cx + (int) Math.round(Math.cos(angle) * (outerR + 2));
-                int y2 = cy + (int) Math.round(Math.sin(angle) * (outerR + 2));
+                int x2 = cx + (int) Math.round(Math.cos(angle) * (outerR + 2 + spikeIntensity * 2.0));
+                int y2 = cy + (int) Math.round(Math.sin(angle) * (outerR + 2 + spikeIntensity * 2.0));
                 g2d.drawLine(x1, y1, x2, y2);
             }
         }

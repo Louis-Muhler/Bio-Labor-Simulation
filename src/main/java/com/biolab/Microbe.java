@@ -73,10 +73,23 @@ public class Microbe {
     private static final double MIN_MAX_HEALTH = 1.0;
     private static final double MIN_MAX_ENERGY = 1.0;
     private static final double INITIAL_ENERGY_RATIO = 0.92;
-    private static final double REPRODUCTION_ENERGY_COST_RATIO = 0.32;
-    private static final double MIN_REPRODUCTION_ENERGY_RATIO = 0.62;
+    private static final double REPRODUCTION_START_ENERGY_RATIO = 0.32;
+    private static final double BASE_REPRODUCTION_HEALTH_COST_RATIO = 0.28;
+    private static final double BASE_REPRODUCTION_ENERGY_COST_RATIO = 0.30;
+    private static final double BASE_REPRODUCTION_HEALTH_THRESHOLD_RATIO = 0.50;
+    private static final double BASE_REPRODUCTION_ENERGY_THRESHOLD_RATIO = 0.62;
+    private static final double REPRODUCTION_THRESHOLD_PER_LOAD = 0.10;
+    private static final double REPRODUCTION_HEALTH_COST_PER_LOAD = 0.08;
+    private static final double REPRODUCTION_ENERGY_COST_PER_LOAD = 0.12;
     private static final int REPRODUCTION_AGE = 80;
     private static final double MOVEMENT_ENERGY_COST = 0.009;
+    private static final double MOVEMENT_SPEED_COST_FACTOR = 0.95;
+    private static final double MOVEMENT_CAPACITY_COST_FACTOR = 0.55;
+    private static final double MAX_AGILITY_DRAG = 0.35;
+    private static final double AGILITY_DRAG_PER_LOAD = 0.22;
+    private static final double AGILITY_DRAG_PER_DEFENSE = 0.10;
+    private static final double ENERGY_TRANSFER_BASE_FACTOR = 0.70;
+    private static final double ENERGY_TRANSFER_BULK_PENALTY = 0.08;
     private final double maxHealth;
     private final double maxEnergy;
     /**
@@ -248,7 +261,7 @@ public class Microbe {
         this.maxEnergy = mutateCap(parent.maxEnergy, MIN_MAX_ENERGY, Double.MAX_VALUE);
 
         this.health = this.maxHealth;
-        this.energy = this.maxEnergy * REPRODUCTION_ENERGY_COST_RATIO;
+        this.energy = this.maxEnergy * REPRODUCTION_START_ENERGY_RATIO;
         this.age = 0;
 
         // ── Smart ancestry thinning ──────────────────────────────────────
@@ -418,6 +431,21 @@ public class Microbe {
         return Math.max(0.0, Math.min(1.0, value));
     }
 
+    private static double clampRatio(double ratio) {
+        return clamp(ratio, 0.0, 1.0);
+    }
+
+    private static double computeCapacityLoad(double maxHealth, double maxEnergy) {
+        double healthLoad = Math.max(0.0, (maxHealth / BASE_MAX_HEALTH) - 1.0);
+        double energyLoad = Math.max(0.0, (maxEnergy / BASE_MAX_ENERGY) - 1.0);
+        // Health-heavy builds get a slightly higher burden than battery-heavy builds.
+        return healthLoad * 0.60 + energyLoad * 0.40;
+    }
+
+    private double capacityLoad() {
+        return computeCapacityLoad(maxHealth, maxEnergy);
+    }
+
     /**
      * Sets random velocity based on speed gene.
      */
@@ -437,7 +465,10 @@ public class Microbe {
     public void move(int width, int height) {
         boolean hasAdrenaline = (System.currentTimeMillis() - adrenalineTimer < ADRENALINE_DURATION_MS);
 
-        double energyCost = MOVEMENT_ENERGY_COST * (1.0 + speed);
+        double load = capacityLoad();
+        double energyCost = MOVEMENT_ENERGY_COST
+                * (1.0 + speed * MOVEMENT_SPEED_COST_FACTOR)
+                * (1.0 + load * MOVEMENT_CAPACITY_COST_FACTOR);
         if (hasAdrenaline) {
             energyCost *= ADRENALINE_ENERGY_MULT;
         }
@@ -450,8 +481,11 @@ public class Microbe {
 
         double vitality = getVitality();
         double energySpeedFactor = 0.30 + getEnergyRatio() * 0.70;
-        x += appliedVX * vitality * energySpeedFactor;
-        y += appliedVY * vitality * energySpeedFactor;
+        double agilityDrag = Math.min(MAX_AGILITY_DRAG,
+                load * AGILITY_DRAG_PER_LOAD + getDefenseTrait() * AGILITY_DRAG_PER_DEFENSE);
+        double agilityFactor = 1.0 - agilityDrag;
+        x += appliedVX * vitality * energySpeedFactor * agilityFactor;
+        y += appliedVY * vitality * energySpeedFactor * agilityFactor;
 
         // Bounce off world boundaries
         if (x < 0 || x > width) {
@@ -540,9 +574,14 @@ public class Microbe {
      * Returns {@code true} if this microbe meets the age, health, and energy thresholds to reproduce.
      */
     public boolean canReproduce() {
+        double load = capacityLoad();
+        double requiredHealthRatio = clampRatio(BASE_REPRODUCTION_HEALTH_THRESHOLD_RATIO
+                + load * (REPRODUCTION_THRESHOLD_PER_LOAD * 0.5));
+        double requiredEnergyRatio = clampRatio(BASE_REPRODUCTION_ENERGY_THRESHOLD_RATIO
+                + load * REPRODUCTION_THRESHOLD_PER_LOAD);
         return age >= REPRODUCTION_AGE
-                && health > maxHealth * 0.5
-                && energy >= maxEnergy * MIN_REPRODUCTION_ENERGY_RATIO;
+                && health > maxHealth * requiredHealthRatio
+                && energy >= maxEnergy * requiredEnergyRatio;
     }
 
     /**
@@ -589,9 +628,14 @@ public class Microbe {
      */
     public void resetReproduction() {
         age = 0;
+        double load = capacityLoad();
+        double healthCostRatio = clampRatio(BASE_REPRODUCTION_HEALTH_COST_RATIO
+                + load * REPRODUCTION_HEALTH_COST_PER_LOAD);
+        double energyCostRatio = clampRatio(BASE_REPRODUCTION_ENERGY_COST_RATIO
+                + load * REPRODUCTION_ENERGY_COST_PER_LOAD);
         synchronized (stateLock) {
-            health -= maxHealth * 0.3;
-            energy -= maxEnergy * REPRODUCTION_ENERGY_COST_RATIO;
+            health = Math.max(0.0, health - maxHealth * healthCostRatio);
+            energy = Math.max(0.0, energy - maxEnergy * energyCostRatio);
         }
     }
 
@@ -657,12 +701,9 @@ public class Microbe {
      * <p>Called from the attacker's worker thread, so the victim may belong to a different
      * thread – hence this method is fully guarded by {@code stateLock}.</p>
      *
-     * <ul>
-     *   <li>If the victim survives the hit, the attacker receives energy proportional to the
-     *       fraction of health removed (scaled to this victim's max energy).</li>
-     *   <li>If the victim is killed by the hit, the attacker receives <em>all</em> of the
-     *       victim's remaining energy before it dies (energy is then zeroed).</li>
-     * </ul>
+     * <p>Transfer scales with actually removed health and individual max values. High-capacity
+     * victims therefore reward meaningful hits, but dense/tanky builds leak slightly less
+     * energy per damage point.</p>
      *
      * @param damage raw damage amount (positive value)
      * @return energy awarded to the attacker (≥ 0)
@@ -679,7 +720,10 @@ public class Microbe {
             adrenalineTimer = System.currentTimeMillis();
 
             // Transfer only what was actually "harvested" by this hit, capped by victim's current energy.
-            double potentialTransfer = maxHealth > 0.0 ? (actualDamage / maxHealth) * maxEnergy : 0.0;
+            double transferEfficiency = Math.max(0.35, ENERGY_TRANSFER_BASE_FACTOR - capacityLoad() * ENERGY_TRANSFER_BULK_PENALTY);
+            double potentialTransfer = maxHealth > 0.0
+                    ? (actualDamage / maxHealth) * maxEnergy * transferEfficiency
+                    : 0.0;
             double energyTransferred = Math.min(energy, potentialTransfer);
             energy -= energyTransferred;
 
@@ -737,8 +781,9 @@ public class Microbe {
     public int getSize() {
         double defense = getDefenseTrait();
         double strength = getStrengthTrait();
-        double bulk = 0.55 * defense + 0.45 * strength;
-        double agilityPenalty = speed * 0.35;
+        double load = clamp01(capacityLoad());
+        double bulk = 0.35 * defense + 0.25 * strength + 0.40 * load;
+        double agilityPenalty = speed * (0.24 + load * 0.16);
         double sizeFactor = clamp01(0.18 + bulk - agilityPenalty);
         return 5 + (int) Math.round(sizeFactor * 8.0);
     }
@@ -765,6 +810,14 @@ public class Microbe {
     public double getStrengthTrait() {
         // Carnivore tendency + body mass proxy produce striking power.
         return clamp01(0.70 * diet + 0.30 * (1.0 - speed));
+    }
+
+    /**
+     * Returns how far this microbe's health/energy caps exceed the species baseline.
+     * 0.0 means baseline capacity, larger values mean increasingly heavy upkeep.
+     */
+    public double getCapacityLoad() {
+        return capacityLoad();
     }
 
     public boolean isDead() {

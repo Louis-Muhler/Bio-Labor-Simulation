@@ -9,7 +9,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Applies per-microbe behaviour for one simulation frame chunk.
  */
 final class MicrobeBehaviorSystem {
-    private static final double COMBAT_DAMAGE = 7.0;
+    private static final double BASE_COMBAT_DAMAGE = 6.4;
+    private static final double MIN_COMBAT_DAMAGE = 1.5;
+    private static final double MAX_COMBAT_DAMAGE = 14.0;
+    private static final double ATTACK_RANGE_FACTOR = 1.45;
+    private static final double BASE_KNOCKBACK_FORCE = 4.2;
+    private static final double ENERGY_ABSORB_BASE = 0.64;
+    private static final double ENERGY_ABSORB_DIET_FACTOR = 0.20;
+    private static final double ENERGY_ABSORB_STRENGTH_FACTOR = 0.16;
+    private static final double ENERGY_ABSORB_LOAD_PENALTY = 0.14;
     private static final int MAX_REPRODUCTION_ATTEMPTS = 5;
     private static final int MIN_RETRIES_BEFORE_BACKOFF = 2;
     private static final double HUNT_STEER_STRENGTH = 0.12;
@@ -17,7 +25,8 @@ final class MicrobeBehaviorSystem {
     private static final double FORAGE_STEER_BASE = 0.10;
     private static final double FORAGE_STEER_HUNGER_BOOST = 0.26;
     private static final double MAX_STEER_DELTA = 1.2;
-    private static final long ATTACK_COOLDOWN_MS = 300;
+    private static final long BASE_ATTACK_COOLDOWN_MS = 330;
+    private static final long ATTACK_COOLDOWN_PER_LOAD_MS = 80;
 
     private final int worldWidth;
     private final int worldHeight;
@@ -36,6 +45,27 @@ final class MicrobeBehaviorSystem {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static long attackCooldownMs(Microbe microbe) {
+        return BASE_ATTACK_COOLDOWN_MS + Math.round(microbe.getCapacityLoad() * ATTACK_COOLDOWN_PER_LOAD_MS);
+    }
+
+    private static double computeScaledDamage(Microbe attacker, Microbe prey) {
+        double offense = 0.70 + attacker.getStrengthTrait() * 0.85 + attacker.getSpeed() * 0.20;
+        double offenseBulkPenalty = 1.0 - attacker.getCapacityLoad() * 0.16;
+        double mitigation = 0.78 + prey.getDefenseTrait() * 0.60 + prey.getCapacityLoad() * 0.24;
+        double sizeMultiplier = clamp(attacker.getSize() / (double) Math.max(1, prey.getSize()), 0.75, 1.45);
+        double scaled = BASE_COMBAT_DAMAGE * offense * Math.max(0.70, offenseBulkPenalty) * sizeMultiplier / mitigation;
+        return clamp(scaled, MIN_COMBAT_DAMAGE, MAX_COMBAT_DAMAGE);
+    }
+
+    private static double computeAbsorbEfficiency(Microbe attacker) {
+        double efficiency = ENERGY_ABSORB_BASE
+                + attacker.getDiet() * ENERGY_ABSORB_DIET_FACTOR
+                + attacker.getStrengthTrait() * ENERGY_ABSORB_STRENGTH_FACTOR
+                - attacker.getCapacityLoad() * ENERGY_ABSORB_LOAD_PENALTY;
+        return clamp(efficiency, 0.42, 0.92);
     }
 
     void processChunk(List<Microbe> snapshot,
@@ -95,23 +125,23 @@ final class MicrobeBehaviorSystem {
                 -MAX_STEER_DELTA, MAX_STEER_DELTA);
         microbe.applyKnockback(steerX, steerY);
 
-        double attackRange = (microbe.getSize() + prey.getSize()) * 1.5;
+        double attackRange = (microbe.getSize() + prey.getSize()) * ATTACK_RANGE_FACTOR;
         long now = System.currentTimeMillis();
-        if (dist >= attackRange || prey.isDead() || (now - microbe.getLastAttackTime()) < ATTACK_COOLDOWN_MS) {
+        long cooldownMs = attackCooldownMs(microbe);
+        if (dist >= attackRange || prey.isDead() || (now - microbe.getLastAttackTime()) < cooldownMs) {
             return;
         }
 
-        double sizeMultiplier = microbe.getSize() / (double) Math.max(1, prey.getSize());
-        sizeMultiplier = clamp(sizeMultiplier, 0.5, 2.5);
-        double scaledDamage = COMBAT_DAMAGE * sizeMultiplier;
-
-        double energyGain = prey.takeDamageAndTransferEnergy(scaledDamage);
-        microbe.eat(energyGain);
+        double scaledDamage = computeScaledDamage(microbe, prey);
+        double stolenEnergy = prey.takeDamageAndTransferEnergy(scaledDamage);
+        microbe.eat(stolenEnergy * computeAbsorbEfficiency(microbe));
         microbe.markAttack();
 
-        double kbDist = Math.max(0.1, Math.sqrt(dx * dx + dy * dy));
-        double kx = (dx / kbDist) * 5.0;
-        double ky = (dy / kbDist) * 5.0;
+        double kbDist = Math.max(0.1, dist);
+        double preyMass = 1.0 + prey.getCapacityLoad() * 0.50;
+        double kScale = BASE_KNOCKBACK_FORCE * (0.75 + microbe.getStrengthTrait() * 0.40) / preyMass;
+        double kx = (dx / kbDist) * kScale;
+        double ky = (dy / kbDist) * kScale;
         prey.applyKnockback(kx, ky);
     }
 

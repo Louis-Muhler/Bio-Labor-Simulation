@@ -39,6 +39,18 @@ class MicrobeTest {
                                                     double health,
                                                     double energy,
                                                     int age) {
+        return createFromPersistedState(maxHealth, maxEnergy, health, energy, age, 0.5, 0.5, 0.5, 0.5);
+    }
+
+    private static Microbe createFromPersistedState(double maxHealth,
+                                                    double maxEnergy,
+                                                    double health,
+                                                    double energy,
+                                                    int age,
+                                                    double heatResistance,
+                                                    double toxinResistance,
+                                                    double speed,
+                                                    double diet) {
         long id = persistedIdCounter++;
         Microbe.PersistedState state = new Microbe.PersistedState(
                 id,
@@ -48,10 +60,10 @@ class MicrobeTest {
                 100.0,
                 0.0,
                 0.0,
-                0.5,
-                0.5,
-                0.5,
-                0.5,
+                heatResistance,
+                toxinResistance,
+                speed,
+                diet,
                 maxHealth,
                 maxEnergy,
                 health,
@@ -349,13 +361,61 @@ class MicrobeTest {
 
     @Test
     void reproductionThresholdsAndCostsShouldUseIndividualMaxValues() {
-        Microbe m = createFromPersistedState(220.0, 150.0, 120.0, 130.0, 80);
+        Microbe m = createFromPersistedState(220.0, 150.0, 150.0, 130.0, 80);
         assertTrue(m.canReproduce(), "Reproduction should use ratio thresholds over individual max caps");
 
+        double healthBefore = m.getHealth();
+        double energyBefore = m.getEnergy();
         m.resetReproduction();
         assertEquals(0, m.getAge());
-        assertEquals(120.0 - (220.0 * 0.3), m.getHealth(), 0.001);
-        assertEquals(130.0 - (150.0 * 0.32), m.getEnergy(), 0.001);
+        assertTrue(m.getHealth() < healthBefore, "Reproduction should consume health");
+        assertTrue(m.getEnergy() < energyBefore, "Reproduction should consume energy");
+        assertTrue((healthBefore - m.getHealth()) / m.getMaxHealth() > 0.30,
+                "High-capacity builds should pay extra health cost");
+        assertTrue((energyBefore - m.getEnergy()) / m.getMaxEnergy() > 0.32,
+                "High-capacity builds should pay extra energy cost");
+    }
+
+    @Test
+    void reproductionThresholdShouldScaleWithIndividualCapacityLoad() {
+        Microbe baseline = createFromPersistedState(100.0, 100.0, 60.0, 66.0, 80);
+        Microbe highCapacity = createFromPersistedState(220.0, 220.0, 140.0, 145.0, 80);
+
+        assertTrue(baseline.canReproduce(), "Baseline build should pass at 66% energy");
+        assertFalse(highCapacity.canReproduce(),
+                "High-capacity build should need a higher relative energy threshold");
+    }
+
+    @Test
+    void movementCostShouldIncreaseForHighCapacityBuilds() {
+        Microbe baseline = createFromPersistedState(100.0, 100.0, 100.0, 92.0, 0, 0.5, 0.5, 0.5, 0.5);
+        Microbe highCapacity = createFromPersistedState(220.0, 220.0, 220.0, 202.0, 0, 0.5, 0.5, 0.5, 0.5);
+
+        double baselineBefore = baseline.getEnergy();
+        double highBefore = highCapacity.getEnergy();
+
+        baseline.move(2000, 2000);
+        highCapacity.move(2000, 2000);
+
+        double baselineCost = baselineBefore - baseline.getEnergy();
+        double highCost = highBefore - highCapacity.getEnergy();
+        assertTrue(highCost > baselineCost,
+                "High maxHealth/maxEnergy should increase movement upkeep cost");
+    }
+
+    @Test
+    void damageTransferShouldNotFavorTankVictimsPerDamagePoint() {
+        Microbe baselineVictim = createFromPersistedState(100.0, 100.0, 100.0, 100.0, 20);
+        Microbe tankVictim = createFromPersistedState(220.0, 220.0, 220.0, 220.0, 20);
+
+        double baselineTransfer = baselineVictim.takeDamageAndTransferEnergy(20.0);
+        double tankTransfer = tankVictim.takeDamageAndTransferEnergy(20.0);
+
+        assertTrue(baselineTransfer >= 0.0 && tankTransfer >= 0.0);
+        assertTrue(tankTransfer < baselineTransfer,
+                "Tanky victims should leak less energy per equal raw damage");
+        assertTrue(baselineTransfer <= 100.0 && tankTransfer <= 220.0,
+                "Transferred energy must never exceed victim's available energy");
     }
 }
 
