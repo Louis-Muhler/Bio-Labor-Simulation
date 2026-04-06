@@ -307,6 +307,8 @@ public class SimulationEngine implements SimulationRuntime {
             double ageSum = 0.0;
             double energyPercentSum = 0.0;
             double healthPercentSum = 0.0;
+            double energyAbsoluteSum = 0.0;
+            double healthAbsoluteSum = 0.0;
 
             for (Microbe microbe : microbes) {
                 heatSum += microbe.getHeatResistance();
@@ -316,6 +318,8 @@ public class SimulationEngine implements SimulationRuntime {
                 ageSum += microbe.getAge();
                 energyPercentSum += microbe.getEnergyRatio() * 100.0;
                 healthPercentSum += microbe.getHealthRatio() * 100.0;
+                energyAbsoluteSum += microbe.getEnergy();
+                healthAbsoluteSum += microbe.getHealth();
             }
 
             double divisor = Math.max(1, population);
@@ -333,7 +337,9 @@ public class SimulationEngine implements SimulationRuntime {
                     dietSum / divisor,
                     ageSum / divisor,
                     energyPercentSum / divisor,
-                    healthPercentSum / divisor
+                    healthPercentSum / divisor,
+                    energyAbsoluteSum / divisor,
+                    healthAbsoluteSum / divisor
             );
         }
 

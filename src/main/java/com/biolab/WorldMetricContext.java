@@ -17,7 +17,9 @@ record WorldMetricContext(
         double avgDiet,
         double avgAge,
         double avgEnergyPercent,
-        double avgHealthPercent
+        double avgHealthPercent,
+        double avgEnergyAbsolute,
+        double avgHealthAbsolute
 ) {
 }
 

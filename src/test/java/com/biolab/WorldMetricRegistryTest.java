@@ -25,7 +25,8 @@ class WorldMetricRegistryTest {
                 42, 128, 2.5, 1.5,
                 0.6, 0.3, 0.8,
                 0.5, 0.4, 0.7, 0.2,
-                95.0, 66.0, 77.0
+                95.0, 66.0, 77.0,
+                54.5, 81.25
         );
 
         for (WorldMetricDefinition definition : WorldMetricRegistry.definitions()) {
@@ -37,6 +38,13 @@ class WorldMetricRegistryTest {
             assertTrue(Double.isFinite(value), () -> "Extractor lieferte keinen gueltigen Wert fuer " + definition.id());
             assertSame(definition, WorldMetricRegistry.definition(definition.id()));
         }
+
+        assertEquals(54.5,
+                WorldMetricRegistry.definition(WorldMetricId.AVG_ENERGY_ABSOLUTE).extractor().applyAsDouble(context),
+                0.0001);
+        assertEquals(81.25,
+                WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_ABSOLUTE).extractor().applyAsDouble(context),
+                0.0001);
     }
 }
 

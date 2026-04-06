@@ -52,7 +52,13 @@ public final class WorldMetricRegistry {
                     WorldMetricContext::avgEnergyPercent),
             new WorldMetricDefinition(WorldMetricId.AVG_HEALTH_PERCENT, "Avg Health", "%",
                     new Color(255, 120, 200), WorldMetricCategory.TRAITS,
-                    WorldMetricContext::avgHealthPercent)
+                    WorldMetricContext::avgHealthPercent),
+            new WorldMetricDefinition(WorldMetricId.AVG_ENERGY_ABSOLUTE, "Avg Energy (abs)", "units",
+                    new Color(220, 120, 255), WorldMetricCategory.TRAITS,
+                    WorldMetricContext::avgEnergyAbsolute),
+            new WorldMetricDefinition(WorldMetricId.AVG_HEALTH_ABSOLUTE, "Avg Health (abs)", "units",
+                    new Color(255, 100, 180), WorldMetricCategory.TRAITS,
+                    WorldMetricContext::avgHealthAbsolute)
     );
 
     private static final Map<WorldMetricId, WorldMetricDefinition> BY_ID;

@@ -68,14 +68,17 @@ public class Microbe {
     private final Color cachedBrightColor;
     private final double toxinResistance;
     private final double speed;
-
-    private static final double MAX_HEALTH = 100.0;
-    private static final double MAX_ENERGY = 100.0;
-    private static final double INITIAL_ENERGY = 92.0;
+    private static final double BASE_MAX_HEALTH = 100.0;
+    private static final double BASE_MAX_ENERGY = 100.0;
+    private static final double MIN_MAX_HEALTH = 1.0;
+    private static final double MIN_MAX_ENERGY = 1.0;
+    private static final double INITIAL_ENERGY_RATIO = 0.92;
+    private static final double REPRODUCTION_ENERGY_COST_RATIO = 0.32;
+    private static final double MIN_REPRODUCTION_ENERGY_RATIO = 0.62;
     private static final int REPRODUCTION_AGE = 80;
     private static final double MOVEMENT_ENERGY_COST = 0.009;
-    private static final double REPRODUCTION_ENERGY_COST = 32.0;
-    private static final double MIN_REPRODUCTION_ENERGY = 62.0;
+    private final double maxHealth;
+    private final double maxEnergy;
     /**
      * Absolute generation counter: 1 for seed microbes, parent.absoluteGeneration + 1
      * for every child born through reproduction.  Never changes after construction.
@@ -163,8 +166,10 @@ public class Microbe {
         double baseDefense = clamp01(0.15 + defenseAxis * 1.15);
         this.heatResistance = clamp01(baseDefense + (random.nextDouble() - 0.5) * 0.18);
         this.toxinResistance = clamp01(baseDefense + (random.nextDouble() - 0.5) * 0.18);
-        this.health = MAX_HEALTH;
-        this.energy = INITIAL_ENERGY;
+        this.maxHealth = createSeedMaxHealth(defenseAxis);
+        this.maxEnergy = createSeedMaxEnergy(agilityAxis);
+        this.health = this.maxHealth;
+        this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
         this.age = 0;
         this.ancestry = new ArrayList<>();
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
@@ -182,6 +187,8 @@ public class Microbe {
                     double toxinResistance,
                     double speed,
                     double diet,
+                    double maxHealth,
+                    double maxEnergy,
                     double health,
                     double energy,
                     int age,
@@ -203,8 +210,10 @@ public class Microbe {
         this.toxinResistance = toxinResistance;
         this.speed = speed;
         this.diet = diet;
-        this.health = health;
-        this.energy = energy;
+        this.maxHealth = sanitizeMaxHealth(maxHealth);
+        this.maxEnergy = sanitizeMaxEnergy(maxEnergy);
+        this.health = clamp(health, 0.0, this.maxHealth);
+        this.energy = clamp(energy, 0.0, this.maxEnergy);
         this.age = age;
         this.velocityX = velocityX;
         this.velocityY = velocityY;
@@ -235,9 +244,11 @@ public class Microbe {
         this.toxinResistance = mutate(parent.toxinResistance);
         this.speed = mutate(parent.speed);
         this.diet = mutate(parent.diet);
+        this.maxHealth = mutateCap(parent.maxHealth, MIN_MAX_HEALTH, Double.MAX_VALUE);
+        this.maxEnergy = mutateCap(parent.maxEnergy, MIN_MAX_ENERGY, Double.MAX_VALUE);
 
-        this.health = MAX_HEALTH;
-        this.energy = REPRODUCTION_ENERGY_COST;
+        this.health = this.maxHealth;
+        this.energy = this.maxEnergy * REPRODUCTION_ENERGY_COST_RATIO;
         this.age = 0;
 
         // ── Smart ancestry thinning ──────────────────────────────────────
@@ -351,8 +362,10 @@ public class Microbe {
         this.toxinResistance = 0.35 + random.nextDouble() * 0.45;
         this.speed = 0.35 + random.nextDouble() * 0.45; // slightly faster for sandbox visibility
         this.diet = Math.max(0.0, Math.min(1.0, forcedDiet));
-        this.health = MAX_HEALTH;
-        this.energy = INITIAL_ENERGY;
+        this.maxHealth = createSeedMaxHealth((this.heatResistance + this.toxinResistance) * 0.5);
+        this.maxEnergy = createSeedMaxEnergy(this.speed);
+        this.health = this.maxHealth;
+        this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
         this.age = 0;
         this.ancestry = new ArrayList<>();
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
@@ -368,6 +381,35 @@ public class Microbe {
         double mutation = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.1; // ±5% mutation
         double newValue = value + mutation;
         return Math.max(0.0, Math.min(1.0, newValue)); // Clamp to [0, 1]
+    }
+
+    private static double createSeedMaxHealth(double defenseAxis) {
+        double jitter = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.08;
+        double scaled = BASE_MAX_HEALTH * (0.90 + clamp01(defenseAxis) * 0.20 + jitter);
+        return sanitizeMaxHealth(scaled);
+    }
+
+    private static double createSeedMaxEnergy(double agilityAxis) {
+        double jitter = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.08;
+        double scaled = BASE_MAX_ENERGY * (0.90 + clamp01(agilityAxis) * 0.20 + jitter);
+        return sanitizeMaxEnergy(scaled);
+    }
+
+    private static double mutateCap(double value, double min, double max) {
+        double mutation = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.10;
+        return clamp(value * (1.0 + mutation), min, max);
+    }
+
+    private static double sanitizeMaxHealth(double value) {
+        return Math.max(MIN_MAX_HEALTH, value);
+    }
+
+    private static double sanitizeMaxEnergy(double value) {
+        return Math.max(MIN_MAX_ENERGY, value);
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static double clamp01(double value) {
@@ -454,18 +496,42 @@ public class Microbe {
         }
     }
 
-    /**
-     * Returns the maximum possible health value.
-     */
-    public static double getMaxHealth() {
-        return MAX_HEALTH;
+    public static Microbe fromPersistedState(PersistedState state) {
+        Microbe microbe = new Microbe(
+                state.id(),
+                state.parentId(),
+                state.absoluteGeneration(),
+                state.x(),
+                state.y(),
+                state.heatResistance(),
+                state.toxinResistance(),
+                state.speed(),
+                state.diet(),
+                state.maxHealth(),
+                state.maxEnergy(),
+                state.health(),
+                state.energy(),
+                state.age(),
+                state.velocityX(),
+                state.velocityY(),
+                state.selected(),
+                state.lastAttackTime(),
+                state.targetX(),
+                state.targetY(),
+                state.aiState(),
+                state.adrenalineTimer(),
+                state.ancestry()
+        );
+        ensureCounterAtLeast(state.id() + 1);
+        return microbe;
     }
 
-    /**
-     * Returns the maximum possible energy value.
-     */
-    public static double getMaxEnergy() {
-        return MAX_ENERGY;
+    public double getMaxHealth() {
+        return maxHealth;
+    }
+
+    public double getMaxEnergy() {
+        return maxEnergy;
     }
 
     /**
@@ -473,20 +539,8 @@ public class Microbe {
      */
     public boolean canReproduce() {
         return age >= REPRODUCTION_AGE
-            && health > MAX_HEALTH * 0.5
-            && energy >= MIN_REPRODUCTION_ENERGY;
-    }
-
-    /**
-     * Resets age and deducts reproduction costs.
-     * Called on the parent after a child is spawned.
-     */
-    public void resetReproduction() {
-        age = 0;
-        synchronized (stateLock) {
-            health -= MAX_HEALTH * 0.3;
-            energy -= REPRODUCTION_ENERGY_COST;
-        }
+                && health > maxHealth * 0.5
+                && energy >= maxEnergy * MIN_REPRODUCTION_ENERGY_RATIO;
     }
 
     /**
@@ -528,15 +582,14 @@ public class Microbe {
     // ===== Accessors =====
 
     /**
-     * Increases energy by {@code energyGain}, capped at {@link #MAX_ENERGY}.
+     * Resets age and deducts reproduction costs.
+     * Called on the parent after a child is spawned.
      */
-    public void eat(double energyGain) {
+    public void resetReproduction() {
+        age = 0;
         synchronized (stateLock) {
-            energy = Math.min(MAX_ENERGY, energy + energyGain);
-            // Food can slowly repair damage, enabling long-lived lineages when foraging succeeds.
-            if (energyGain > 0 && health > 0) {
-                health = Math.min(MAX_HEALTH, health + energyGain * 0.06);
-            }
+            health -= maxHealth * 0.3;
+            energy -= maxEnergy * REPRODUCTION_ENERGY_COST_RATIO;
         }
     }
 
@@ -584,6 +637,19 @@ public class Microbe {
     }
 
     /**
+     * Increases energy, capped at this microbe's individual max energy.
+     */
+    public void eat(double energyGain) {
+        synchronized (stateLock) {
+            energy = Math.min(maxEnergy, energy + energyGain);
+            // Food can slowly repair damage, enabling long-lived lineages when foraging succeeds.
+            if (energyGain > 0 && health > 0) {
+                health = Math.min(maxHealth, health + energyGain * 0.06);
+            }
+        }
+    }
+
+    /**
      * Inflicts {@code damage} on this microbe and returns the energy the attacker absorbs.
      *
      * <p>Called from the attacker's worker thread, so the victim may belong to a different
@@ -591,7 +657,7 @@ public class Microbe {
      *
      * <ul>
      *   <li>If the victim survives the hit, the attacker receives energy proportional to the
-     *       fraction of health removed (scaled to {@link #MAX_ENERGY}).</li>
+     *       fraction of health removed (scaled to this victim's max energy).</li>
      *   <li>If the victim is killed by the hit, the attacker receives <em>all</em> of the
      *       victim's remaining energy before it dies (energy is then zeroed).</li>
      * </ul>
@@ -611,7 +677,7 @@ public class Microbe {
             adrenalineTimer = System.currentTimeMillis();
 
             // Transfer only what was actually "harvested" by this hit, capped by victim's current energy.
-            double potentialTransfer = (actualDamage / MAX_HEALTH) * MAX_ENERGY;
+            double potentialTransfer = maxHealth > 0.0 ? (actualDamage / maxHealth) * maxEnergy : 0.0;
             double energyTransferred = Math.min(energy, potentialTransfer);
             energy -= energyTransferred;
 
@@ -620,34 +686,6 @@ public class Microbe {
             }
             return energyTransferred;
         }
-    }
-
-    public static Microbe fromPersistedState(PersistedState state) {
-        Microbe microbe = new Microbe(
-                state.id(),
-                state.parentId(),
-                state.absoluteGeneration(),
-                state.x(),
-                state.y(),
-                state.heatResistance(),
-                state.toxinResistance(),
-                state.speed(),
-                state.diet(),
-                state.health(),
-                state.energy(),
-                state.age(),
-                state.velocityX(),
-                state.velocityY(),
-                state.selected(),
-                state.lastAttackTime(),
-                state.targetX(),
-                state.targetY(),
-                state.aiState(),
-                state.adrenalineTimer(),
-                state.ancestry()
-        );
-        ensureCounterAtLeast(state.id() + 1);
-        return microbe;
     }
 
     /**
@@ -714,7 +752,7 @@ public class Microbe {
 
     public double getEnergyRatio() {
         synchronized (stateLock) {
-            return clamp01(energy / MAX_ENERGY);
+            return maxEnergy <= 0.0 ? 0.0 : clamp01(energy / maxEnergy);
         }
     }
 
@@ -738,7 +776,7 @@ public class Microbe {
      */
     public double getHealthRatio() {
         synchronized (stateLock) {
-            return Math.max(0.0, health / MAX_HEALTH);
+            return maxHealth <= 0.0 ? 0.0 : clamp01(health / maxHealth);
         }
     }
 
@@ -808,7 +846,7 @@ public class Microbe {
     }
 
     /**
-     * Returns current health (0–{@link #MAX_HEALTH}).
+     * Returns current health in the range [0, maxHealth].
      */
     public double getHealth() {
         synchronized (stateLock) {
@@ -817,7 +855,7 @@ public class Microbe {
     }
 
     /**
-     * Returns current energy (0–{@link #MAX_ENERGY}).
+     * Returns current energy in the range [0, maxEnergy].
      */
     public double getEnergy() {
         synchronized (stateLock) {
@@ -872,7 +910,7 @@ public class Microbe {
     public RenderState toRenderState() {
         double healthRatio;
         synchronized (stateLock) {
-            healthRatio = Math.max(0.0, health / MAX_HEALTH);
+            healthRatio = maxHealth <= 0.0 ? 0.0 : clamp01(health / maxHealth);
         }
         return new RenderState(
                 id,
@@ -919,6 +957,8 @@ public class Microbe {
                 toxinResistance,
                 speed,
                 diet,
+                maxHealth,
+                maxEnergy,
                 h,
                 e,
                 age,
@@ -974,6 +1014,8 @@ public class Microbe {
             double toxinResistance,
             double speed,
             double diet,
+            double maxHealth,
+            double maxEnergy,
             double health,
             double energy,
             int age,

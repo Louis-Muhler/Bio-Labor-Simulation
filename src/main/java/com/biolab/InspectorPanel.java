@@ -403,8 +403,8 @@ public class InspectorPanel extends JPanel {
 
                 // Vital Signs
                 y = drawSection(g2, y, "VITAL SIGNS", new String[]{
-                        String.format("Health: %.1f %%", microbe.getHealth() / Microbe.getMaxHealth() * 100),
-                        String.format("Energy: %.1f %%", microbe.getEnergy() / Microbe.getMaxEnergy() * 100),
+                        String.format("Health: %.0f/%.0f", microbe.getHealth(), microbe.getMaxHealth()),
+                        String.format("Energy: %.0f/%.0f", microbe.getEnergy(), microbe.getMaxEnergy()),
                         String.format("Age: %d cycles", microbe.getAge())
                 });
                 y += SECTION_GAP;

@@ -13,7 +13,7 @@ import java.util.List;
  */
 public class SimulationStateService {
     private static final int MAGIC = 0x424C5331; // BLS1
-    private static final int FORMAT_VERSION = 2;
+    private static final int FORMAT_VERSION = 3;
 
     private static void writeState(DataOutputStream out, SimulationState state) throws IOException {
         out.writeInt(MAGIC);
@@ -39,6 +39,8 @@ public class SimulationStateService {
             out.writeDouble(microbe.toxinResistance());
             out.writeDouble(microbe.speed());
             out.writeDouble(microbe.diet());
+            out.writeDouble(microbe.maxHealth());
+            out.writeDouble(microbe.maxEnergy());
             out.writeDouble(microbe.health());
             out.writeDouble(microbe.energy());
             out.writeInt(microbe.age());
@@ -114,6 +116,8 @@ public class SimulationStateService {
             double toxinResistance = in.readDouble();
             double speed = in.readDouble();
             double diet = in.readDouble();
+            double maxHealth = in.readDouble();
+            double maxEnergy = in.readDouble();
             double health = in.readDouble();
             double energy = in.readDouble();
             int age = in.readInt();
@@ -157,6 +161,8 @@ public class SimulationStateService {
                     toxinResistance,
                     speed,
                     diet,
+                    maxHealth,
+                    maxEnergy,
                     health,
                     energy,
                     age,

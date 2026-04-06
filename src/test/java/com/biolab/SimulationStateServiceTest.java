@@ -35,6 +35,13 @@ class SimulationStateServiceTest {
         assertEquals(0.12, target.getEnvironment().getToxicity(), 0.0001);
         assertEquals(0.65, target.getFoodSpawnRate(), 0.0001);
         assertEquals(captured.worldStatsHistory(), loaded.worldStatsHistory());
+        assertEquals(captured.microbes().size(), loaded.microbes().size());
+        for (int i = 0; i < captured.microbes().size(); i++) {
+            Microbe.PersistedState expected = captured.microbes().get(i);
+            Microbe.PersistedState actual = loaded.microbes().get(i);
+            assertEquals(expected.maxHealth(), actual.maxHealth(), 0.0001);
+            assertEquals(expected.maxEnergy(), actual.maxEnergy(), 0.0001);
+        }
 
         source.shutdown();
         target.shutdown();
