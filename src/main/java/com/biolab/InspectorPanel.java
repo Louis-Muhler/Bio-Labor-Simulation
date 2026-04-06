@@ -5,10 +5,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Path2D;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Objects;
-import java.util.TreeSet;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -196,6 +194,13 @@ public class InspectorPanel extends JPanel {
             xs.add(x);
         }
         return xs;
+    }
+
+    static String formatCurrentMaxWithPercent(double current, double max) {
+        double safeMax = Math.max(0.0, max);
+        double clampedCurrent = Math.max(0.0, Math.min(current, safeMax));
+        double percent = safeMax <= 0.0 ? 0.0 : (clampedCurrent / safeMax) * 100.0;
+        return String.format(Locale.ROOT, "%.0f/%.0f (%.1f%%)", clampedCurrent, safeMax, percent);
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -403,8 +408,8 @@ public class InspectorPanel extends JPanel {
 
                 // Vital Signs
                 y = drawSection(g2, y, "VITAL SIGNS", new String[]{
-                        String.format("Health: %.0f/%.0f", microbe.getHealth(), microbe.getMaxHealth()),
-                        String.format("Energy: %.0f/%.0f", microbe.getEnergy(), microbe.getMaxEnergy()),
+                        "Health: " + formatCurrentMaxWithPercent(microbe.getHealth(), microbe.getMaxHealth()),
+                        "Energy: " + formatCurrentMaxWithPercent(microbe.getEnergy(), microbe.getMaxEnergy()),
                         String.format("Age: %d cycles", microbe.getAge())
                 });
                 y += SECTION_GAP;

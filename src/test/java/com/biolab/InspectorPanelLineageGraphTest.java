@@ -123,5 +123,11 @@ class InspectorPanelLineageGraphTest {
         assertTrue(newError < oldError,
                 "Die neue 32er Basis soll die sichtbaren 10 Punkte naeher an die ideale Historienverteilung bringen");
     }
+
+    @Test
+    void vitalSignsFormatterShouldShowCurrentMaxAndPercent() {
+        assertEquals("133/556 (23.9%)", InspectorPanel.formatCurrentMaxWithPercent(133.0, 556.0));
+        assertEquals("0/0 (0.0%)", InspectorPanel.formatCurrentMaxWithPercent(5.0, 0.0));
+    }
 }
 

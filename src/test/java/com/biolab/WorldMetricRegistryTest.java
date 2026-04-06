@@ -45,6 +45,10 @@ class WorldMetricRegistryTest {
         assertEquals(81.25,
                 WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_ABSOLUTE).extractor().applyAsDouble(context),
                 0.0001);
+        assertEquals("Avg Energy", WorldMetricRegistry.definition(WorldMetricId.AVG_ENERGY_ABSOLUTE).label());
+        assertEquals("Avg Health", WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_ABSOLUTE).label());
+        assertEquals("Avg Energy (%)", WorldMetricRegistry.definition(WorldMetricId.AVG_ENERGY_PERCENT).label());
+        assertEquals("Avg Health (%)", WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_PERCENT).label());
     }
 }
 
