@@ -5,6 +5,7 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.util.OptionalLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -381,6 +382,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         }
     }
 
+    static OptionalLong findPersistedSelectedMicrobeId(SimulationState state) {
+        if (state == null) {
+            return OptionalLong.empty();
+        }
+        for (Microbe.PersistedState microbe : state.microbes()) {
+            if (microbe.selected()) {
+                return OptionalLong.of(microbe.id());
+            }
+        }
+        return OptionalLong.empty();
+    }
+
     private void loadSaveAndStart(SaveGameMetadata metadata) {
         if (metadata == null) return;
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
@@ -411,6 +424,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
                     uiFlowCoordinator.removeMainMenu();
                     uiFlowCoordinator.removeSaveBrowser(false);
+                    restoreInspectorSelectionFromLoadedState(state);
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(BioLabSimulatorApp.this,
                             "Load failed: " + ex.getMessage(),
@@ -421,6 +435,20 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             }
         };
         worker.execute();
+    }
+
+    private void restoreInspectorSelectionFromLoadedState(SimulationState state) {
+        OptionalLong selectedId = findPersistedSelectedMicrobeId(state);
+        if (selectedId.isEmpty()) {
+            onSelectionCleared();
+            return;
+        }
+        Microbe selected = engine.findMicrobeById(selectedId.getAsLong());
+        if (selected == null || selected.isDead()) {
+            onSelectionCleared();
+            return;
+        }
+        onMicrobeSelected(selected);
     }
 
     private boolean isGameplaySession() {
