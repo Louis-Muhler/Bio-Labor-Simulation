@@ -46,14 +46,47 @@ final class MicrobeRenderStyle {
                          Color brightColor,
                          double healthRatio,
                          Composite defaultComposite) {
+        drawCore(g2d, x, y, size, baseColor, brightColor, healthRatio, 1.0, defaultComposite);
+    }
+
+    static void drawCore(Graphics2D g2d,
+                         int x,
+                         int y,
+                         int size,
+                         Color baseColor,
+                         Color brightColor,
+                         double healthRatio,
+                         double glowScale,
+                         Composite defaultComposite) {
+        drawGlow(g2d, x, y, size, baseColor, healthRatio, glowScale);
+        drawBody(g2d, x, y, size, baseColor, brightColor, defaultComposite);
+    }
+
+    static void drawGlow(Graphics2D g2d,
+                         int x,
+                         int y,
+                         int size,
+                         Color baseColor,
+                         double healthRatio,
+                         double glowScale) {
         int healthBucket = Math.max(0, Math.min(10, (int) (healthRatio * 10)));
+        int perSideGrowth = Math.max(2, (int) Math.round(2.0 * Math.max(1.0, glowScale)));
         for (int i = 0; i < 3; i++) {
             int layer = 3 - i;
             g2d.setComposite(GLOW_COMPOSITES[healthBucket][i]);
             g2d.setColor(baseColor);
-            int gs = size + (layer * 4);
-            g2d.fillOval(x - layer * 2, y - layer * 2, gs, gs);
+            int gs = size + (layer * perSideGrowth * 2);
+            g2d.fillOval(x - layer * perSideGrowth, y - layer * perSideGrowth, gs, gs);
         }
+    }
+
+    static void drawBody(Graphics2D g2d,
+                         int x,
+                         int y,
+                         int size,
+                         Color baseColor,
+                         Color brightColor,
+                         Composite defaultComposite) {
         g2d.setComposite(AC_BRIGHT_FILL);
         g2d.setColor(brightColor);
         g2d.fillOval(x, y, size, size);
@@ -70,21 +103,13 @@ final class MicrobeRenderStyle {
         return baseSize + (carnivore ? Math.max(0, carnivoreBonus) : 0);
     }
 
-    static void drawCombatAndSelectionOverlays(Graphics2D g2d,
-                                               int x,
-                                               int y,
-                                               int size,
-                                               double centerX,
-                                               double centerY,
-                                               double defense,
-                                               double strength,
-                                               Color coreColor,
-                                               boolean carnivore,
-                                               long lastAttackTime,
-                                               long nowMs,
-                                               boolean selected,
-                                               boolean showSelectionRing,
-                                               Composite defaultComposite) {
+    static void drawPredatorSpikes(Graphics2D g2d,
+                                   double centerX,
+                                   double centerY,
+                                   int size,
+                                   double defense,
+                                   double strength,
+                                   Color coreColor) {
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
         float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
         float aggression = (float) Math.max(0.0, Math.min(1.0,
@@ -138,6 +163,18 @@ final class MicrobeRenderStyle {
             }
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
         }
+    }
+
+    static void drawCombatAndSelectionOverlays(Graphics2D g2d,
+                                               int x,
+                                               int y,
+                                               int size,
+                                               boolean carnivore,
+                                               long lastAttackTime,
+                                               long nowMs,
+                                               boolean selected,
+                                               boolean showSelectionRing,
+                                               Composite defaultComposite) {
 
         long msSinceAttack = nowMs - lastAttackTime;
         if (carnivore && msSinceAttack < ATTACK_FLASH_DURATION_MS) {

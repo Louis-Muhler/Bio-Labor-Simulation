@@ -825,14 +825,33 @@ public class InspectorPanel extends JPanel {
 
             Composite orig = g2.getComposite();
 
-            MicrobeRenderStyle.drawCore(
+            MicrobeRenderStyle.drawGlow(
+                    g2,
+                    x,
+                    baseY,
+                    size,
+                    mc,
+                    renderState.healthRatio(),
+                    PREVIEW_SCALE
+            );
+
+            MicrobeRenderStyle.drawPredatorSpikes(
+                    g2,
+                    cx,
+                    cy,
+                    size,
+                    renderState.defense(),
+                    renderState.strength(),
+                    mc
+            );
+
+            MicrobeRenderStyle.drawBody(
                     g2,
                     x,
                     baseY,
                     size,
                     mc,
                     renderState.brightColor(),
-                    renderState.healthRatio(),
                     orig
             );
 
@@ -841,11 +860,6 @@ public class InspectorPanel extends JPanel {
                     x,
                     baseY,
                     size,
-                    cx,
-                    cy,
-                    renderState.defense(),
-                    renderState.strength(),
-                    mc,
                     renderState.carnivore(),
                     renderState.lastAttackTime(),
                     System.currentTimeMillis(),

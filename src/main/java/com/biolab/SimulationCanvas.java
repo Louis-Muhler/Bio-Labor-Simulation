@@ -406,14 +406,33 @@ public class SimulationCanvas extends JPanel {
                 int x = (int) mx - size / 2;
                 int y = (int) my - size / 2;
 
-                MicrobeRenderStyle.drawCore(
+                MicrobeRenderStyle.drawGlow(
+                        g2d,
+                        x,
+                        y,
+                        size,
+                        microbeColor,
+                        microbe.healthRatio(),
+                        1.0
+                );
+
+                MicrobeRenderStyle.drawPredatorSpikes(
+                        g2d,
+                        mx,
+                        my,
+                        size,
+                        microbe.defense(),
+                        microbe.strength(),
+                        microbeColor
+                );
+
+                MicrobeRenderStyle.drawBody(
                         g2d,
                         x,
                         y,
                         size,
                         microbeColor,
                         microbe.brightColor(),
-                        microbe.healthRatio(),
                         defaultComposite
                 );
 
@@ -422,11 +441,6 @@ public class SimulationCanvas extends JPanel {
                         x,
                         y,
                         size,
-                        mx,
-                        my,
-                        microbe.defense(),
-                        microbe.strength(),
-                        microbeColor,
                         microbe.carnivore(),
                         microbe.lastAttackTime(),
                         nowMs,
