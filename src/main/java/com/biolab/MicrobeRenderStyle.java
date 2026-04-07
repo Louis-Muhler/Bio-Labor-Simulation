@@ -117,6 +117,14 @@ final class MicrobeRenderStyle {
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
     }
 
+    static float computeRimStrokeWidth(int size, double defense, double thicknessBoost) {
+        double clampedDefense = Math.max(0.0, Math.min(1.0, defense));
+        double base = Math.max(1.0, size / 22.0);
+        double defenseFactor = 0.85 + clampedDefense * 0.75;
+        double boost = Math.max(0.8, thicknessBoost);
+        return (float) Math.max(1.0, base * defenseFactor * boost);
+    }
+
     static int sizeWithCarnivoreBonus(int baseSize, boolean carnivore) {
         return sizeWithCarnivoreBonus(baseSize, carnivore, DEFAULT_CARNIVORE_SIZE_BONUS);
     }
@@ -133,7 +141,7 @@ final class MicrobeRenderStyle {
                                    double strength,
                                    Color coreColor,
                                    Composite defaultComposite) {
-        drawPredatorSpikes(g2d, centerX, centerY, size, defense, strength, coreColor, 1.0, 1.0, defaultComposite);
+        drawPredatorSpikes(g2d, centerX, centerY, size, defense, strength, coreColor, 1.0, 1.0, 1.0, defaultComposite);
     }
 
     static void drawPredatorSpikes(Graphics2D g2d,
@@ -145,6 +153,21 @@ final class MicrobeRenderStyle {
                                    Color coreColor,
                                    double spikeScale,
                                    double glowScale,
+                                   Composite defaultComposite) {
+        drawPredatorSpikes(g2d, centerX, centerY, size, defense, strength, coreColor,
+                spikeScale, glowScale, 1.0, defaultComposite);
+    }
+
+    static void drawPredatorSpikes(Graphics2D g2d,
+                                   double centerX,
+                                   double centerY,
+                                   int size,
+                                   double defense,
+                                   double strength,
+                                   Color coreColor,
+                                   double spikeScale,
+                                   double glowScale,
+                                   double thicknessBoost,
                                    Composite defaultComposite) {
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
         float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
@@ -178,7 +201,11 @@ final class MicrobeRenderStyle {
             Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            float spokeWidth = (float) Math.max(1.0, (size / 28.0) * Math.max(1.0, spikeScale * 0.9));
+            double baseWidth = Math.max(1.0, size / 26.0);
+            double strengthFactor = 0.70 + clampedStrength * 1.10;
+            double scaleFactor = Math.max(1.0, spikeScale * 0.95);
+            double boost = Math.max(0.8, thicknessBoost);
+            float spokeWidth = (float) Math.max(1.0, baseWidth * strengthFactor * scaleFactor * boost);
             g2d.setStroke(new BasicStroke(spokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             for (int s = 0; s < spikes; s++) {
                 double angle = (Math.PI * 2.0 * s) / spikes;

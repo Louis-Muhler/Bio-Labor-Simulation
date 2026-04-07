@@ -435,6 +435,7 @@ public class SimulationCanvas extends JPanel {
                         size,
                         microbeColor,
                         microbe.brightColor(),
+                        MicrobeRenderStyle.computeRimStrokeWidth(size, microbe.defense(), 1.0),
                         defaultComposite
                 );
 
