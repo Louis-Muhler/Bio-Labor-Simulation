@@ -386,6 +386,13 @@ public class InspectorPanel extends JPanel {
             Microbe microbe = this.selectedMicrobe;
             if (microbe == null || microbe.isDead()) return;
 
+            int expectedHeight = computeContentHeight();
+            Dimension pref = getPreferredSize();
+            if (pref == null || pref.height != expectedHeight || pref.width != CW) {
+                setPreferredSize(new Dimension(CW, expectedHeight));
+                revalidate();
+            }
+
             // Rebuild hit-boxes each frame so they always match what was just drawn
             chartHitboxes.clear();
 
