@@ -45,6 +45,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private final ModernButton activateButton;
     private final JPanel randomRow;
     private final JPanel amountRow;
+    private final JPanel centeredAmountRow;
     private final JPanel microbeSection;
     private final JPanel body;
     private final JPanel heatRow;
@@ -104,14 +105,17 @@ public class MicrobeCreatorPanel extends JPanel {
                 applyGeneratedProfile(generatedRandomProfile());
             }
         });
+        amountRow = rowWithLabel("Amount", amountSpinner, LABEL_FONT_PLAIN);
+        amountRow.setMaximumSize(new Dimension(198, ROW_HEIGHT));
+
+        centeredAmountRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        centeredAmountRow.setOpaque(false);
+
         randomRow = new JPanel(new BorderLayout());
         randomRow.setOpaque(false);
         randomRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         randomRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-        randomRow.add(randomCheck, BorderLayout.WEST);
-        amountRow = rowWithLabel("Amount", amountSpinner, LABEL_FONT_PLAIN);
-        amountRow.setMaximumSize(new Dimension(198, ROW_HEIGHT));
-        randomRow.add(amountRow, BorderLayout.EAST);
+        applyTopRowLayout(true);
         body.add(randomRow);
         body.add(Box.createVerticalStrut(12));
 
@@ -122,16 +126,16 @@ public class MicrobeCreatorPanel extends JPanel {
 
         heatRow = wrapTraitRow(heatTrait);
         microbeSection.add(heatRow);
-        microbeSection.add(Box.createVerticalStrut(10));
+        microbeSection.add(Box.createVerticalStrut(5));
         toxinRow = wrapTraitRow(toxinTrait);
         microbeSection.add(toxinRow);
-        microbeSection.add(Box.createVerticalStrut(10));
+        microbeSection.add(Box.createVerticalStrut(5));
         speedRow = wrapTraitRow(speedTrait);
         microbeSection.add(speedRow);
-        microbeSection.add(Box.createVerticalStrut(10));
+        microbeSection.add(Box.createVerticalStrut(5));
         dietRow = wrapTraitRow(dietTrait);
         microbeSection.add(dietRow);
-        microbeSection.add(Box.createVerticalStrut(8));
+        microbeSection.add(Box.createVerticalStrut(6));
 
         microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT);
         microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT);
@@ -344,6 +348,7 @@ public class MicrobeCreatorPanel extends JPanel {
         randomCheck.setVisible(microbeMode);
         randomRow.setVisible(true);
         amountRow.setVisible(true);
+        applyTopRowLayout(microbeMode);
         microbeSection.setVisible(microbeMode);
         heatRow.setVisible(microbeMode);
         toxinRow.setVisible(microbeMode);
@@ -383,6 +388,20 @@ public class MicrobeCreatorPanel extends JPanel {
         row.add(spinner, BorderLayout.EAST);
 
         return row;
+    }
+
+    private void applyTopRowLayout(boolean microbeMode) {
+        randomRow.removeAll();
+        if (microbeMode) {
+            randomRow.add(randomCheck, BorderLayout.WEST);
+            randomRow.add(amountRow, BorderLayout.EAST);
+        } else {
+            centeredAmountRow.removeAll();
+            centeredAmountRow.add(amountRow);
+            randomRow.add(centeredAmountRow, BorderLayout.CENTER);
+        }
+        randomRow.revalidate();
+        randomRow.repaint();
     }
 
     private MicrobeGeneProfile generatedRandomProfile() {
@@ -444,7 +463,7 @@ public class MicrobeCreatorPanel extends JPanel {
                     return;
                 }
                 int cx = getWidth() / 2;
-                int cy = Math.max(54, getHeight() / 2 + 12);
+                int cy = getHeight() / 2;
                 MicrobePreviewRenderer.paintPreview(g2, preview, cx, cy, 5.0);
             } finally {
                 g2.dispose();
@@ -497,7 +516,7 @@ public class MicrobeCreatorPanel extends JPanel {
             top.add(valueLabel, BorderLayout.EAST);
 
             panel.add(top);
-            panel.add(Box.createVerticalStrut(4));
+            panel.add(Box.createVerticalStrut(2));
             panel.add(slider);
         }
 
