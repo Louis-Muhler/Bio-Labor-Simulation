@@ -313,7 +313,6 @@ final class OverlayControlFactory {
             g2.setFont(comboBox.getFont());
             g2.setColor(OverlayTheme.ACCENT);
             String text = String.valueOf(comboBox.getSelectedItem());
-            @SuppressWarnings("unchecked")
             ListCellRenderer<Object> renderer = comboBox.getRenderer();
             if (renderer != null) {
                 Component rendered = renderer.getListCellRendererComponent(new JList<>(), comboBox.getSelectedItem(), -1, false, false);
