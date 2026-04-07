@@ -15,6 +15,8 @@ public enum WorldMetricId {
     AVG_TOXIN_RESISTANCE,
     AVG_SPEED,
     AVG_DIET,
+    AVG_STRENGTH,
+    AVG_DEFENSE,
     AVG_AGE,
     AVG_ENERGY_PERCENT,
     AVG_HEALTH_PERCENT,

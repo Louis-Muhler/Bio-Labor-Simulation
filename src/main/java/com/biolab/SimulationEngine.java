@@ -233,6 +233,7 @@ public class SimulationEngine implements SimulationRuntime {
                 renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
                 simulationTick = Math.max(0L, state.simulationTick());
                 worldStatsStore.replaceAll(state.worldStatsHistory());
+                worldStatsStore.backfillDerivedTraitMetrics();
                 spawnedSinceLastSample = 0;
                 consumedSinceLastSample = 0;
                 recomputeLatestRatesFromStore();
@@ -305,6 +306,8 @@ public class SimulationEngine implements SimulationRuntime {
             double toxinSum = 0.0;
             double speedSum = 0.0;
             double dietSum = 0.0;
+            double strengthSum = 0.0;
+            double defenseSum = 0.0;
             double ageSum = 0.0;
             double energyPercentSum = 0.0;
             double healthPercentSum = 0.0;
@@ -316,6 +319,8 @@ public class SimulationEngine implements SimulationRuntime {
                 toxinSum += microbe.getToxinResistance();
                 speedSum += microbe.getSpeed();
                 dietSum += microbe.getDiet();
+                strengthSum += microbe.getStrengthTrait();
+                defenseSum += microbe.getDefenseTrait();
                 ageSum += microbe.getAge();
                 energyPercentSum += microbe.getEnergyRatio() * 100.0;
                 healthPercentSum += microbe.getHealthRatio() * 100.0;
@@ -336,6 +341,8 @@ public class SimulationEngine implements SimulationRuntime {
                     toxinSum / divisor,
                     speedSum / divisor,
                     dietSum / divisor,
+                    strengthSum / divisor,
+                    defenseSum / divisor,
                     ageSum / divisor,
                     energyPercentSum / divisor,
                     healthPercentSum / divisor,

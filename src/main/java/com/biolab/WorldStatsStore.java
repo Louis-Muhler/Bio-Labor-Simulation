@@ -56,6 +56,10 @@ public class WorldStatsStore {
         }
     }
 
+    private static double clampPercent(double value) {
+        return Math.max(0.0, Math.min(100.0, value));
+    }
+
     public synchronized List<WorldStatsSample> snapshotAll() {
         LinkedHashSet<WorldMetricId> all = new LinkedHashSet<>();
         Collections.addAll(all, WorldMetricId.values());
@@ -154,6 +158,36 @@ public class WorldStatsStore {
             }
         }
         return ordered;
+    }
+
+    /**
+     * Derives AVG_STRENGTH/AVG_DEFENSE once for all currently stored samples.
+     * Uses already persisted base trait percentages and updates only in RAM.
+     */
+    public synchronized void backfillDerivedTraitMetrics() {
+        if (size == 0) {
+            return;
+        }
+
+        int dietIdx = WorldMetricId.AVG_DIET.ordinal();
+        int speedIdx = WorldMetricId.AVG_SPEED.ordinal();
+        int heatIdx = WorldMetricId.AVG_HEAT_RESISTANCE.ordinal();
+        int toxinIdx = WorldMetricId.AVG_TOXIN_RESISTANCE.ordinal();
+        int strengthIdx = WorldMetricId.AVG_STRENGTH.ordinal();
+        int defenseIdx = WorldMetricId.AVG_DEFENSE.ordinal();
+
+        for (int i = 0; i < size; i++) {
+            double avgDietPercent = metricValues[dietIdx][i];
+            double avgSpeedPercent = metricValues[speedIdx][i];
+            double avgHeatPercent = metricValues[heatIdx][i];
+            double avgToxinPercent = metricValues[toxinIdx][i];
+
+            double derivedStrength = 0.70 * avgDietPercent + 0.30 * (100.0 - avgSpeedPercent);
+            double derivedDefense = (avgHeatPercent + avgToxinPercent) * 0.5;
+
+            metricValues[strengthIdx][i] = clampPercent(derivedStrength);
+            metricValues[defenseIdx][i] = clampPercent(derivedDefense);
+        }
     }
 
     private List<Integer> downsample(List<Integer> source, int maxPoints, WorldMetricId primaryMetric) {

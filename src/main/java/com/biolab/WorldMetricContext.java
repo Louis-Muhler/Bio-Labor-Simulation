@@ -15,6 +15,8 @@ record WorldMetricContext(
         double avgToxinResistance,
         double avgSpeed,
         double avgDiet,
+        double avgStrength,
+        double avgDefense,
         double avgAge,
         double avgEnergyPercent,
         double avgHealthPercent,

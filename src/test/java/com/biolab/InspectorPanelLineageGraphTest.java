@@ -129,5 +129,14 @@ class InspectorPanelLineageGraphTest {
         assertEquals("133/556 (23.9%)", InspectorPanel.formatCurrentMaxWithPercent(133.0, 556.0));
         assertEquals("0/0 (0.0%)", InspectorPanel.formatCurrentMaxWithPercent(5.0, 0.0));
     }
+
+    @Test
+    void geneticProfileLinesShouldIncludeStrengthAndDefense() {
+        Microbe microbe = new Microbe(100, 100);
+
+        List<String> lines = List.of(InspectorPanel.buildGeneticProfileLines(microbe));
+        assertTrue(lines.stream().anyMatch(line -> line.contains("Strength:")));
+        assertTrue(lines.stream().anyMatch(line -> line.contains("Defense:")));
+    }
 }
 

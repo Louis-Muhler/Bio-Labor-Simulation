@@ -30,6 +30,7 @@ class WorldMetricRegistryTest {
                 42, 128, 2.5, 1.5,
                 0.6, 0.3, 0.8,
                 0.5, 0.4, 0.7, 0.2,
+                0.35, 0.45,
                 95.0, 66.0, 77.0,
                 54.5, 81.25
         );
@@ -54,6 +55,14 @@ class WorldMetricRegistryTest {
         assertEquals("Avg Health", WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_ABSOLUTE).label());
         assertEquals("Avg Energy (%)", WorldMetricRegistry.definition(WorldMetricId.AVG_ENERGY_PERCENT).label());
         assertEquals("Avg Health (%)", WorldMetricRegistry.definition(WorldMetricId.AVG_HEALTH_PERCENT).label());
+        assertEquals("Avg Strength", WorldMetricRegistry.definition(WorldMetricId.AVG_STRENGTH).label());
+        assertEquals("Avg Defense", WorldMetricRegistry.definition(WorldMetricId.AVG_DEFENSE).label());
+        assertEquals(35.0,
+                WorldMetricRegistry.definition(WorldMetricId.AVG_STRENGTH).extractor().applyAsDouble(context),
+                0.0001);
+        assertEquals(45.0,
+                WorldMetricRegistry.definition(WorldMetricId.AVG_DEFENSE).extractor().applyAsDouble(context),
+                0.0001);
     }
 }
 

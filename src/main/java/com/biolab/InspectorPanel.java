@@ -203,6 +203,17 @@ public class InspectorPanel extends JPanel {
         return String.format(Locale.ROOT, "%.0f/%.0f (%.1f%%)", clampedCurrent, safeMax, percent);
     }
 
+    static String[] buildGeneticProfileLines(Microbe microbe) {
+        return new String[]{
+                String.format("%-20s %6.1f %%", "Heat Resistance:", microbe.getHeatResistance() * 100),
+                String.format("%-20s %6.1f %%", "Toxin Resistance:", microbe.getToxinResistance() * 100),
+                String.format("%-20s %6.1f %%", "Speed Factor:", microbe.getSpeed() * 100),
+                String.format("%-20s %6.1f %%", "Diet:", microbe.getDiet() * 100),
+                String.format("%-20s %6.1f %%", "Strength:", microbe.getStrengthTrait() * 100),
+                String.format("%-20s %6.1f %%", "Defense:", microbe.getDefenseTrait() * 100)
+        };
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Outer frame painting – static, never scrolls
     // ────────────────────────────────────────────────────────────────────
@@ -409,12 +420,7 @@ public class InspectorPanel extends JPanel {
                 y += SECTION_GAP;
 
                 // Genetic Profile
-                y = drawSection(g2, y, "GENETIC PROFILE", new String[]{
-                        String.format("%-20s %6.1f %%", "Heat Resistance:", microbe.getHeatResistance() * 100),
-                        String.format("%-20s %6.1f %%", "Toxin Resistance:", microbe.getToxinResistance() * 100),
-                        String.format("%-20s %6.1f %%", "Speed Factor:", microbe.getSpeed() * 100),
-                        String.format("%-20s %6.1f %%", "Diet:", microbe.getDiet() * 100)
-                });
+                y = drawSection(g2, y, "GENETIC PROFILE", buildGeneticProfileLines(microbe));
                 y += SECTION_GAP;
 
                 // Lineage Evolution
@@ -589,7 +595,7 @@ public class InspectorPanel extends JPanel {
             h += LINE_H;           // separator
             h += sectionHeight();    // vital signs (3 lines)
             h += SECTION_GAP;
-            h += sectionHeight(4);   // genetic profile (4 lines: heat, toxin, speed, diet)
+            h += sectionHeight(6);   // genetic profile (6 lines: incl. derived strength/defense)
             h += SECTION_GAP;
 
             List<AncestorSnapshot> ancestry = m.getAncestry();
@@ -710,6 +716,9 @@ public class InspectorPanel extends JPanel {
             HoveredPoint hp = hoveredPoint;
             if (hp == null) return;
 
+            double strength = Math.max(0.0, Math.min(1.0, 0.70 * hp.diet() + 0.30 * (1.0 - hp.speed())));
+            double defense = Math.max(0.0, Math.min(1.0, (hp.heatResistance() + hp.toxinResistance()) * 0.5));
+
             // ── Crosshair vertical line ──────────────────────────────────
             Composite orig = g2.getComposite();
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 40 / 255f));
@@ -735,7 +744,9 @@ public class InspectorPanel extends JPanel {
                     String.format("Heat:       %.1f %%", hp.heatResistance() * 100),
                     String.format("Toxin:      %.1f %%", hp.toxinResistance() * 100),
                     String.format("Speed:      %.1f %%", hp.speed() * 100),
-                    String.format("Diet:       %.1f %%", hp.diet() * 100)
+                    String.format("Diet:       %.1f %%", hp.diet() * 100),
+                    String.format("Strength:   %.1f %%", strength * 100),
+                    String.format("Defense:    %.1f %%", defense * 100)
             };
 
             int lineH = fm.getHeight();
@@ -767,7 +778,17 @@ public class InspectorPanel extends JPanel {
             // Text lines – Gen row in accent colour, gene rows in their chart colours
             int textX = tx + PAD;
             int textY = ty + PAD + fm.getAscent();
-            Color[] lineColors = {ACCENT, CHART_HEAT, CHART_TOXIN, CHART_SPEED, CHART_DIET, CHART_MAX_HEALTH, CHART_MAX_ENERGY};
+            Color[] lineColors = {
+                    ACCENT,
+                    CHART_MAX_HEALTH,
+                    CHART_MAX_ENERGY,
+                    CHART_HEAT,
+                    CHART_TOXIN,
+                    CHART_SPEED,
+                    CHART_DIET,
+                    CHART_MAX_HEALTH,
+                    CHART_MAX_ENERGY
+            };
             for (int i = 0; i < lines.length; i++) {
                 g2.setColor(lineColors[i]);
                 g2.drawString(lines[i], textX, textY);
