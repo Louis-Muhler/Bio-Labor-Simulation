@@ -91,9 +91,9 @@ public class EnvironmentPanel extends JPanel {
         temperatureLabel = createSectionLabel(SLIDER_LABELS[0], SLIDER_COLORS[0]);
         toxicityLabel = createSectionLabel(SLIDER_LABELS[1], SLIDER_COLORS[1]);
         foodLabel = createSectionLabel(FOOD_LABEL, FOOD_SPINNER_BORDER);
-        temperatureValueLabel = createValueLabel(SLIDER_COLORS[0], "30%");
-        toxicityValueLabel = createValueLabel(SLIDER_COLORS[1], "30%");
-        foodValueLabel = createValueLabel(FOOD_SPINNER_BORDER, "0.00");
+        temperatureValueLabel = createValueLabel(SLIDER_COLORS[0], "30 %");
+        toxicityValueLabel = createValueLabel(SLIDER_COLORS[1], "30 %");
+        foodValueLabel = createValueLabel(FOOD_SPINNER_BORDER, "0.75 per tick");
 
         add(temperatureLabel);
         add(toxicityLabel);
@@ -120,6 +120,7 @@ public class EnvironmentPanel extends JPanel {
             updateFoodValueLabel(next);
         });
         add(foodSpawnSpinner);
+        updateFoodValueLabel(engine.getFoodSpawnRate());
 
         temperatureSlider.addChangeListener(e -> {
             if (syncingControls) {
@@ -197,6 +198,7 @@ public class EnvironmentPanel extends JPanel {
 
     private void syncFoodSpinnerFromEngine() {
         double runtimeValue = Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, engine.getFoodSpawnRate()));
+        updateFoodValueLabel(runtimeValue);
         double spinnerValue = ((Number) foodSpawnSpinner.getValue()).doubleValue();
         if (Math.abs(runtimeValue - spinnerValue) < 0.0001) {
             return;
@@ -217,15 +219,15 @@ public class EnvironmentPanel extends JPanel {
             int tox = (int) Math.round(engine.getEnvironment().getToxicity() * 100.0);
             temperatureSlider.setValue(Math.max(0, Math.min(100, temp)));
             toxicitySlider.setValue(Math.max(0, Math.min(100, tox)));
-            temperatureValueLabel.setText(String.format(Locale.ROOT, "%d%%", temperatureSlider.getValue()));
-            toxicityValueLabel.setText(String.format(Locale.ROOT, "%d%%", toxicitySlider.getValue()));
+            temperatureValueLabel.setText(String.format(Locale.ROOT, "%d %%", temperatureSlider.getValue()));
+            toxicityValueLabel.setText(String.format(Locale.ROOT, "%d %%", toxicitySlider.getValue()));
         } finally {
             syncingControls = false;
         }
     }
 
     private void updateFoodValueLabel(double value) {
-        foodValueLabel.setText(String.format(Locale.ROOT, "%.2f", value));
+        foodValueLabel.setText(String.format(Locale.ROOT, "%.2f per tick", value));
     }
 
     @Override
@@ -277,7 +279,7 @@ public class EnvironmentPanel extends JPanel {
     }
 
     private void layoutControls(int x, int y, int contentWidth) {
-        int valueW = 110;
+        int valueW = 150;
         int labelW = Math.max(120, contentWidth - valueW - 10);
         int sliderY;
 
