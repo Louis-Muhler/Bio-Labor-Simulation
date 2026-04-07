@@ -19,10 +19,15 @@ import java.util.logging.Logger;
  */
 public class SimulationLoopController {
     private static final Logger LOGGER = Logger.getLogger(SimulationLoopController.class.getName());
+    // Avoid OS timer quantization for short waits (common on Windows).
+    private static final long OS_SLEEP_THRESHOLD_NS = 25_000_000L;
+    private static final long OS_SLEEP_GUARD_NS = 5_000_000L;
+    private static final long YIELD_THRESHOLD_NS = 1_000_000L;
 
     // ── Tick-speed (simulation updates / second) ──────────────────────────
     private static final int BASE_TPS = 30;
-    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000};
+    private static final int[] SPEED_MULTIPLIERS = {1, 2, 5, 10, 25, 50, 100};
+    private static final String MAX_SPEED_LABEL = "MAX";
     private int currentSpeedIndex = 0;
 
     private final SimulationRuntime engine;
@@ -54,7 +59,7 @@ public class SimulationLoopController {
         this.onDeadMicrobeCheck = onDeadMicrobeCheck;
         this.onPopulationUpdated = onPopulationUpdated;
         // Both default to 30 TPS / 60 render-FPS until callers set them explicitly.
-        this.frameIntervalNs = 1_000_000_000L / (BASE_TPS * SPEED_MULTIPLIERS[0]);
+        this.frameIntervalNs = frameIntervalForCurrentSpeed();
         this.renderIntervalNs = 1_000_000_000L / 60;
     }
 
@@ -67,10 +72,10 @@ public class SimulationLoopController {
      * @return display string, e.g. {@code "2x"}
      */
     public String cycleSpeed() {
-        currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_MULTIPLIERS.length;
-        int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
-        frameIntervalNs = 1_000_000_000L / (BASE_TPS * multiplier);
-        return multiplier + "x";
+        int speedStageCount = SPEED_MULTIPLIERS.length + 1; // +1 for uncapped MAX stage
+        currentSpeedIndex = (currentSpeedIndex + 1) % speedStageCount;
+        frameIntervalNs = frameIntervalForCurrentSpeed();
+        return speedLabelForCurrentSpeed();
     }
 
     /**
@@ -78,9 +83,27 @@ public class SimulationLoopController {
      */
     public String resetSpeedToDefault() {
         currentSpeedIndex = 0;
+        frameIntervalNs = frameIntervalForCurrentSpeed();
+        return speedLabelForCurrentSpeed();
+    }
+
+    private long frameIntervalForCurrentSpeed() {
+        if (isMaxSpeedMode()) {
+            return 0L;
+        }
         int multiplier = SPEED_MULTIPLIERS[currentSpeedIndex];
-        frameIntervalNs = 1_000_000_000L / (BASE_TPS * multiplier);
-        return multiplier + "x";
+        return 1_000_000_000L / (BASE_TPS * multiplier);
+    }
+
+    private String speedLabelForCurrentSpeed() {
+        if (isMaxSpeedMode()) {
+            return MAX_SPEED_LABEL;
+        }
+        return SPEED_MULTIPLIERS[currentSpeedIndex] + "x";
+    }
+
+    private boolean isMaxSpeedMode() {
+        return currentSpeedIndex == SPEED_MULTIPLIERS.length;
     }
 
     /**
@@ -134,19 +157,14 @@ public class SimulationLoopController {
                         break;
                     }
                 } else {
-                    long elapsed = System.nanoTime() - startTime;
-                    long sleepTime = frameIntervalNs - elapsed;
-                    if (sleepTime > 0) {
-                        try {
-                            //noinspection BusyWait
-                            Thread.sleep(sleepTime / 1_000_000, (int) (sleepTime % 1_000_000));
-                        } catch (InterruptedException e) {
-                            if (running) {
-                                LOGGER.log(Level.FINE, "Simulation loop interrupted while active", e);
-                            }
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
+                    long intervalNs = frameIntervalNs;
+                    if (intervalNs <= 0L) {
+                        // MAX mode: run updates as fast as possible without artificial wait.
+                        continue;
+                    }
+                    long targetEndNs = startTime + intervalNs;
+                    if (!waitUntil(targetEndNs)) {
+                        break;
                     }
                 }
             }
@@ -154,6 +172,44 @@ public class SimulationLoopController {
 
         simulationThread.setDaemon(true);
         simulationThread.start();
+    }
+
+    /**
+     * Waits until the given deadline using a hybrid strategy:
+     * coarse OS sleep for long waits, then yield/spin for short waits.
+     *
+     * @return false when interrupted and loop should terminate
+     */
+    private boolean waitUntil(long deadlineNs) {
+        while (running) {
+            long remainingNs = deadlineNs - System.nanoTime();
+            if (remainingNs <= 0L) {
+                return true;
+            }
+            try {
+                if (remainingNs > OS_SLEEP_THRESHOLD_NS) {
+                    long coarseNs = remainingNs - OS_SLEEP_GUARD_NS;
+                    long sleepMs = coarseNs / 1_000_000L;
+                    if (sleepMs > 0L) {
+                        //noinspection BusyWait
+                        Thread.sleep(sleepMs);
+                        continue;
+                    }
+                }
+                if (remainingNs > YIELD_THRESHOLD_NS) {
+                    Thread.yield();
+                    continue;
+                }
+                Thread.onSpinWait();
+            } catch (InterruptedException e) {
+                if (running) {
+                    LOGGER.log(Level.FINE, "Simulation loop interrupted while active", e);
+                }
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     /**

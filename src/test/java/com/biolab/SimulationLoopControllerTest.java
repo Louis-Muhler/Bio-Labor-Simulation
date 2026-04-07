@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class SimulationLoopControllerTest {
 
     @Test
-    void cycleSpeedShouldIncludeNewHighSpeedLevelsAndWrapAround() {
+    void cycleSpeedShouldIncludeMaxStageAndWrapAround() {
         SimulationLoopController controller = new SimulationLoopController(
                 null,
                 null,
@@ -20,14 +20,10 @@ class SimulationLoopControllerTest {
         assertEquals("2x", controller.cycleSpeed());
         assertEquals("5x", controller.cycleSpeed());
         assertEquals("10x", controller.cycleSpeed());
-        assertEquals("20x", controller.cycleSpeed());
+        assertEquals("25x", controller.cycleSpeed());
         assertEquals("50x", controller.cycleSpeed());
         assertEquals("100x", controller.cycleSpeed());
-        assertEquals("250x", controller.cycleSpeed());
-        assertEquals("500x", controller.cycleSpeed());
-        assertEquals("1000x", controller.cycleSpeed());
-        assertEquals("2500x", controller.cycleSpeed());
-        assertEquals("5000x", controller.cycleSpeed());
+        assertEquals("MAX", controller.cycleSpeed());
         assertEquals("1x", controller.cycleSpeed());
     }
 
