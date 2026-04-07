@@ -200,7 +200,7 @@ public class InspectorPanel extends JPanel {
         double safeMax = Math.max(0.0, max);
         double clampedCurrent = Math.max(0.0, Math.min(current, safeMax));
         double percent = safeMax <= 0.0 ? 0.0 : (clampedCurrent / safeMax) * 100.0;
-        return String.format(Locale.ROOT, "%.0f/%.0f (%.1f%%)", clampedCurrent, safeMax, percent);
+        return String.format(Locale.ROOT, "%.0f/%.0f | %4.1f %%", clampedCurrent, safeMax, percent);
     }
 
     static String[] buildGeneticProfileLines(Microbe microbe) {
@@ -208,9 +208,7 @@ public class InspectorPanel extends JPanel {
                 String.format("%-20s %6.1f %%", "Heat Resistance:", microbe.getHeatResistance() * 100),
                 String.format("%-20s %6.1f %%", "Toxin Resistance:", microbe.getToxinResistance() * 100),
                 String.format("%-20s %6.1f %%", "Speed Factor:", microbe.getSpeed() * 100),
-                String.format("%-20s %6.1f %%", "Diet:", microbe.getDiet() * 100),
-                String.format("%-20s %6.1f %%", "Strength:", microbe.getStrengthTrait() * 100),
-                String.format("%-20s %6.1f %%", "Defense:", microbe.getDefenseTrait() * 100)
+                String.format("%-20s %6.1f %%", "Diet:", microbe.getDiet() * 100)
         };
     }
 
@@ -413,9 +411,11 @@ public class InspectorPanel extends JPanel {
 
                 // Vital Signs
                 y = drawSection(g2, y, "VITAL SIGNS", new String[]{
-                        String.format("Age:    %d cycles", microbe.getAge()),
-                        "Health: " + formatCurrentMaxWithPercent(microbe.getHealth(), microbe.getMaxHealth()),
-                        "Energy: " + formatCurrentMaxWithPercent(microbe.getEnergy(), microbe.getMaxEnergy())
+                        String.format("%-12s %16s", "Age:", microbe.getAge() + " cycles"),
+                        String.format("%-12s %16s", "Health:", formatCurrentMaxWithPercent(microbe.getHealth(), microbe.getMaxHealth())),
+                        String.format("%-12s %16s", "Energy:", formatCurrentMaxWithPercent(microbe.getEnergy(), microbe.getMaxEnergy())),
+                        String.format("%-20s %6.1f %%", "Strength:", microbe.getStrengthTrait() * 100),
+                        String.format("%-20s %6.1f %%", "Defense:", microbe.getDefenseTrait() * 100)
                 });
                 y += SECTION_GAP;
 
