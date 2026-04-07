@@ -28,6 +28,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final int FOOD_MODE_HEIGHT = 230;
     private static final int ROW_HEIGHT = 30;
     private static final int INPUT_WIDTH = 112;
+    private static final int CONTENT_PADDING = 35;
     private static final int TRAIT_BLOCK_TOP_GAP = 16;
     private static final int TRAIT_ROW_GAP = 8;
     private static final int HEALTH_ENERGY_GAP = 10;
@@ -78,7 +79,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
         contentPanel = new JPanel(new BorderLayout(0, 8));
         contentPanel.setOpaque(false);
-        contentPanel.setBorder(new EmptyBorder(FRAME_MARGIN + 10, FRAME_MARGIN + 8, FRAME_MARGIN + 10, FRAME_MARGIN + 8));
+        contentPanel.setBorder(new EmptyBorder(CONTENT_PADDING, CONTENT_PADDING, CONTENT_PADDING, CONTENT_PADDING));
 
         JLabel title = new JLabel("ENTITY SPAWNER", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
@@ -112,7 +113,7 @@ public class MicrobeCreatorPanel extends JPanel {
         body = new JPanel();
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setBorder(new EmptyBorder(8, 0, 8, 0));
+        body.setBorder(new EmptyBorder(0, 0, 0, 0));
 
         randomCheck.addActionListener(e -> {
             if (randomCheck.isSelected()) {
