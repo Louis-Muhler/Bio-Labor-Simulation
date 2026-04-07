@@ -84,7 +84,7 @@ class MicrobeCreatorPanelTest {
     }
 
     @Test
-    void randomGenerationShouldUseConfiguredWorldBasedProfile() throws Exception {
+    void randomGenerationShouldUseSupplierCapsWhileTraitsRemainIndependent() throws Exception {
         MicrobeCreatorPanel panel = onEdt(MicrobeCreatorPanel::new);
 
         onEdt(() -> {
@@ -93,10 +93,10 @@ class MicrobeCreatorPanelTest {
         });
 
         MicrobeGeneProfile profile = onEdt(panel::currentMicrobeProfile);
-        assertTrue(profile.heatResistance() >= 0.0 && profile.heatResistance() <= 0.55);
-        assertTrue(profile.toxinResistance() >= 0.0 && profile.toxinResistance() <= 0.65);
-        assertTrue(profile.speed() >= 0.05 && profile.speed() <= 0.75);
-        assertTrue(profile.diet() >= 0.15 && profile.diet() <= 0.85);
+        assertTrue(profile.heatResistance() >= 0.0 && profile.heatResistance() <= 1.0);
+        assertTrue(profile.toxinResistance() >= 0.0 && profile.toxinResistance() <= 1.0);
+        assertTrue(profile.speed() >= 0.0 && profile.speed() <= 1.0);
+        assertTrue(profile.diet() >= 0.0 && profile.diet() <= 1.0);
         assertTrue(profile.maxHealth() >= 11.0 && profile.maxHealth() <= 31.0);
         assertTrue(profile.maxEnergy() >= 16.5 && profile.maxEnergy() <= 46.5);
     }

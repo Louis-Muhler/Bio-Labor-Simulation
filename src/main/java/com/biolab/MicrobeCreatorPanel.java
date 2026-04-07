@@ -255,34 +255,9 @@ public class MicrobeCreatorPanel extends JPanel {
         this.layoutRefreshAction = action;
     }
 
-    public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
-        if (selectedMode() == SpawnMode.FOOD) {
-            return SimulationCommand.spawnFood(new FoodSpawnRequest(worldX, worldY, currentAmount()));
-        }
-
-        MicrobeGeneProfile baseProfile = currentMicrobeProfile();
-        boolean randomEnabled = randomCheck.isSelected();
-        MicrobeGeneProfile randomAnchor = randomEnabled
-                ? resolveRandomAnchorProfile(baseProfile)
-                : baseProfile;
-        MicrobeGeneProfile firstProfile = randomEnabled
-                ? MicrobeSpawnRequest.randomizedProfile(randomAnchor)
-                : baseProfile;
-
-        if (randomEnabled) {
-            // Keep controls in sync with the randomized profile that will be spawned first.
-            applyGeneratedProfile(firstProfile);
-        }
-
-        previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
-        return SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
-                worldX,
-                worldY,
-                currentAmount(),
-                randomEnabled,
-                randomAnchor,
-                firstProfile
-        ));
+    private static double randomCenteredTrait() {
+        // Gaussian around 0.5 gives a natural tendency toward middle values.
+        return Math.max(0.0, Math.min(1.0, ThreadLocalRandom.current().nextGaussian(0.5, 0.22)));
     }
 
     private static MicrobeGeneProfile widenProfileVariance(MicrobeGeneProfile base) {
@@ -464,13 +439,52 @@ public class MicrobeCreatorPanel extends JPanel {
         randomRow.repaint();
     }
 
-    private MicrobeGeneProfile generatedRandomProfile() {
-        Supplier<MicrobeGeneProfile> supplier = randomProfileSupplier;
-        MicrobeGeneProfile base = supplier == null ? null : supplier.get();
-        if (base == null) {
-            base = MicrobeSpawnRequest.defaultProfile();
+    public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
+        if (selectedMode() == SpawnMode.FOOD) {
+            return SimulationCommand.spawnFood(new FoodSpawnRequest(worldX, worldY, currentAmount()));
         }
-        return widenProfileVariance(base);
+
+        MicrobeGeneProfile baseProfile = currentMicrobeProfile();
+        boolean randomEnabled = randomCheck.isSelected();
+        MicrobeGeneProfile randomAnchor = randomEnabled
+                ? resolveRandomAnchorProfile(baseProfile)
+                : baseProfile;
+        MicrobeGeneProfile randomSpawnBase = randomEnabled
+                ? new MicrobeGeneProfile(0.5, 0.5, 0.5, 0.5, randomAnchor.maxHealth(), randomAnchor.maxEnergy())
+                : baseProfile;
+        MicrobeGeneProfile firstProfile = randomEnabled
+                ? buildRandomProfileFromAnchor(randomAnchor)
+                : baseProfile;
+
+        if (randomEnabled) {
+            // Keep controls in sync with the randomized profile that will be spawned first.
+            applyGeneratedProfile(firstProfile);
+        }
+
+        previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
+        return SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
+                worldX,
+                worldY,
+                currentAmount(),
+                randomEnabled,
+                randomSpawnBase,
+                firstProfile
+        ));
+    }
+
+    private MicrobeGeneProfile generatedRandomProfile() {
+        return buildRandomProfileFromAnchor(resolveRandomAnchorProfile(MicrobeSpawnRequest.defaultProfile()));
+    }
+
+    private MicrobeGeneProfile buildRandomProfileFromAnchor(MicrobeGeneProfile anchor) {
+        return new MicrobeGeneProfile(
+                randomCenteredTrait(),
+                randomCenteredTrait(),
+                randomCenteredTrait(),
+                randomCenteredTrait(),
+                jitterCap(anchor.maxHealth(), ThreadLocalRandom.current()),
+                jitterCap(anchor.maxEnergy(), ThreadLocalRandom.current())
+        );
     }
 
     private MicrobeGeneProfile resolveRandomAnchorProfile(MicrobeGeneProfile fallback) {
