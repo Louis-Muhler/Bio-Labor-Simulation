@@ -398,6 +398,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         creatorToggleButton.addActionListener(e -> overlayManager.toggleMicrobeCreatorPanel());
         speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
         microbeCreatorPanel.setActivateSpawnToolAction(this::toggleSpawnToolFromCreator);
+        microbeCreatorPanel.setLayoutRefreshAction(() -> {
+            if (overlayManager != null && microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
+                overlayManager.positionMicrobeCreatorPanel();
+            }
+        });
         deactivateToolButton.addActionListener(e -> deactivateSpawnTool());
 
         inspectorPanel.setVisible(false);

@@ -30,6 +30,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final int INPUT_WIDTH = 112;
     private static final int TRAIT_BLOCK_TOP_GAP = 16;
     private static final int TRAIT_ROW_GAP = 8;
+    private static final int HEALTH_ENERGY_GAP = 10;
     private static final int TRAIT_TITLE_TO_SLIDER_GAP = 4;
     private static final Color TRAIT_HEAT_COLOR = new Color(255, 100, 100);
     private static final Color TRAIT_TOXIN_COLOR = new Color(100, 255, 100);
@@ -64,6 +65,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private final JPanel speedRow;
     private final JPanel dietRow;
     private Runnable activateSpawnToolAction;
+    private Runnable layoutRefreshAction;
     private Supplier<MicrobeGeneProfile> randomProfileSupplier;
     private boolean spawnToolActive;
     private SpawnMode spawnMode = SpawnMode.MICROBE;
@@ -151,7 +153,7 @@ public class MicrobeCreatorPanel extends JPanel {
         microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT, MAX_HEALTH_COLOR);
         microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT, MAX_ENERGY_COLOR);
         microbeSection.add(microbeHealthRow);
-        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
+        microbeSection.add(Box.createVerticalStrut(HEALTH_ENERGY_GAP));
         microbeSection.add(microbeEnergyRow);
         microbeSection.add(Box.createVerticalStrut(TRAIT_BLOCK_TOP_GAP));
 
@@ -206,6 +208,16 @@ public class MicrobeCreatorPanel extends JPanel {
         this.activateSpawnToolAction = action;
     }
 
+    private static void styleSpinnerField(JSpinner spinner) {
+        JComponent editor = spinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
+            JTextField textField = defaultEditor.getTextField();
+            textField.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            textField.setBorder(new EmptyBorder(6, 10, 6, 10));
+            textField.setHorizontalAlignment(SwingConstants.LEFT);
+        }
+    }
+
     boolean isSpawnToolActive() {
         return spawnToolActive;
     }
@@ -237,13 +249,8 @@ public class MicrobeCreatorPanel extends JPanel {
         return randomCheck.isSelected();
     }
 
-    private static void styleSpinnerField(JSpinner spinner) {
-        JComponent editor = spinner.getEditor();
-        if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
-            JTextField textField = defaultEditor.getTextField();
-            textField.setFont(new Font("Segoe UI", Font.BOLD, 14));
-            textField.setBorder(new EmptyBorder(6, 10, 6, 10));
-        }
+    void setLayoutRefreshAction(Runnable action) {
+        this.layoutRefreshAction = action;
     }
 
     public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
@@ -410,6 +417,9 @@ public class MicrobeCreatorPanel extends JPanel {
             updatePreviewFromControls();
         }
         setPreferredSize(new Dimension(PANEL_WIDTH, microbeMode ? MICROBE_MODE_HEIGHT : FOOD_MODE_HEIGHT));
+        if (layoutRefreshAction != null) {
+            layoutRefreshAction.run();
+        }
         body.revalidate();
         revalidate();
         repaint();

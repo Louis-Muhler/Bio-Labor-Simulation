@@ -185,7 +185,7 @@ public class EnvironmentPanel extends JPanel {
             field.setForeground(FOOD_SPINNER_BORDER);
             field.setCaretColor(FOOD_SPINNER_BORDER);
             field.setOpaque(false);
-            field.setHorizontalAlignment(SwingConstants.CENTER);
+            field.setHorizontalAlignment(SwingConstants.LEFT);
             field.setBorder(new EmptyBorder(6, 0, 6, 0));
             defaultEditor.setBorder(BorderFactory.createEmptyBorder());
             defaultEditor.setOpaque(false);
