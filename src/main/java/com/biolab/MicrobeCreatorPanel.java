@@ -452,17 +452,12 @@ public class MicrobeCreatorPanel extends JPanel {
         MicrobeGeneProfile randomSpawnBase = randomEnabled
                 ? new MicrobeGeneProfile(0.5, 0.5, 0.5, 0.5, randomAnchor.maxHealth(), randomAnchor.maxEnergy())
                 : baseProfile;
-        MicrobeGeneProfile firstProfile = randomEnabled
+        MicrobeGeneProfile firstProfile = baseProfile;
+        MicrobeGeneProfile nextPreviewProfile = randomEnabled
                 ? buildRandomProfileFromAnchor(randomAnchor)
                 : baseProfile;
 
-        if (randomEnabled) {
-            // Keep controls in sync with the randomized profile that will be spawned first.
-            applyGeneratedProfile(firstProfile);
-        }
-
-        previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
-        return SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
+        SimulationCommand command = SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
                 worldX,
                 worldY,
                 currentAmount(),
@@ -470,6 +465,15 @@ public class MicrobeCreatorPanel extends JPanel {
                 randomSpawnBase,
                 firstProfile
         ));
+
+        if (randomEnabled) {
+            // After issuing this spawn, immediately stage the next random profile in the UI.
+            applyGeneratedProfile(nextPreviewProfile);
+        } else {
+            previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
+        }
+
+        return command;
     }
 
     private MicrobeGeneProfile generatedRandomProfile() {
