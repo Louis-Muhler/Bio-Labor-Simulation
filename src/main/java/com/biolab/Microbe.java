@@ -625,9 +625,17 @@ public class Microbe {
                 + load * (REPRODUCTION_THRESHOLD_PER_LOAD * 0.5));
         double requiredEnergyRatio = clampRatio(BASE_REPRODUCTION_ENERGY_THRESHOLD_RATIO
                 + load * REPRODUCTION_THRESHOLD_PER_LOAD);
+
+        double currentHealth;
+        double currentEnergy;
+        synchronized (stateLock) {
+            currentHealth = health;
+            currentEnergy = energy;
+        }
+
         return age >= REPRODUCTION_AGE
-                && health > maxHealth * requiredHealthRatio
-                && energy >= maxEnergy * requiredEnergyRatio;
+                && currentHealth > maxHealth * requiredHealthRatio
+                && currentEnergy >= maxEnergy * requiredEnergyRatio;
     }
 
     /**
