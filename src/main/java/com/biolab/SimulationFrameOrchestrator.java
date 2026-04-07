@@ -21,6 +21,7 @@ final class SimulationFrameOrchestrator {
     private final PopulationCommitSystem populationCommitSystem;
     private final Logger logger;
     private final ArrayList<Future<?>> futureBuffer = new ArrayList<>();
+    private static final int SINGLE_THREAD_MICROBE_THRESHOLD = 512;
 
     SimulationFrameOrchestrator(ExecutorService executorService,
                                 int threadCount,
@@ -73,6 +74,11 @@ final class SimulationFrameOrchestrator {
         spatialGrid.rebuild(foodSnapshot);
         microbeGrid.rebuild(microbeSnapshot);
 
+        if (threadCount <= 1 || microbeCount <= SINGLE_THREAD_MICROBE_THRESHOLD) {
+            behaviorSystem.processChunk(microbeSnapshot, spatialGrid, microbeGrid, 0, microbeCount, temperature, toxicity);
+            return populationCommitSystem.finalizeFrame(spawnedFoodCount);
+        }
+
         int chunkSize = Math.max(1, microbeCount / threadCount);
         futureBuffer.clear();
 
@@ -103,4 +109,3 @@ final class SimulationFrameOrchestrator {
         return populationCommitSystem.finalizeFrame(spawnedFoodCount);
     }
 }
-

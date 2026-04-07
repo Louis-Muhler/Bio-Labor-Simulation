@@ -102,9 +102,9 @@ final class SimulationStateCoordinator {
             return snapshotFromCurrentWorld();
         }
         List<Microbe> microbes = worldState.population().microbes();
-        Microbe clamped = clampMicrobeToWorld(microbe);
-        microbes.add(clamped);
-        worldState.index().byId().put(clamped.getId(), clamped);
+        clampMicrobeToWorld(microbe);
+        microbes.add(microbe);
+        worldState.index().byId().put(microbe.getId(), microbe);
         return snapshotFromCurrentWorld();
     }
 
@@ -117,19 +117,10 @@ final class SimulationStateCoordinator {
         return snapshotFromCurrentWorld();
     }
 
-    private Microbe clampMicrobeToWorld(Microbe microbe) {
+    private void clampMicrobeToWorld(Microbe microbe) {
         double clampedX = clamp(microbe.getX(), 0.0, width);
         double clampedY = clamp(microbe.getY(), 0.0, height);
-        return Microbe.createSpawned(
-                clampedX,
-                clampedY,
-                microbe.getHeatResistance(),
-                microbe.getToxinResistance(),
-                microbe.getSpeed(),
-                microbe.getDiet(),
-                microbe.getMaxHealth(),
-                microbe.getMaxEnergy()
-        );
+        microbe.setPosition(clampedX, clampedY);
     }
 
     private FoodPellet clampFoodToWorld(FoodPellet foodPellet) {
@@ -147,4 +138,3 @@ final class SimulationStateCoordinator {
         );
     }
 }
-

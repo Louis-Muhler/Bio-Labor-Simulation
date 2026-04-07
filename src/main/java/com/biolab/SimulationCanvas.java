@@ -105,9 +105,11 @@ public class SimulationCanvas extends JPanel {
     // ── World ─────────────────────────────────────────────────────────────
     private final int worldWidth;
     /**
-     * The microbe the camera is currently locked onto, or {@code null} when free.
+     * ID of the microbe the camera is currently following, or {@code null} when free.
+     * Uses boxed {@link Long} rather than primitive {@code long} so {@code null}
+     * can represent the "no follow target" state.
      */
-    private volatile Microbe followTarget;
+    private volatile Long followTargetId;
     private double cameraY;
     private double zoom = 1.0;
     // ── Camera – position & zoom ──────────────────────────────────────────
@@ -262,7 +264,7 @@ public class SimulationCanvas extends JPanel {
      * the camera toward the microbe on every subsequent timer tick.
      */
     public void startFollowing(Microbe microbe) {
-        followTarget = microbe;
+        followTargetId = (microbe == null ? null : microbe.getId());
     }
 
     /**
@@ -270,7 +272,7 @@ public class SimulationCanvas extends JPanel {
      * user can pan freely.
      */
     public void stopFollowing() {
-        followTarget = null;
+        followTargetId = null;
     }
 
     /**
@@ -280,7 +282,7 @@ public class SimulationCanvas extends JPanel {
      * the render frame and avoid jitter from timer desynchronisation.
      */
     private void tickFollowCamera() {
-        if (followTarget != null) repaint();
+        if (followTargetId != null) repaint();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -340,24 +342,7 @@ public class SimulationCanvas extends JPanel {
         updateSimulationRateCounter();
 
         // ── Camera follow update (runs once per frame, in sync with rendering) ──
-        Microbe target = followTarget;
-        if (target != null) {
-            if (target.isDead()) {
-                followTarget = null;
-            } else {
-                double dx = target.getX() - cameraX;
-                double dy = target.getY() - cameraY;
-                double distSq = dx * dx + dy * dy;
-                if (distSq < SNAP_THRESHOLD * SNAP_THRESHOLD) {
-                    cameraX = target.getX();
-                    cameraY = target.getY();
-                } else {
-                    cameraX += dx * PULL_STRENGTH;
-                    cameraY += dy * PULL_STRENGTH;
-                }
-                clampCamera();
-            }
-        }
+        // Camera follow is resolved against immutable render snapshots below.
 
         Graphics2D g2d = (Graphics2D) g.create();
         try {
@@ -365,6 +350,32 @@ public class SimulationCanvas extends JPanel {
             SimulationSnapshot snapshot = engine.getRenderSnapshot();
             List<Microbe.RenderState> snapshotMicrobes = snapshot.microbes();
             List<FoodPellet> snapshotFood = snapshot.food();
+
+            Long followedId = followTargetId;
+            if (followedId != null) {
+                Microbe.RenderState followed = null;
+                for (Microbe.RenderState state : snapshotMicrobes) {
+                    if (state.id() == followedId) {
+                        followed = state;
+                        break;
+                    }
+                }
+                if (followed == null) {
+                    followTargetId = null;
+                } else {
+                    double dx = followed.x() - cameraX;
+                    double dy = followed.y() - cameraY;
+                    double distSq = dx * dx + dy * dy;
+                    if (distSq < SNAP_THRESHOLD * SNAP_THRESHOLD) {
+                        cameraX = followed.x();
+                        cameraY = followed.y();
+                    } else {
+                        cameraX += dx * PULL_STRENGTH;
+                        cameraY += dy * PULL_STRENGTH;
+                    }
+                    clampCamera();
+                }
+            }
 
             // AA ON for grid lines only – turned OFF before entity rendering
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

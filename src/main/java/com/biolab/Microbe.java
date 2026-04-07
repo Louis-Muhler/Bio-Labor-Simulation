@@ -257,8 +257,8 @@ public class Microbe {
         this.toxinResistance = mutate(parent.toxinResistance);
         this.speed = mutate(parent.speed);
         this.diet = mutate(parent.diet);
-        this.maxHealth = mutateCap(parent.maxHealth, MIN_MAX_HEALTH, Double.MAX_VALUE);
-        this.maxEnergy = mutateCap(parent.maxEnergy, MIN_MAX_ENERGY, Double.MAX_VALUE);
+        this.maxHealth = mutateCap(parent.maxHealth, MIN_MAX_HEALTH);
+        this.maxEnergy = mutateCap(parent.maxEnergy, MIN_MAX_ENERGY);
 
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * REPRODUCTION_START_ENERGY_RATIO;
@@ -281,7 +281,7 @@ public class Microbe {
         // On overflow, globally remap to a deterministic evenly-covered set.
         // Anchors (oldest/newest) are always preserved.
         if (newAncestry.size() > MAX_SNAPSHOTS) {
-            newAncestry = remapAncestrySnapshots(newAncestry, MAX_SNAPSHOTS);
+            newAncestry = remapAncestrySnapshots(newAncestry);
         }
 
         this.ancestry = newAncestry;
@@ -291,15 +291,15 @@ public class Microbe {
         randomizeVelocity();
     }
 
-    private static List<AncestorSnapshot> remapAncestrySnapshots(List<AncestorSnapshot> snapshots, int capacity) {
-        if (snapshots.size() <= capacity) {
+    private static List<AncestorSnapshot> remapAncestrySnapshots(List<AncestorSnapshot> snapshots) {
+        if (snapshots.size() <= MAX_SNAPSHOTS) {
             return snapshots;
         }
 
         int lastIndex = snapshots.size() - 1;
         int firstGen = snapshots.get(0).generation();
         int lastGen = snapshots.get(lastIndex).generation();
-        int targetCount = Math.max(2, capacity);
+        int targetCount = Math.max(2, MAX_SNAPSHOTS);
 
         TreeSet<Integer> selected = new TreeSet<>();
         selected.add(0);
@@ -456,9 +456,9 @@ public class Microbe {
         return sanitizeMaxEnergy(scaled);
     }
 
-    private static double mutateCap(double value, double min, double max) {
+    private static double mutateCap(double value, double min) {
         double mutation = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.10;
-        return clamp(value * (1.0 + mutation), min, max);
+        return clamp(value * (1.0 + mutation), min, Double.MAX_VALUE);
     }
 
     private static double sanitizeMaxHealth(double value) {
@@ -578,9 +578,8 @@ public class Microbe {
 
         synchronized (stateLock) {
             health -= totalDamage;
+            age++;
         }
-
-        age++;
     }
 
     private static void ensureCounterAtLeast(long nextValueExclusive) {
@@ -937,6 +936,15 @@ public class Microbe {
     }
 
     /**
+     * Repositions this microbe in world space.
+     * Caller must ensure engine-level frame mutation locks are held.
+     */
+    void setPosition(double newX, double newY) {
+        this.x = newX;
+        this.y = newY;
+    }
+
+    /**
      * Returns the visual radius of this microbe.
      */
     public int getSize() {
@@ -954,8 +962,12 @@ public class Microbe {
      * Young microbes are fully vital; old microbes become slower and more fragile.
      */
     public double getVitality() {
-        if (age < 3000) return 1.0;
-        return Math.max(0.1, 1.0 - ((age - 3000) / 6000.0));
+        int localAge;
+        synchronized (stateLock) {
+            localAge = age;
+        }
+        if (localAge < 3000) return 1.0;
+        return Math.max(0.1, 1.0 - ((localAge - 3000) / 6000.0));
     }
 
     public double getEnergyRatio() {
