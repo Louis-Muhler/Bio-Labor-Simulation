@@ -74,6 +74,24 @@ class OverlayManagerLayoutTest {
                 "WorldStats must remain inside bottom window bounds");
     }
 
+    @Test
+    void deactivateToolButtonShouldAppearWhenToolActiveAndCreatorClosed() {
+        OverlayBundle bundle = newBundle(1280, 800, false);
+
+        bundle.manager.setSpawnToolActive(true);
+        bundle.manager.repositionAllOverlays();
+        assertTrue(bundle.deactivateToolButton.isVisible());
+
+        bundle.manager.toggleMicrobeCreatorPanel();
+        assertFalse(bundle.deactivateToolButton.isVisible());
+
+        bundle.manager.toggleMicrobeCreatorPanel();
+        assertTrue(bundle.deactivateToolButton.isVisible());
+
+        bundle.manager.setSpawnToolActive(false);
+        assertFalse(bundle.deactivateToolButton.isVisible());
+    }
+
     private OverlayBundle newBundle(int width, int height, boolean hugeSavedStatsSize) {
         JLayeredPane layeredPane = new JLayeredPane();
         layeredPane.setSize(width, height);
@@ -102,6 +120,7 @@ class OverlayManagerLayoutTest {
         ModernButton statsButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton creatorButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
+        ModernButton deactivateToolButton = new ModernButton("Tool Off", ModernButton.ButtonIcon.CLOSE);
         MicrobeCreatorPanel microbeCreatorPanel = new MicrobeCreatorPanel();
 
         OverlayManager manager = new OverlayManager(
@@ -113,14 +132,16 @@ class OverlayManagerLayoutTest {
                 envButton,
                 statsButton,
                 creatorButton,
-                speedButton
+                speedButton,
+                deactivateToolButton
         );
 
         environmentPanel.setVisible(false);
         worldStatsPanel.hidePanel();
         microbeCreatorPanel.setVisible(false);
 
-        return new OverlayBundle(layeredPane, manager, inspectorPanel, environmentPanel, worldStatsPanel, microbeCreatorPanel);
+        return new OverlayBundle(layeredPane, manager, inspectorPanel, environmentPanel, worldStatsPanel,
+                microbeCreatorPanel, deactivateToolButton);
     }
 
     private record OverlayBundle(
@@ -129,7 +150,8 @@ class OverlayManagerLayoutTest {
             InspectorPanel inspectorPanel,
             EnvironmentPanel environmentPanel,
             WorldStatsPanel worldStatsPanel,
-            MicrobeCreatorPanel microbeCreatorPanel
+            MicrobeCreatorPanel microbeCreatorPanel,
+            ModernButton deactivateToolButton
     ) {
     }
 

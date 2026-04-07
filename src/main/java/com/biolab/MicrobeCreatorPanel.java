@@ -32,7 +32,10 @@ public class MicrobeCreatorPanel extends JPanel {
     private final TraitControl maxEnergyTrait = new TraitControl("Max Energy", 100, 20, 400, false);
 
     private final PreviewCanvas previewCanvas = new PreviewCanvas();
+    private final ModernButton microbeActivateButton;
+    private final ModernButton foodActivateButton;
     private Runnable activateSpawnToolAction;
+    private boolean spawnToolActive;
 
     public MicrobeCreatorPanel() {
         setOpaque(false);
@@ -48,6 +51,9 @@ public class MicrobeCreatorPanel extends JPanel {
         title.setFont(TITLE_FONT);
         content.add(title, BorderLayout.NORTH);
 
+        microbeActivateButton = new ModernButton("Activate Spawn Tool");
+        foodActivateButton = new ModernButton("Activate Spawn Tool");
+
         tabbedPane.addTab("Microbe", buildMicrobeTab());
         tabbedPane.addTab("Food", buildFoodTab());
         tabbedPane.setOpaque(false);
@@ -60,6 +66,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
         add(content, BorderLayout.CENTER);
         applyRandomDefaults();
+        setSpawnToolActive(false);
     }
 
     public SpawnMode selectedMode() {
@@ -74,6 +81,19 @@ public class MicrobeCreatorPanel extends JPanel {
 
     public void setActivateSpawnToolAction(Runnable action) {
         this.activateSpawnToolAction = action;
+    }
+
+    boolean isSpawnToolActive() {
+        return spawnToolActive;
+    }
+
+    public void setSpawnToolActive(boolean active) {
+        spawnToolActive = active;
+        String label = active ? "Deactivate Spawn Tool" : "Activate Spawn Tool";
+        microbeActivateButton.setDisplayText(label);
+        foodActivateButton.setDisplayText(label);
+        microbeActivateButton.setDimmed(active);
+        foodActivateButton.setDimmed(active);
     }
 
     public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
@@ -139,6 +159,18 @@ public class MicrobeCreatorPanel extends JPanel {
         );
     }
 
+    String currentActivateButtonText() {
+        return selectedMode() == SpawnMode.MICROBE
+                ? microbeActivateButton.getDisplayText()
+                : foodActivateButton.getDisplayText();
+    }
+
+    boolean isCurrentActivateButtonDimmed() {
+        return selectedMode() == SpawnMode.MICROBE
+                ? microbeActivateButton.isDimmed()
+                : foodActivateButton.isDimmed();
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -196,15 +228,14 @@ public class MicrobeCreatorPanel extends JPanel {
         root.add(previewShell);
         root.add(Box.createVerticalStrut(10));
 
-        ModernButton activate = new ModernButton("Activate Spawn Tool");
-        activate.setPreferredSize(new Dimension(210, 36));
-        activate.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        activate.addActionListener(e -> {
+        microbeActivateButton.setPreferredSize(new Dimension(210, 36));
+        microbeActivateButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        microbeActivateButton.addActionListener(e -> {
             if (activateSpawnToolAction != null) {
                 activateSpawnToolAction.run();
             }
         });
-        root.add(activate);
+        root.add(microbeActivateButton);
 
         return root;
     }
@@ -225,15 +256,14 @@ public class MicrobeCreatorPanel extends JPanel {
         root.add(hint);
         root.add(Box.createVerticalStrut(10));
 
-        ModernButton activate = new ModernButton("Activate Spawn Tool");
-        activate.setPreferredSize(new Dimension(210, 36));
-        activate.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        activate.addActionListener(e -> {
+        foodActivateButton.setPreferredSize(new Dimension(210, 36));
+        foodActivateButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        foodActivateButton.addActionListener(e -> {
             if (activateSpawnToolAction != null) {
                 activateSpawnToolAction.run();
             }
         });
-        root.add(activate);
+        root.add(foodActivateButton);
 
         return root;
     }

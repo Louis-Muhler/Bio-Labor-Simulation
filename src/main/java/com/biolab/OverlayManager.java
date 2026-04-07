@@ -24,6 +24,9 @@ public class OverlayManager {
     private static final int OVERLAY_EDGE_MARGIN = 15;
     private static final int SPEED_BUTTON_WIDTH = 112;
     private static final int SPEED_BUTTON_HEIGHT = 45;
+    private static final int TOOL_BUTTON_WIDTH = 100;
+    private static final int TOOL_BUTTON_HEIGHT = 36;
+    private static final int TOOL_SPEED_GAP = 8;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;
     /**
@@ -52,12 +55,15 @@ public class OverlayManager {
     private final ModernButton statsToggleButton;
     private final ModernButton creatorToggleButton;
     private final ModernButton speedButton;
+    private final ModernButton spawnToolDeactivateButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
     private boolean inspectorVisibleBeforeHide;
     private boolean environmentVisibleBeforeHide;
     private boolean statsVisibleBeforeHide;
     private boolean creatorVisibleBeforeHide;
+    private boolean gameplayOverlaysVisible = true;
+    private boolean spawnToolActive;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -86,7 +92,8 @@ public class OverlayManager {
                 envToggleButton,
                 statsToggleButton,
                 null,
-                speedButton);
+                speedButton,
+                null);
     }
 
     public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
@@ -98,6 +105,28 @@ public class OverlayManager {
                           ModernButton statsToggleButton,
                           ModernButton creatorToggleButton,
                           ModernButton speedButton) {
+        this(layeredPaneSupplier,
+                inspectorPanel,
+                environmentPanel,
+                worldStatsPanel,
+                microbeCreatorPanel,
+                envToggleButton,
+                statsToggleButton,
+                creatorToggleButton,
+                speedButton,
+                null);
+    }
+
+    public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
+                          InspectorPanel inspectorPanel,
+                          EnvironmentPanel environmentPanel,
+                          WorldStatsPanel worldStatsPanel,
+                          MicrobeCreatorPanel microbeCreatorPanel,
+                          ModernButton envToggleButton,
+                          ModernButton statsToggleButton,
+                          ModernButton creatorToggleButton,
+                          ModernButton speedButton,
+                          ModernButton spawnToolDeactivateButton) {
         this.layeredPaneSupplier = layeredPaneSupplier;
         this.inspectorPanel = inspectorPanel;
         this.environmentPanel = environmentPanel;
@@ -107,6 +136,7 @@ public class OverlayManager {
         this.statsToggleButton = statsToggleButton;
         this.creatorToggleButton = creatorToggleButton;
         this.speedButton = speedButton;
+        this.spawnToolDeactivateButton = spawnToolDeactivateButton;
 
         // Transparent panel – no background box, only the label itself is visible
         this.populationOverlay = new JPanel() {
@@ -298,6 +328,17 @@ public class OverlayManager {
             speedButton.repaint();
         }
 
+        if (spawnToolDeactivateButton != null) {
+            int toolX = speedX - TOOL_SPEED_GAP - TOOL_BUTTON_WIDTH;
+            int toolY = speedY + (SPEED_BUTTON_HEIGHT - TOOL_BUTTON_HEIGHT) / 2;
+            if (spawnToolDeactivateButton.getParent() != lp) {
+                lp.add(spawnToolDeactivateButton, JLayeredPane.PALETTE_LAYER);
+            }
+            spawnToolDeactivateButton.setBounds(toolX, toolY, TOOL_BUTTON_WIDTH, TOOL_BUTTON_HEIGHT);
+            spawnToolDeactivateButton.revalidate();
+            spawnToolDeactivateButton.repaint();
+        }
+
         int popX = (lpW - POP_OVERLAY_WIDTH) / 2;
         int popY = contentTop + OVERLAY_EDGE_MARGIN + 5;
 
@@ -334,6 +375,7 @@ public class OverlayManager {
         if (microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
             positionMicrobeCreatorPanel();
         }
+        updateSpawnToolDeactivateButtonVisibility();
     }
 
     private int overlayTopY(JLayeredPane lp) {
@@ -383,6 +425,7 @@ public class OverlayManager {
             positionEnvironmentPanel();
             envToggleButton.setDimmed(true);
         }
+        updateSpawnToolDeactivateButtonVisibility();
         lp.repaint();
     }
 
@@ -404,6 +447,7 @@ public class OverlayManager {
             positionWorldStatsPanel();
             statsToggleButton.setDimmed(true);
         }
+        updateSpawnToolDeactivateButtonVisibility();
         lp.repaint();
     }
 
@@ -428,7 +472,24 @@ public class OverlayManager {
             positionMicrobeCreatorPanel();
             creatorToggleButton.setDimmed(true);
         }
+        updateSpawnToolDeactivateButtonVisibility();
         lp.repaint();
+    }
+
+    public void setSpawnToolActive(boolean active) {
+        spawnToolActive = active;
+        if (microbeCreatorPanel != null) {
+            microbeCreatorPanel.setSpawnToolActive(active);
+        }
+        updateSpawnToolDeactivateButtonVisibility();
+    }
+
+    private void updateSpawnToolDeactivateButtonVisibility() {
+        if (spawnToolDeactivateButton == null) {
+            return;
+        }
+        boolean creatorVisible = microbeCreatorPanel != null && microbeCreatorPanel.isVisible();
+        spawnToolDeactivateButton.setVisible(gameplayOverlaysVisible && spawnToolActive && !creatorVisible);
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -453,6 +514,7 @@ public class OverlayManager {
      * Shows or hides all gameplay overlays/buttons managed by this instance.
      */
     public void setGameplayOverlaysVisible(boolean visible) {
+        gameplayOverlaysVisible = visible;
         if (visible) {
             inspectorPanel.setVisible(inspectorVisibleBeforeHide);
             boolean wantStats = statsVisibleBeforeHide;
@@ -488,6 +550,9 @@ public class OverlayManager {
         statsToggleButton.setVisible(visible);
         if (creatorToggleButton != null) creatorToggleButton.setVisible(visible);
         speedButton.setVisible(visible);
+        if (spawnToolDeactivateButton != null) {
+            spawnToolDeactivateButton.setVisible(false);
+        }
         populationOverlay.setVisible(visible);
         if (!visible) {
             envToggleButton.setDimmed(false);
@@ -496,6 +561,7 @@ public class OverlayManager {
             inspectorPanel.hidePanel();
         }
         JLayeredPane lp = layeredPaneSupplier.get();
+        updateSpawnToolDeactivateButtonVisibility();
         lp.repaint();
     }
 
@@ -516,6 +582,9 @@ public class OverlayManager {
             lp.remove(creatorToggleButton);
         }
         lp.remove(speedButton);
+        if (spawnToolDeactivateButton != null) {
+            lp.remove(spawnToolDeactivateButton);
+        }
         lp.remove(populationOverlay);
         lp.repaint();
     }

@@ -108,6 +108,14 @@ public class ModernButton extends JButton {
         repaint();
     }
 
+    public boolean isDimmed() {
+        return isDimmed;
+    }
+
+    public String getDisplayText() {
+        return displayText;
+    }
+
 
     @Override
     public void setText(String text) {

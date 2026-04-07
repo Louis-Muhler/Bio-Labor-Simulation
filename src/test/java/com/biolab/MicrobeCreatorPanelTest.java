@@ -4,8 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 class MicrobeCreatorPanelTest {
 
@@ -101,6 +100,25 @@ class MicrobeCreatorPanelTest {
         });
         assertEquals(1, onEdt(panel::currentAmount));
         assertNotNull(onEdt(() -> panel.buildSpawnCommand(10, 20)));
+    }
+
+    @Test
+    void activateButtonShouldReflectSpawnToolState() throws Exception {
+        MicrobeCreatorPanel panel = onEdt(MicrobeCreatorPanel::new);
+
+        onEdt(() -> {
+            panel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.MICROBE);
+            panel.setSpawnToolActive(true);
+        });
+        assertEquals("Deactivate Spawn Tool", onEdt(panel::currentActivateButtonText));
+        assertTrue(onEdt(panel::isCurrentActivateButtonDimmed));
+
+        onEdt(() -> {
+            panel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.FOOD);
+            panel.setSpawnToolActive(false);
+        });
+        assertEquals("Activate Spawn Tool", onEdt(panel::currentActivateButtonText));
+        assertFalse(onEdt(panel::isCurrentActivateButtonDimmed));
     }
 
     @FunctionalInterface
