@@ -48,7 +48,7 @@ class SimulationEngineLookupTest {
     void spawnMicrobeShouldPreserveIdentityAndInstance() {
         SimulationEngine engine = new SimulationEngine(300, 300, 0);
         try {
-            Microbe external = new Microbe(120, 130, 0.2);
+            Microbe external = new Microbe(-25, 999, 0.2);
             long expectedId = external.getId();
 
             engine.spawnMicrobe(external);
@@ -56,6 +56,8 @@ class SimulationEngineLookupTest {
             Microbe lookedUp = engine.findMicrobeById(expectedId);
             assertNotNull(lookedUp, "Spawned microbe should be indexed under its original ID");
             assertSame(external, lookedUp, "spawnMicrobe must not recreate a different Microbe instance");
+            assertEquals(0.0, lookedUp.getX(), 0.0001, "X should be clamped to world min bound");
+            assertEquals(300.0, lookedUp.getY(), 0.0001, "Y should be clamped to world max bound");
         } finally {
             engine.shutdown();
         }
