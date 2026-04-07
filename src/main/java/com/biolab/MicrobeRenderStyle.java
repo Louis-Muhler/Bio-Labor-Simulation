@@ -58,7 +58,7 @@ final class MicrobeRenderStyle {
                          double healthRatio,
                          double glowScale,
                          Composite defaultComposite) {
-        drawGlow(g2d, x, y, size, baseColor, healthRatio, glowScale);
+        drawGlow(g2d, x, y, size, baseColor, healthRatio, glowScale, defaultComposite);
         drawBody(g2d, x, y, size, baseColor, brightColor, defaultComposite);
     }
 
@@ -68,7 +68,8 @@ final class MicrobeRenderStyle {
                          int size,
                          Color baseColor,
                          double healthRatio,
-                         double glowScale) {
+                         double glowScale,
+                         Composite defaultComposite) {
         int healthBucket = Math.max(0, Math.min(10, (int) (healthRatio * 10)));
         int perSideGrowth = Math.max(2, (int) Math.round(2.0 * Math.max(1.0, glowScale)));
         for (int i = 0; i < 3; i++) {
@@ -78,6 +79,7 @@ final class MicrobeRenderStyle {
             int gs = size + (layer * perSideGrowth * 2);
             g2d.fillOval(x - layer * perSideGrowth, y - layer * perSideGrowth, gs, gs);
         }
+        g2d.setComposite(defaultComposite);
     }
 
     static void drawBody(Graphics2D g2d,
@@ -109,7 +111,8 @@ final class MicrobeRenderStyle {
                                    int size,
                                    double defense,
                                    double strength,
-                                   Color coreColor) {
+                                   Color coreColor,
+                                   Composite defaultComposite) {
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
         float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
         float aggression = (float) Math.max(0.0, Math.min(1.0,
@@ -137,6 +140,7 @@ final class MicrobeRenderStyle {
             );
 
             Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setStroke(STROKE_1);
             for (int s = 0; s < spikes; s++) {
@@ -161,6 +165,8 @@ final class MicrobeRenderStyle {
                 g2d.setColor(spikeLineColor);
                 g2d.drawLine(cx, cy, xTip, yTip);
             }
+            g2d.setComposite(defaultComposite);
+            g2d.setStroke(STROKE_1);
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
         }
     }

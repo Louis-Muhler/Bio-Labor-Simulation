@@ -413,7 +413,8 @@ public class SimulationCanvas extends JPanel {
                         size,
                         microbeColor,
                         microbe.healthRatio(),
-                        1.0
+                        1.0,
+                        defaultComposite
                 );
 
                 MicrobeRenderStyle.drawPredatorSpikes(
@@ -423,7 +424,8 @@ public class SimulationCanvas extends JPanel {
                         size,
                         microbe.defense(),
                         microbe.strength(),
-                        microbeColor
+                        microbeColor,
+                        defaultComposite
                 );
 
                 MicrobeRenderStyle.drawBody(

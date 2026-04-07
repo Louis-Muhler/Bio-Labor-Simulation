@@ -832,7 +832,8 @@ public class InspectorPanel extends JPanel {
                     size,
                     mc,
                     renderState.healthRatio(),
-                    PREVIEW_SCALE
+                    PREVIEW_SCALE,
+                    orig
             );
 
             MicrobeRenderStyle.drawPredatorSpikes(
@@ -842,7 +843,8 @@ public class InspectorPanel extends JPanel {
                     size,
                     renderState.defense(),
                     renderState.strength(),
-                    mc
+                    mc,
+                    orig
             );
 
             MicrobeRenderStyle.drawBody(
