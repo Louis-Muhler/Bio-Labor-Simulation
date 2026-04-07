@@ -24,9 +24,9 @@ public class OverlayManager {
     private static final int OVERLAY_EDGE_MARGIN = 15;
     private static final int SPEED_BUTTON_WIDTH = 112;
     private static final int SPEED_BUTTON_HEIGHT = 45;
-    private static final int TOOL_BUTTON_WIDTH = 100;
-    private static final int TOOL_BUTTON_HEIGHT = 36;
-    private static final int TOOL_SPEED_GAP = 8;
+    private static final int TOOL_BUTTON_WIDTH = 168;
+    private static final int TOOL_BUTTON_HEIGHT = SPEED_BUTTON_HEIGHT;
+    private static final int CREATOR_TOOL_GAP = 10;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;
     /**
@@ -329,8 +329,9 @@ public class OverlayManager {
         }
 
         if (spawnToolDeactivateButton != null) {
-            int toolX = speedX - TOOL_SPEED_GAP - TOOL_BUTTON_WIDTH;
-            int toolY = speedY + (SPEED_BUTTON_HEIGHT - TOOL_BUTTON_HEIGHT) / 2;
+            int toolX = OVERLAY_EDGE_MARGIN;
+            int toolY = overlayTopY(lp) + (BTN_SIZE * 3) + SETTINGS_ENV_GAP + ENV_STATS_GAP + STATS_CREATOR_GAP
+                    + BTN_SIZE + CREATOR_TOOL_GAP;
             if (spawnToolDeactivateButton.getParent() != lp) {
                 lp.add(spawnToolDeactivateButton, JLayeredPane.PALETTE_LAYER);
             }

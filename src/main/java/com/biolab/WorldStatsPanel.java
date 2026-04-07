@@ -418,6 +418,9 @@ public class WorldStatsPanel extends JPanel {
         metricListPanel.setBorder(new EmptyBorder(8, LIST_SIDE_PADDING, 8, LIST_SIDE_PADDING));
 
         JScrollPane scrollPane = OverlayControlFactory.createStyledScrollPane(metricListPanel);
+        JScrollBar metricsScroll = scrollPane.getVerticalScrollBar();
+        metricsScroll.setUnitIncrement(24);
+        metricsScroll.setBlockIncrement(72);
         JPanel metricListContainer = OverlayControlFactory.wrapInInnerFrame(scrollPane);
 
         leftColumn.add(searchField, BorderLayout.NORTH);

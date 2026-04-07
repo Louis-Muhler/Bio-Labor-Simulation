@@ -86,13 +86,11 @@ public class InspectorPanel extends JPanel {
 
         contentCanvas = new ContentCanvas();
 
-        scrollPane = new JScrollPane(contentCanvas);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder(INSET, INSET, INSET, INSET));
-        scrollPane.setOpaque(false);
-        scrollPane.getViewport().setOpaque(false);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(
+                contentCanvas,
+                new Insets(INSET, INSET, INSET, INSET),
+                18
+        );
 
         add(scrollPane, BorderLayout.CENTER);
     }

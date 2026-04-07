@@ -60,8 +60,11 @@ public class MicrobeCreatorPanel extends JPanel {
         tabbedPane.setForeground(ACCENT_COLOR);
         tabbedPane.setFont(LABEL_FONT);
 
-        JScrollPane scrollPane = OverlayControlFactory.createStyledScrollPane(tabbedPane);
-        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        JScrollPane scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(
+                tabbedPane,
+                new Insets(0, 0, 0, 0),
+                18
+        );
         content.add(scrollPane, BorderLayout.CENTER);
 
         add(content, BorderLayout.CENTER);

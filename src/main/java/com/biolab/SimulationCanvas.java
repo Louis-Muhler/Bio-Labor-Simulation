@@ -45,7 +45,6 @@ public class SimulationCanvas extends JPanel {
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
     private static final double SIM_TICKS_PER_SIM_SECOND = 30.0;
     private static final int PLACEMENT_HOLD_INTERVAL_MS = 120;
-    private static final int PLACEMENT_INDICATOR_RADIUS = 12;
 
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
     // Avoids AlphaComposite.getInstance() per frame for debug overlays.
@@ -526,18 +525,6 @@ public class SimulationCanvas extends JPanel {
             // ── Restore screen-space transform ────────────────────────────
             g2d.setTransform(originalTransform);
 
-            if (placementTool != null && placementMousePoint != null) {
-                Point.Double world = screenToWorld(placementMousePoint.x, placementMousePoint.y);
-                int sx = worldToScreenX(world.x);
-                int sy = worldToScreenY(world.y);
-                g2d.setColor(new Color(0, 255, 255, 170));
-                g2d.setStroke(STROKE_1);
-                g2d.drawOval(sx - PLACEMENT_INDICATOR_RADIUS, sy - PLACEMENT_INDICATOR_RADIUS,
-                        PLACEMENT_INDICATOR_RADIUS * 2, PLACEMENT_INDICATOR_RADIUS * 2);
-                g2d.drawLine(sx - 4, sy, sx + 4, sy);
-                g2d.drawLine(sx, sy - 4, sx, sy + 4);
-            }
-
             if (debugOn) {
                 drawDebugStats(g2d);
             }
@@ -640,13 +627,6 @@ public class SimulationCanvas extends JPanel {
         );
     }
 
-    private int worldToScreenX(double worldX) {
-        return (int) Math.round((worldX - cameraX) * zoom + getWidth() / 2.0);
-    }
-
-    private int worldToScreenY(double worldY) {
-        return (int) Math.round((worldY - cameraY) * zoom + getHeight() / 2.0);
-    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Inner interface

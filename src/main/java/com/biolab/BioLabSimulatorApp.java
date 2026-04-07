@@ -350,7 +350,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton creatorToggleButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
-        ModernButton deactivateToolButton = new ModernButton("Tool Off", ModernButton.ButtonIcon.CLOSE);
+        ModernButton deactivateToolButton = new ModernButton("DEACTIVATE TOOL");
         runtimeSpeedButton = speedButton;
 
         overlayManager = new OverlayManager(this::getLayeredPane,

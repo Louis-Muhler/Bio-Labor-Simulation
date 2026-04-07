@@ -1,0 +1,45 @@
+package com.biolab;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+import java.awt.event.MouseWheelEvent;
+
+/**
+ * Shared wheel-only scroll behavior for overlay panels.
+ */
+final class OverlayScrollSupport {
+    private OverlayScrollSupport() {
+    }
+
+    static JScrollPane createWheelOnlyScrollPane(JComponent content, Insets insets, int unitIncrement) {
+        JScrollPane scrollPane = new JScrollPane(content);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setBorder(new EmptyBorder(insets));
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        int unit = Math.max(8, unitIncrement);
+        vertical.setUnitIncrement(unit);
+        vertical.setBlockIncrement(unit * 3);
+
+        java.awt.event.MouseWheelListener wheelHandler = e -> applyWheelDelta(scrollPane, e, unit);
+        scrollPane.addMouseWheelListener(wheelHandler);
+        content.addMouseWheelListener(wheelHandler);
+        return scrollPane;
+    }
+
+    private static void applyWheelDelta(JScrollPane scrollPane, MouseWheelEvent e, int unit) {
+        JScrollBar bar = scrollPane.getVerticalScrollBar();
+        int maxValue = Math.max(bar.getMinimum(), bar.getMaximum() - bar.getVisibleAmount());
+        int delta = e.getWheelRotation() * unit;
+        int next = Math.max(bar.getMinimum(), Math.min(maxValue, bar.getValue() + delta));
+        if (next != bar.getValue()) {
+            bar.setValue(next);
+            e.consume();
+        }
+    }
+}
+
