@@ -24,7 +24,7 @@ public class OverlayManager {
     private static final int OVERLAY_EDGE_MARGIN = 15;
     private static final int SPEED_BUTTON_WIDTH = 112;
     private static final int SPEED_BUTTON_HEIGHT = 45;
-    private static final int TOOL_BUTTON_WIDTH = 168;
+    private static final int TOOL_BUTTON_WIDTH = 220;
     private static final int TOOL_BUTTON_HEIGHT = SPEED_BUTTON_HEIGHT;
     private static final int POP_OVERLAY_WIDTH = 280;
     private static final int POP_OVERLAY_HEIGHT = 100;
@@ -42,7 +42,7 @@ public class OverlayManager {
     /**
      * Fixed height of the environment panel (content does not change).
      */
-    private static final int ENV_PANEL_HEIGHT = 310;
+    private static final int ENV_PANEL_HEIGHT = 285;
 
     private final Supplier<JLayeredPane> layeredPaneSupplier;
 
@@ -331,7 +331,8 @@ public class OverlayManager {
             int toolX = OVERLAY_EDGE_MARGIN;
             int toolY = speedY;
             if (spawnToolDeactivateButton.getParent() != lp) {
-                lp.add(spawnToolDeactivateButton, JLayeredPane.PALETTE_LAYER);
+                // Keep this below left viewers so it never overlays the World Stats panel.
+                lp.add(spawnToolDeactivateButton, JLayeredPane.DEFAULT_LAYER);
             }
             spawnToolDeactivateButton.setBounds(toolX, toolY, TOOL_BUTTON_WIDTH, TOOL_BUTTON_HEIGHT);
             spawnToolDeactivateButton.revalidate();

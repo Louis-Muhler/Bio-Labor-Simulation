@@ -38,8 +38,8 @@ public class EnvironmentPanel extends JPanel {
 
     // ── Fonts (identical hierarchy to InspectorPanel) ─────────────────────
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 16);
-    private static final Font LABEL_FONT = new Font("Segoe UI", Font.BOLD, 12);
-    private static final Font VALUE_FONT = new Font("Consolas", Font.BOLD, 13);
+    private static final Font LABEL_FONT = new Font("Segoe UI", Font.BOLD, 14);
+    private static final Font VALUE_FONT = new Font("Segoe UI", Font.BOLD, 14);
 
     // ── Strokes ───────────────────────────────────────────────────────────
     private static final BasicStroke STROKE_1 = new BasicStroke(1);
@@ -81,7 +81,7 @@ public class EnvironmentPanel extends JPanel {
      */
     public EnvironmentPanel(SimulationRuntime engine) {
         this.engine = engine;
-        setPreferredSize(new Dimension(PANEL_WIDTH, 310));
+        setPreferredSize(new Dimension(PANEL_WIDTH, 285));
         setBackground(new Color(0, 0, 0, 0));
         setOpaque(false);
         setLayout(null);
@@ -91,9 +91,9 @@ public class EnvironmentPanel extends JPanel {
         temperatureLabel = createSectionLabel(SLIDER_LABELS[0], SLIDER_COLORS[0]);
         toxicityLabel = createSectionLabel(SLIDER_LABELS[1], SLIDER_COLORS[1]);
         foodLabel = createSectionLabel(FOOD_LABEL, FOOD_SPINNER_BORDER);
-        temperatureValueLabel = createValueLabel(SLIDER_COLORS[0]);
-        toxicityValueLabel = createValueLabel(SLIDER_COLORS[1]);
-        foodValueLabel = createValueLabel(FOOD_SPINNER_BORDER);
+        temperatureValueLabel = createValueLabel(SLIDER_COLORS[0], "30%");
+        toxicityValueLabel = createValueLabel(SLIDER_COLORS[1], "30%");
+        foodValueLabel = createValueLabel(FOOD_SPINNER_BORDER, "0.00");
 
         add(temperatureLabel);
         add(toxicityLabel);
@@ -155,8 +155,8 @@ public class EnvironmentPanel extends JPanel {
         return slider;
     }
 
-    private static JLabel createValueLabel(Color color) {
-        JLabel label = new JLabel("0%", SwingConstants.RIGHT);
+    private static JLabel createValueLabel(Color color, String initialText) {
+        JLabel label = new JLabel(initialText, SwingConstants.RIGHT);
         label.setFont(VALUE_FONT);
         label.setForeground(color);
         return label;
@@ -166,6 +166,8 @@ public class EnvironmentPanel extends JPanel {
         JLabel label = new JLabel(text);
         label.setFont(LABEL_FONT);
         label.setForeground(color);
+        label.setIcon(new TriangleIcon(color));
+        label.setIconTextGap(6);
         return label;
     }
 
@@ -223,7 +225,7 @@ public class EnvironmentPanel extends JPanel {
     }
 
     private void updateFoodValueLabel(double value) {
-        foodValueLabel.setText(String.format(Locale.ROOT, "%.2f per tick", value));
+        foodValueLabel.setText(String.format(Locale.ROOT, "%.2f", value));
     }
 
     @Override
@@ -275,20 +277,20 @@ public class EnvironmentPanel extends JPanel {
     }
 
     private void layoutControls(int x, int y, int contentWidth) {
-        int valueW = 64;
-        int labelW = Math.max(120, contentWidth / 2);
+        int valueW = 110;
+        int labelW = Math.max(120, contentWidth - valueW - 10);
         int sliderY;
 
         temperatureLabel.setBounds(x, y, labelW, 18);
         temperatureValueLabel.setBounds(x + contentWidth - valueW, y, valueW, 18);
-        y += 18;
+        y += 20;
         sliderY = y + 2;
         temperatureSlider.setBounds(x, sliderY, contentWidth, 26);
-        y += 34;
+        y += 36;
 
         toxicityLabel.setBounds(x, y, labelW, 18);
         toxicityValueLabel.setBounds(x + contentWidth - valueW, y, valueW, 18);
-        y += 18;
+        y += 20;
         sliderY = y + 2;
         toxicitySlider.setBounds(x, sliderY, contentWidth, 26);
         y += 40;
@@ -297,6 +299,30 @@ public class EnvironmentPanel extends JPanel {
         foodValueLabel.setBounds(x + contentWidth - valueW, y, valueW, 18);
         y += 22;
         foodSpawnSpinner.setBounds(x, y, contentWidth, FOOD_SPINNER_HEIGHT);
+    }
+
+    private record TriangleIcon(Color color) implements Icon {
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            int mid = y + getIconHeight() / 2;
+            int[] xs = {x, x + 7, x};
+            int[] ys = {mid - 4, mid, mid + 4};
+            g2.fillPolygon(xs, ys, 3);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return 8;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return 10;
+        }
     }
 
     private static final class BlueSpinnerUI extends BasicSpinnerUI {
