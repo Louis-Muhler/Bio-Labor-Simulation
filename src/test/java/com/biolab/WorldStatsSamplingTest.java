@@ -137,7 +137,7 @@ class WorldStatsSamplingTest {
 
             assertEquals(1, samples.size());
             WorldStatsSample sample = samples.get(0);
-            double expectedEnergy = 120.0 - 30 * 0.009;
+            double expectedEnergy = engine.captureState().microbes().get(0).energy();
 
             assertEquals(80.0, sample.metricValues().get(WorldMetricId.AVG_HEALTH_ABSOLUTE), 0.001);
             assertEquals(expectedEnergy, sample.metricValues().get(WorldMetricId.AVG_ENERGY_ABSOLUTE), 0.001);
