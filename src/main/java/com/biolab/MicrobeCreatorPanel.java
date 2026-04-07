@@ -33,6 +33,8 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final Color TRAIT_TOXIN_COLOR = new Color(100, 255, 100);
     private static final Color TRAIT_SPEED_COLOR = new Color(100, 150, 255);
     private static final Color TRAIT_DIET_COLOR = new Color(255, 180, 50);
+    private static final Color MAX_HEALTH_COLOR = new Color(255, 120, 180);
+    private static final Color MAX_ENERGY_COLOR = new Color(120, 200, 255);
 
     private final ModernButton microbeModeButton = new ModernButton("MICROBE");
     private final ModernButton foodModeButton = new ModernButton("FOOD");
@@ -112,7 +114,7 @@ public class MicrobeCreatorPanel extends JPanel {
                 applyGeneratedProfile(generatedRandomProfile());
             }
         });
-        amountRow = rowWithLabel("Amount", amountSpinner, LABEL_FONT_PLAIN);
+        amountRow = rowWithLabel("Amount", amountSpinner, LABEL_FONT_PLAIN, ACCENT_COLOR);
         amountRow.setMaximumSize(new Dimension(198, ROW_HEIGHT));
 
         centeredAmountRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
@@ -144,8 +146,8 @@ public class MicrobeCreatorPanel extends JPanel {
         microbeSection.add(dietRow);
         microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
 
-        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT);
-        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT);
+        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT, MAX_HEALTH_COLOR);
+        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT, MAX_ENERGY_COLOR);
         microbeSection.add(microbeHealthRow);
         microbeSection.add(Box.createVerticalStrut(6));
         microbeSection.add(microbeEnergyRow);
@@ -175,6 +177,8 @@ public class MicrobeCreatorPanel extends JPanel {
         styleSpinnerField(amountSpinner);
         styleSpinnerField(maxHealthInput);
         styleSpinnerField(maxEnergyInput);
+        tintSpinnerText(maxHealthInput, MAX_HEALTH_COLOR);
+        tintSpinnerText(maxEnergyInput, MAX_ENERGY_COLOR);
         randomProfileSupplier = () -> MicrobeSpawnRequest.randomizedProfile(MicrobeSpawnRequest.defaultProfile());
 
         JScrollPane scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(body, new Insets(0, 0, 0, 0), 18);
@@ -209,26 +213,13 @@ public class MicrobeCreatorPanel extends JPanel {
         activateButton.setDimmed(active);
     }
 
-    public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
-        if (selectedMode() == SpawnMode.FOOD) {
-            return SimulationCommand.spawnFood(new FoodSpawnRequest(worldX, worldY, currentAmount()));
+    private static void tintSpinnerText(JSpinner spinner, Color color) {
+        JComponent editor = spinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
+            JTextField textField = defaultEditor.getTextField();
+            textField.setForeground(color);
+            textField.setCaretColor(color);
         }
-
-        MicrobeGeneProfile baseProfile = currentMicrobeProfile();
-        boolean randomEnabled = randomCheck.isSelected();
-        MicrobeGeneProfile firstProfile = randomEnabled
-                ? MicrobeSpawnRequest.randomizedProfile(baseProfile)
-                : baseProfile;
-
-        previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
-        return SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
-                worldX,
-                worldY,
-                currentAmount(),
-                randomEnabled,
-                baseProfile,
-                firstProfile
-        ));
     }
 
     public boolean isRandomEnabled() {
@@ -242,6 +233,33 @@ public class MicrobeCreatorPanel extends JPanel {
             textField.setFont(new Font("Segoe UI", Font.BOLD, 14));
             textField.setBorder(new EmptyBorder(6, 10, 6, 10));
         }
+    }
+
+    public SimulationCommand buildSpawnCommand(double worldX, double worldY) {
+        if (selectedMode() == SpawnMode.FOOD) {
+            return SimulationCommand.spawnFood(new FoodSpawnRequest(worldX, worldY, currentAmount()));
+        }
+
+        MicrobeGeneProfile baseProfile = currentMicrobeProfile();
+        boolean randomEnabled = randomCheck.isSelected();
+        MicrobeGeneProfile firstProfile = randomEnabled
+                ? MicrobeSpawnRequest.randomizedProfile(baseProfile)
+                : baseProfile;
+
+        if (randomEnabled) {
+            // Keep controls in sync with the randomized profile that will be spawned first.
+            applyGeneratedProfile(firstProfile);
+        }
+
+        previewCanvas.setPreview(firstProfile.createMicrobe(worldX, worldY).toRenderState());
+        return SimulationCommand.spawnMicrobes(new MicrobeSpawnRequest(
+                worldX,
+                worldY,
+                currentAmount(),
+                randomEnabled,
+                baseProfile,
+                firstProfile
+        ));
     }
 
     private static MicrobeGeneProfile widenProfileVariance(MicrobeGeneProfile base) {
@@ -386,7 +404,7 @@ public class MicrobeCreatorPanel extends JPanel {
         repaint();
     }
 
-    private JPanel rowWithLabel(String label, JSpinner spinner, Font labelFont) {
+    private JPanel rowWithLabel(String label, JSpinner spinner, Font labelFont, Color labelColor) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -394,7 +412,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
         JLabel amountLabel = new JLabel(label);
         amountLabel.setFont(labelFont);
-        amountLabel.setForeground(ACCENT_COLOR);
+        amountLabel.setForeground(labelColor);
         row.add(amountLabel, BorderLayout.WEST);
 
         OverlayControlFactory.styleSpinner(spinner);
