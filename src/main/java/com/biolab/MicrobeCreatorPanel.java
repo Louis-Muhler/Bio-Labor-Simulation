@@ -26,6 +26,9 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final int FOOD_MODE_HEIGHT = 230;
     private static final int ROW_HEIGHT = 30;
     private static final int INPUT_WIDTH = 112;
+    private static final int TRAIT_BLOCK_TOP_GAP = 10;
+    private static final int TRAIT_ROW_GAP = 8;
+    private static final int TRAIT_TITLE_TO_SLIDER_GAP = 4;
 
     private final ModernButton microbeModeButton = new ModernButton("MICROBE");
     private final ModernButton foodModeButton = new ModernButton("FOOD");
@@ -117,7 +120,7 @@ public class MicrobeCreatorPanel extends JPanel {
         randomRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
         applyTopRowLayout(true);
         body.add(randomRow);
-        body.add(Box.createVerticalStrut(12));
+        body.add(Box.createVerticalStrut(TRAIT_BLOCK_TOP_GAP));
 
         microbeSection = new JPanel();
         microbeSection.setOpaque(false);
@@ -126,16 +129,16 @@ public class MicrobeCreatorPanel extends JPanel {
 
         heatRow = wrapTraitRow(heatTrait);
         microbeSection.add(heatRow);
-        microbeSection.add(Box.createVerticalStrut(5));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
         toxinRow = wrapTraitRow(toxinTrait);
         microbeSection.add(toxinRow);
-        microbeSection.add(Box.createVerticalStrut(5));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
         speedRow = wrapTraitRow(speedTrait);
         microbeSection.add(speedRow);
-        microbeSection.add(Box.createVerticalStrut(5));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
         dietRow = wrapTraitRow(dietTrait);
         microbeSection.add(dietRow);
-        microbeSection.add(Box.createVerticalStrut(6));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
 
         microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT);
         microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT);
@@ -314,11 +317,20 @@ public class MicrobeCreatorPanel extends JPanel {
         }
     }
 
+    private static void lockPreferredHeight(JComponent component) {
+        Dimension pref = component.getPreferredSize();
+        if (pref == null) {
+            return;
+        }
+        component.setMaximumSize(new Dimension(Integer.MAX_VALUE, pref.height));
+    }
+
     private JPanel wrapTraitRow(TraitControl control) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.add(control.component(), BorderLayout.CENTER);
+        lockPreferredHeight(row);
         return row;
     }
 
@@ -516,8 +528,9 @@ public class MicrobeCreatorPanel extends JPanel {
             top.add(valueLabel, BorderLayout.EAST);
 
             panel.add(top);
-            panel.add(Box.createVerticalStrut(2));
+            panel.add(Box.createVerticalStrut(TRAIT_TITLE_TO_SLIDER_GAP));
             panel.add(slider);
+            lockPreferredHeight(panel);
         }
 
         private JComponent component() {
