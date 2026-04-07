@@ -60,6 +60,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private final JPanel centeredAmountRow;
     private final JPanel microbeSection;
     private final JPanel body;
+    private final JPanel contentPanel;
     private final JPanel heatRow;
     private final JPanel toxinRow;
     private final JPanel speedRow;
@@ -75,9 +76,9 @@ public class MicrobeCreatorPanel extends JPanel {
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(PANEL_WIDTH, MICROBE_MODE_HEIGHT));
 
-        JPanel content = new JPanel(new BorderLayout(0, 8));
-        content.setOpaque(false);
-        content.setBorder(new EmptyBorder(FRAME_MARGIN + 10, FRAME_MARGIN + 8, FRAME_MARGIN + 10, FRAME_MARGIN + 8));
+        contentPanel = new JPanel(new BorderLayout(0, 8));
+        contentPanel.setOpaque(false);
+        contentPanel.setBorder(new EmptyBorder(FRAME_MARGIN + 10, FRAME_MARGIN + 8, FRAME_MARGIN + 10, FRAME_MARGIN + 8));
 
         JLabel title = new JLabel("ENTITY SPAWNER", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
@@ -106,7 +107,7 @@ public class MicrobeCreatorPanel extends JPanel {
         lowerHeader.add(Box.createVerticalStrut(10));
         lowerHeader.add(modeRow);
         header.add(lowerHeader, BorderLayout.CENTER);
-        content.add(header, BorderLayout.NORTH);
+        contentPanel.add(header, BorderLayout.NORTH);
 
         body = new JPanel();
         body.setOpaque(false);
@@ -188,9 +189,9 @@ public class MicrobeCreatorPanel extends JPanel {
         randomProfileSupplier = () -> MicrobeSpawnRequest.randomizedProfile(MicrobeSpawnRequest.defaultProfile());
 
         JScrollPane scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(body, new Insets(0, 0, 0, 0), 18);
-        content.add(scrollPane, BorderLayout.CENTER);
+        contentPanel.add(scrollPane, BorderLayout.CENTER);
 
-        add(content, BorderLayout.CENTER);
+        add(contentPanel, BorderLayout.CENTER);
         applyGeneratedProfile(MicrobeSpawnRequest.defaultProfile());
         setSelectedMode(SpawnMode.MICROBE);
         setSpawnToolActive(false);
@@ -416,7 +417,7 @@ public class MicrobeCreatorPanel extends JPanel {
         if (microbeMode) {
             updatePreviewFromControls();
         }
-        setPreferredSize(new Dimension(PANEL_WIDTH, microbeMode ? MICROBE_MODE_HEIGHT : FOOD_MODE_HEIGHT));
+        setPreferredSize(new Dimension(PANEL_WIDTH, computePreferredPanelHeight(microbeMode)));
         if (layoutRefreshAction != null) {
             layoutRefreshAction.run();
         }
@@ -466,6 +467,16 @@ public class MicrobeCreatorPanel extends JPanel {
             base = MicrobeSpawnRequest.defaultProfile();
         }
         return widenProfileVariance(base);
+    }
+
+    private int computePreferredPanelHeight(boolean microbeMode) {
+        body.revalidate();
+        contentPanel.revalidate();
+        Dimension pref = contentPanel.getPreferredSize();
+        int fallback = microbeMode ? MICROBE_MODE_HEIGHT : FOOD_MODE_HEIGHT;
+        int height = pref == null ? fallback : pref.height;
+        int minimum = microbeMode ? 520 : 250;
+        return Math.max(minimum, height);
     }
 
     private void registerLivePreviewListeners() {

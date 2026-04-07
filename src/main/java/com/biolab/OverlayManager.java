@@ -255,12 +255,7 @@ public class OverlayManager {
         int preferredHeight = microbeCreatorPanel.getPreferredSize() == null
                 ? availableHeight
                 : microbeCreatorPanel.getPreferredSize().height;
-        int panelHeight;
-        if (microbeCreatorPanel.selectedMode() == MicrobeCreatorPanel.SpawnMode.MICROBE) {
-            panelHeight = availableHeight;
-        } else {
-            panelHeight = Math.min(availableHeight, Math.max(180, preferredHeight));
-        }
+        int panelHeight = Math.min(availableHeight, Math.max(180, preferredHeight));
         int panelWidth = Math.min(MicrobeCreatorPanel.PANEL_WIDTH, maxLeftViewerWidth(lp));
         panelWidth = Math.max(260, panelWidth);
 
