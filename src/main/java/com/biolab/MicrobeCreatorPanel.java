@@ -20,9 +20,10 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final Color BORDER_GLOW_COLOR = OverlayTheme.ACCENT_GLOW;
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font LABEL_FONT = new Font("Segoe UI", Font.BOLD, 14);
+    private static final Font LABEL_FONT_PLAIN = new Font("Segoe UI", Font.PLAIN, 14);
     private static final Font VALUE_FONT = new Font("Segoe UI", Font.BOLD, 14);
     private static final int MICROBE_MODE_HEIGHT = 620;
-    private static final int FOOD_MODE_HEIGHT = 300;
+    private static final int FOOD_MODE_HEIGHT = 230;
     private static final int ROW_HEIGHT = 30;
     private static final int INPUT_WIDTH = 112;
 
@@ -44,6 +45,7 @@ public class MicrobeCreatorPanel extends JPanel {
     private final ModernButton activateButton;
     private final JPanel randomRow;
     private final JPanel amountRow;
+    private final JPanel microbeSection;
     private final JPanel body;
     private final JPanel heatRow;
     private final JPanel toxinRow;
@@ -105,42 +107,47 @@ public class MicrobeCreatorPanel extends JPanel {
         randomRow = new JPanel(new BorderLayout());
         randomRow.setOpaque(false);
         randomRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        randomRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        randomRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
         randomRow.add(randomCheck, BorderLayout.WEST);
+        amountRow = rowWithLabel("Amount", amountSpinner, LABEL_FONT_PLAIN);
+        amountRow.setMaximumSize(new Dimension(198, ROW_HEIGHT));
+        randomRow.add(amountRow, BorderLayout.EAST);
         body.add(randomRow);
-        body.add(Box.createVerticalStrut(8));
+        body.add(Box.createVerticalStrut(12));
 
-        amountRow = rowWithLabel("Amount", amountSpinner);
-        amountRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        body.add(amountRow);
-        body.add(Box.createVerticalStrut(10));
+        microbeSection = new JPanel();
+        microbeSection.setOpaque(false);
+        microbeSection.setLayout(new BoxLayout(microbeSection, BoxLayout.Y_AXIS));
+        microbeSection.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         heatRow = wrapTraitRow(heatTrait);
-        body.add(heatRow);
-        body.add(Box.createVerticalStrut(6));
+        microbeSection.add(heatRow);
+        microbeSection.add(Box.createVerticalStrut(10));
         toxinRow = wrapTraitRow(toxinTrait);
-        body.add(toxinRow);
-        body.add(Box.createVerticalStrut(6));
+        microbeSection.add(toxinRow);
+        microbeSection.add(Box.createVerticalStrut(10));
         speedRow = wrapTraitRow(speedTrait);
-        body.add(speedRow);
-        body.add(Box.createVerticalStrut(6));
+        microbeSection.add(speedRow);
+        microbeSection.add(Box.createVerticalStrut(10));
         dietRow = wrapTraitRow(dietTrait);
-        body.add(dietRow);
-        body.add(Box.createVerticalStrut(4));
+        microbeSection.add(dietRow);
+        microbeSection.add(Box.createVerticalStrut(8));
 
-        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput);
-        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput);
-        body.add(microbeHealthRow);
-        body.add(Box.createVerticalStrut(6));
-        body.add(microbeEnergyRow);
-        body.add(Box.createVerticalStrut(10));
+        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT);
+        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT);
+        microbeSection.add(microbeHealthRow);
+        microbeSection.add(Box.createVerticalStrut(6));
+        microbeSection.add(microbeEnergyRow);
+        microbeSection.add(Box.createVerticalStrut(10));
 
         previewShell = OverlayControlFactory.wrapInInnerFrame(previewCanvas);
-        previewShell.setPreferredSize(new Dimension(1, 168));
-        previewShell.setMaximumSize(new Dimension(Integer.MAX_VALUE, 168));
+        previewShell.setPreferredSize(new Dimension(1, 186));
+        previewShell.setMaximumSize(new Dimension(Integer.MAX_VALUE, 186));
         previewShell.setAlignmentX(Component.LEFT_ALIGNMENT);
-        body.add(previewShell);
-        body.add(Box.createVerticalStrut(10));
+        microbeSection.add(previewShell);
+
+        body.add(microbeSection);
+        body.add(Box.createVerticalStrut(8));
 
         activateButton = new ModernButton("Activate Spawn Tool");
         activateButton.setPreferredSize(new Dimension(1, 38));
@@ -334,8 +341,10 @@ public class MicrobeCreatorPanel extends JPanel {
         spawnMode = mode == null ? SpawnMode.MICROBE : mode;
         boolean microbeMode = spawnMode == SpawnMode.MICROBE;
 
-        randomRow.setVisible(microbeMode);
+        randomCheck.setVisible(microbeMode);
+        randomRow.setVisible(true);
         amountRow.setVisible(true);
+        microbeSection.setVisible(microbeMode);
         heatRow.setVisible(microbeMode);
         toxinRow.setVisible(microbeMode);
         speedRow.setVisible(microbeMode);
@@ -356,14 +365,14 @@ public class MicrobeCreatorPanel extends JPanel {
         repaint();
     }
 
-    private JPanel rowWithLabel(String label, JSpinner spinner) {
+    private JPanel rowWithLabel(String label, JSpinner spinner, Font labelFont) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
 
         JLabel amountLabel = new JLabel(label);
-        amountLabel.setFont(LABEL_FONT);
+        amountLabel.setFont(labelFont);
         amountLabel.setForeground(ACCENT_COLOR);
         row.add(amountLabel, BorderLayout.WEST);
 
@@ -413,7 +422,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
         private PreviewCanvas() {
             setOpaque(false);
-            setPreferredSize(new Dimension(240, 165));
+            setPreferredSize(new Dimension(240, 182));
         }
 
         private void setPreview(Microbe.RenderState renderState) {
@@ -435,7 +444,7 @@ public class MicrobeCreatorPanel extends JPanel {
                     return;
                 }
                 int cx = getWidth() / 2;
-                int cy = Math.max(50, getHeight() / 2 + 10);
+                int cy = Math.max(54, getHeight() / 2 + 12);
                 MicrobePreviewRenderer.paintPreview(g2, preview, cx, cy, 5.0);
             } finally {
                 g2.dispose();
@@ -488,6 +497,7 @@ public class MicrobeCreatorPanel extends JPanel {
             top.add(valueLabel, BorderLayout.EAST);
 
             panel.add(top);
+            panel.add(Box.createVerticalStrut(4));
             panel.add(slider);
         }
 

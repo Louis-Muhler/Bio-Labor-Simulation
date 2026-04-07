@@ -108,6 +108,19 @@ class OverlayManagerLayoutTest {
         assertEquals(bundle.microbeCreatorPanel.getPreferredSize().height, foodHeight);
     }
 
+    @Test
+    void microbeCreatorMicrobeModeShouldUseAvailableViewerHeight() {
+        OverlayBundle bundle = newBundle(1280, 800, false);
+
+        bundle.microbeCreatorPanel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.MICROBE);
+        bundle.manager.positionMicrobeCreatorPanel();
+
+        int expected = bundle.layeredPane.getHeight()
+                - bundle.microbeCreatorPanel.getY()
+                - (45 + 2 * 15);
+        assertEquals(expected, bundle.microbeCreatorPanel.getHeight());
+    }
+
     private OverlayBundle newBundle(int width, int height, boolean hugeSavedStatsSize) {
         JLayeredPane layeredPane = new JLayeredPane();
         layeredPane.setSize(width, height);

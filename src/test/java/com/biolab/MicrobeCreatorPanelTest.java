@@ -3,6 +3,7 @@ package com.biolab;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.*;
+import java.awt.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -135,6 +136,29 @@ class MicrobeCreatorPanelTest {
         });
         assertEquals("Activate Spawn Tool", onEdt(panel::currentActivateButtonText));
         assertFalse(onEdt(panel::isCurrentActivateButtonDimmed));
+    }
+
+    private static JLabel findLabel(Container parent, String text) {
+        for (Component component : parent.getComponents()) {
+            if (component instanceof JLabel label && text.equals(label.getText())) {
+                return label;
+            }
+            if (component instanceof Container child) {
+                JLabel nested = findLabel(child, text);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void amountLabelShouldUsePlainFontStyle() throws Exception {
+        MicrobeCreatorPanel panel = onEdt(MicrobeCreatorPanel::new);
+        JLabel amountLabel = onEdt(() -> findLabel(panel, "Amount"));
+        assertNotNull(amountLabel);
+        assertEquals(Font.PLAIN, amountLabel.getFont().getStyle());
     }
 
     @FunctionalInterface
