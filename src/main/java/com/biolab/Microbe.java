@@ -642,16 +642,73 @@ public class Microbe {
         );
     }
 
+    private static double traitCurve(double value) {
+        return Math.pow(clamp01(value), 1.5);
+    }
+
+    private static double energyCurve(double value) {
+        return Math.pow(clamp01(value), 0.7);
+    }
+
     /**
      * Computes the visual color from Heat/Toxin genes and current energy ratio.
      * Diet is intentionally excluded from color mapping.
      */
     private Color computeColor(double energyRatio) {
         double clampedEnergy = clamp01(energyRatio);
-        int red = (int) Math.round(heatResistance * 255.0);
-        int green = (int) Math.round(toxinResistance * 255.0);
-        int blue = (int) Math.round(clampedEnergy * 255.0);
-        return new Color(red, green, blue);
+        double heatWeight = traitCurve(heatResistance);
+        double toxinWeight = traitCurve(toxinResistance);
+        double speedWeight = traitCurve(speed);
+        double dietWeight = traitCurve(diet);
+
+        double[] hues = {
+                0.0,            // heat -> red
+                120.0 / 360.0,  // toxin -> green
+                220.0 / 360.0,  // speed -> blue
+                290.0 / 360.0   // diet -> violet
+        };
+        double[] weights = {heatWeight, toxinWeight, speedWeight, dietWeight};
+
+        double sum = 0.0;
+        double dominantWeight = 0.0;
+        double x = 0.0;
+        double y = 0.0;
+        for (int i = 0; i < weights.length; i++) {
+            double weight = weights[i];
+            sum += weight;
+            if (weight > dominantWeight) {
+                dominantWeight = weight;
+            }
+            double angle = hues[i] * Math.PI * 2.0;
+            x += Math.cos(angle) * weight;
+            y += Math.sin(angle) * weight;
+        }
+
+        if (sum < 1e-6) {
+            return new Color(110, 130, 150);
+        }
+
+        double hue = Math.atan2(y, x) / (Math.PI * 2.0);
+        if (hue < 0.0) {
+            hue += 1.0;
+        }
+
+        // Add controlled hue twist only for mixed profiles to avoid collapsing into a few colors.
+        double balance = 1.0 - (dominantWeight / sum);
+        double twist = balance * (
+                0.10 * (heatResistance - toxinResistance)
+                        + 0.08 * (speed - diet)
+                        + 0.06 * (heatResistance * speed - toxinResistance * diet)
+        );
+        hue = hue + twist;
+        hue = hue - Math.floor(hue);
+
+        double sumNorm = clamp01(sum / 4.0);
+        double saturation = clamp01(0.58 + 0.30 * sumNorm + 0.12 * balance);
+        // High toxin intentionally darkens the color; energy still brightens visible state.
+        double value = 0.78 - 0.35 * toxinWeight - 0.10 * sumNorm + 0.22 * energyCurve(clampedEnergy);
+        value = Math.max(0.24, Math.min(0.94, value));
+        return Color.getHSBColor((float) hue, (float) saturation, (float) value);
     }
 
     private Color computeColor() {

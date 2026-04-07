@@ -285,6 +285,34 @@ class MicrobeTest {
         assertSame(first, second, "BrightColor should be cached");
     }
 
+    @Test
+    void spawnedProfilesShouldProduceDistinctTraitColors() {
+        Microbe heat = Microbe.createSpawned(0, 0, 1.0, 0.0, 0.0, 0.0, 100, 100);
+        Microbe toxin = Microbe.createSpawned(0, 0, 0.0, 1.0, 0.0, 0.0, 100, 100);
+        Microbe speed = Microbe.createSpawned(0, 0, 0.0, 0.0, 1.0, 0.0, 100, 100);
+        Microbe diet = Microbe.createSpawned(0, 0, 0.0, 0.0, 0.0, 1.0, 100, 100);
+
+        assertNotEquals(heat.getColor().getRGB(), toxin.getColor().getRGB());
+        assertNotEquals(heat.getColor().getRGB(), speed.getColor().getRGB());
+        assertNotEquals(heat.getColor().getRGB(), diet.getColor().getRGB());
+        assertNotEquals(toxin.getColor().getRGB(), speed.getColor().getRGB());
+        assertNotEquals(toxin.getColor().getRGB(), diet.getColor().getRGB());
+    }
+
+    @Test
+    void higherToxinShouldAppearDarkerAndGreenerThanLowToxin() {
+        Microbe lowToxin = Microbe.createSpawned(0, 0, 0.0, 0.2, 0.0, 0.0, 100, 100);
+        Microbe highToxin = Microbe.createSpawned(0, 0, 0.0, 1.0, 0.0, 0.0, 100, 100);
+
+        Color low = lowToxin.getColor();
+        Color high = highToxin.getColor();
+
+        assertTrue(high.getGreen() >= high.getRed(), "High toxin should keep a green-dominant hue");
+        int lowLum = low.getRed() + low.getGreen() + low.getBlue();
+        int highLum = high.getRed() + high.getGreen() + high.getBlue();
+        assertTrue(highLum < lowLum, "High toxin should render darker than low toxin");
+    }
+
     // ===== Selection =====
 
     @Test
