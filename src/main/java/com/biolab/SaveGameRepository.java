@@ -105,6 +105,21 @@ public class SaveGameRepository {
         }
     }
 
+    public synchronized SaveGameMetadata renameSave(String saveId, String newMapName) throws IOException {
+        ensureRoot();
+        String trimmedName = (newMapName == null) ? "" : newMapName.trim();
+        if (trimmedName.isEmpty()) {
+            throw new IllegalArgumentException("Map name must not be empty.");
+        }
+
+        Path saveDir = savesRoot.resolve(saveId);
+        Files.createDirectories(saveDir);
+        SaveGameMetadata current = loadMetadata(saveId);
+        SaveGameMetadata renamed = current.withMapName(trimmedName);
+        writeMetadata(saveDir, renamed);
+        return renamed;
+    }
+
     private void writeMetadata(Path saveDir, SaveGameMetadata metadata) throws IOException {
         Properties props = metadata.toProperties();
         try (OutputStream out = Files.newOutputStream(saveDir.resolve(META_FILE_NAME))) {

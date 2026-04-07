@@ -84,6 +84,19 @@ public record SaveGameMetadata(
         );
     }
 
+    public SaveGameMetadata withMapName(String updatedMapName) {
+        return new SaveGameMetadata(
+                saveId,
+                updatedMapName,
+                createdAtEpochSeconds,
+                lastPlayedAtEpochSeconds,
+                playtimeSeconds,
+                worldWidth,
+                worldHeight,
+                population
+        );
+    }
+
     public String toDisplayLine() {
         return mapName + "  |  "
                 + worldWidth + "x" + worldHeight

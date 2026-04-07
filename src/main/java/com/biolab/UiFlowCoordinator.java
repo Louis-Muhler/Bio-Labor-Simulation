@@ -97,6 +97,11 @@ final class UiFlowCoordinator {
             }
 
             @Override
+            public void onRenameRequested(SaveGameMetadata metadata, String newMapName) {
+                renameSaveAsync(metadata, newMapName);
+            }
+
+            @Override
             public void onBackRequested() {
                 removeSaveBrowser(true);
             }
@@ -195,6 +200,31 @@ final class UiFlowCoordinator {
                     JOptionPane.showMessageDialog(hostFrame,
                             "Delete failed: " + ex.getMessage(),
                             "Save Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void renameSaveAsync(SaveGameMetadata metadata, String newMapName) {
+        if (metadata == null) return;
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                saveRepository.renameSave(metadata.saveId(), newMapName);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    refreshSaveBrowserAsync();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(hostFrame,
+                            "Rename failed: " + ex.getMessage(),
+                            "Save Error", JOptionPane.ERROR_MESSAGE);
+                    refreshSaveBrowserAsync();
                 }
             }
         };

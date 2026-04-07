@@ -7,8 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class SaveGameRepositoryTest {
 
@@ -43,6 +42,12 @@ class SaveGameRepositoryTest {
         repository.overwriteSave(created, initialState, 42);
         SaveGameMetadata updated = repository.loadMetadata(created.saveId());
         assertTrue(updated.playtimeSeconds() >= 42);
+
+        SaveGameMetadata renamed = repository.renameSave(created.saveId(), "Alpha Prime");
+        assertEquals("Alpha Prime", renamed.mapName());
+        SaveGameMetadata renamedReloaded = repository.loadMetadata(created.saveId());
+        assertEquals("Alpha Prime", renamedReloaded.mapName());
+        assertThrows(IllegalArgumentException.class, () -> repository.renameSave(created.saveId(), "   "));
 
         repository.deleteSave(created.saveId());
         assertTrue(repository.listSaves().isEmpty());

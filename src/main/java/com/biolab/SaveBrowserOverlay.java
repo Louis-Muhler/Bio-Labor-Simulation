@@ -6,9 +6,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.plaf.basic.BasicSpinnerUI;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseWheelEvent;
+import java.awt.event.*;
 import java.util.List;
 
 /**
@@ -37,6 +35,11 @@ public class SaveBrowserOverlay extends JPanel {
 
     private static final Font FORM_LABEL_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font FORM_VALUE_FONT = new Font("Segoe UI", Font.BOLD, 16);
+    private static final Font ROW_NAME_FONT = new Font("Segoe UI", Font.BOLD, 17);
+    private static final int LIST_META_AREA_WIDTH = 280;
+
+    private final JTextField inlineRenameEditor = new JTextField();
+    private int editingIndex = -1;
 
     public SaveBrowserOverlay(Listener listener) {
         setOpaque(false);
@@ -119,6 +122,8 @@ public class SaveBrowserOverlay extends JPanel {
         list.setForeground(OverlayTheme.ACCENT);
         list.setFixedCellHeight(64);
         list.setCellRenderer(renderer);
+        configureInlineRenameEditor(listener);
+        list.add(inlineRenameEditor);
         list.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
             public void mouseMoved(java.awt.event.MouseEvent e) {
@@ -133,6 +138,35 @@ public class SaveBrowserOverlay extends JPanel {
             public void mouseExited(java.awt.event.MouseEvent e) {
                 renderer.setHoveredIndex(-1);
                 list.repaint();
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 2) {
+                    return;
+                }
+                int idx = list.locationToIndex(e.getPoint());
+                Rectangle rowBounds = (idx >= 0) ? list.getCellBounds(idx, idx) : null;
+                if (rowBounds == null || !rowBounds.contains(e.getPoint())) {
+                    return;
+                }
+                SaveGameMetadata selected = model.get(idx);
+                if (isRenameClick(rowBounds, e.getPoint(), selected)) {
+                    beginInlineRename(idx);
+                }
+            }
+        });
+
+        list.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "play-selected-save");
+        list.getActionMap().put("play-selected-save", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (isRenameActive()) {
+                    commitInlineRename(listener);
+                } else {
+                    playSelected(listener);
+                }
             }
         });
 
@@ -155,8 +189,7 @@ public class SaveBrowserOverlay extends JPanel {
         ModernButton back = new ModernButton("BACK");
 
         play.addActionListener(e -> {
-            SaveGameMetadata selected = list.getSelectedValue();
-            if (selected != null) listener.onPlayRequested(selected);
+            playSelected(listener);
         });
         delete.addActionListener(e -> {
             SaveGameMetadata selected = list.getSelectedValue();
@@ -302,13 +335,120 @@ public class SaveBrowserOverlay extends JPanel {
     }
 
     public void showCreateForm() {
+        cancelInlineRename();
         title.setText("CREATE GAME");
         cardLayout.show(cardContent, VIEW_CREATE);
     }
 
     public void showListView() {
+        cancelInlineRename();
         title.setText("SELECT GAME");
         cardLayout.show(cardContent, VIEW_LIST);
+    }
+
+    private void configureInlineRenameEditor(Listener listener) {
+        inlineRenameEditor.setVisible(false);
+        inlineRenameEditor.setOpaque(false);
+        inlineRenameEditor.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        inlineRenameEditor.setForeground(OverlayTheme.ACCENT);
+        inlineRenameEditor.setCaretColor(OverlayTheme.ACCENT);
+        inlineRenameEditor.setFont(ROW_NAME_FONT);
+        inlineRenameEditor.addActionListener(e -> commitInlineRename(listener));
+        inlineRenameEditor.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                commitInlineRename(listener);
+            }
+        });
+        inlineRenameEditor.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cancel-inline-rename");
+        inlineRenameEditor.getActionMap().put("cancel-inline-rename", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                cancelInlineRename();
+            }
+        });
+    }
+
+    private boolean isRenameClick(Rectangle rowBounds, Point click, SaveGameMetadata metadata) {
+        int textStartX = rowBounds.x + 12;
+        FontMetrics fm = list.getFontMetrics(ROW_NAME_FONT);
+        int textEndX = textStartX + fm.stringWidth(metadata.listName()) + 20;
+        int maxLeftArea = rowBounds.x + Math.max(80, rowBounds.width - LIST_META_AREA_WIDTH);
+        int effectiveEndX = Math.min(textEndX, maxLeftArea);
+        return click.x >= textStartX && click.x <= effectiveEndX;
+    }
+
+    private void beginInlineRename(int index) {
+        if (index < 0 || index >= model.size()) {
+            return;
+        }
+        if (isRenameActive() && editingIndex != index) {
+            cancelInlineRename();
+        }
+        editingIndex = index;
+        Rectangle rowBounds = list.getCellBounds(index, index);
+        if (rowBounds == null) {
+            cancelInlineRename();
+            return;
+        }
+        inlineRenameEditor.setBounds(computeInlineRenameBounds(rowBounds));
+        inlineRenameEditor.setText(model.get(index).mapName());
+        inlineRenameEditor.selectAll();
+        inlineRenameEditor.setVisible(true);
+        inlineRenameEditor.requestFocusInWindow();
+        list.repaint();
+    }
+
+    private Rectangle computeInlineRenameBounds(Rectangle rowBounds) {
+        int x = rowBounds.x + 12;
+        int y = rowBounds.y + 8;
+        int w = Math.max(140, rowBounds.width - LIST_META_AREA_WIDTH - 18);
+        int h = Math.max(20, rowBounds.height - 16);
+        return new Rectangle(x, y, w, h);
+    }
+
+    private boolean isRenameActive() {
+        return editingIndex >= 0;
+    }
+
+    private void commitInlineRename(Listener listener) {
+        if (!isRenameActive()) {
+            return;
+        }
+        int idx = editingIndex;
+        if (idx < 0 || idx >= model.size()) {
+            cancelInlineRename();
+            return;
+        }
+        SaveGameMetadata current = model.get(idx);
+        String newName = inlineRenameEditor.getText() == null ? "" : inlineRenameEditor.getText().trim();
+        if (newName.isEmpty()) {
+            Toolkit.getDefaultToolkit().beep();
+            inlineRenameEditor.requestFocusInWindow();
+            return;
+        }
+        if (!newName.equals(current.mapName())) {
+            model.set(idx, current.withMapName(newName));
+            listener.onRenameRequested(current, newName);
+        }
+        list.setSelectedIndex(idx);
+        cancelInlineRename();
+    }
+
+    private void cancelInlineRename() {
+        editingIndex = -1;
+        inlineRenameEditor.setVisible(false);
+        inlineRenameEditor.setText("");
+        list.requestFocusInWindow();
+        list.repaint();
+    }
+
+    private void playSelected(Listener listener) {
+        SaveGameMetadata selected = list.getSelectedValue();
+        if (selected != null) {
+            listener.onPlayRequested(selected);
+        }
     }
 
     private static final class RoundedOutlineBorder extends AbstractBorder {
@@ -482,11 +622,21 @@ public class SaveBrowserOverlay extends JPanel {
     }
 
     public void setSaves(List<SaveGameMetadata> saves) {
+        String selectedId = list.getSelectedValue() != null ? list.getSelectedValue().saveId() : null;
+        cancelInlineRename();
         model.clear();
         for (SaveGameMetadata save : saves) {
             model.addElement(save);
         }
-        if (!model.isEmpty()) {
+        if (selectedId != null) {
+            for (int i = 0; i < model.size(); i++) {
+                if (selectedId.equals(model.get(i).saveId())) {
+                    list.setSelectedIndex(i);
+                    return;
+                }
+            }
+        }
+        if (!model.isEmpty() && list.getSelectedIndex() < 0) {
             list.setSelectedIndex(0);
         }
     }
@@ -497,6 +647,8 @@ public class SaveBrowserOverlay extends JPanel {
         void onPlayRequested(SaveGameMetadata metadata);
 
         void onDeleteRequested(SaveGameMetadata metadata);
+
+        void onRenameRequested(SaveGameMetadata metadata, String newMapName);
 
         void onBackRequested();
     }
