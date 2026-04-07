@@ -26,18 +26,22 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final int FOOD_MODE_HEIGHT = 230;
     private static final int ROW_HEIGHT = 30;
     private static final int INPUT_WIDTH = 112;
-    private static final int TRAIT_BLOCK_TOP_GAP = 10;
+    private static final int TRAIT_BLOCK_TOP_GAP = 16;
     private static final int TRAIT_ROW_GAP = 8;
     private static final int TRAIT_TITLE_TO_SLIDER_GAP = 4;
+    private static final Color TRAIT_HEAT_COLOR = new Color(255, 100, 100);
+    private static final Color TRAIT_TOXIN_COLOR = new Color(100, 255, 100);
+    private static final Color TRAIT_SPEED_COLOR = new Color(100, 150, 255);
+    private static final Color TRAIT_DIET_COLOR = new Color(255, 180, 50);
 
     private final ModernButton microbeModeButton = new ModernButton("MICROBE");
     private final ModernButton foodModeButton = new ModernButton("FOOD");
     private final JCheckBox randomCheck = OverlayControlFactory.createSettingsCheckBox("Random", false);
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 1000, 1));
-    private final TraitControl heatTrait = new TraitControl("Heat Resistance", 50, 0, 100, true);
-    private final TraitControl toxinTrait = new TraitControl("Toxin Resistance", 50, 0, 100, true);
-    private final TraitControl speedTrait = new TraitControl("Speed", 50, 0, 100, true);
-    private final TraitControl dietTrait = new TraitControl("Diet", 50, 0, 100, true);
+    private final TraitControl heatTrait = new TraitControl("Heat Resistance", 50, 0, 100, true, TRAIT_HEAT_COLOR);
+    private final TraitControl toxinTrait = new TraitControl("Toxin Resistance", 50, 0, 100, true, TRAIT_TOXIN_COLOR);
+    private final TraitControl speedTrait = new TraitControl("Speed", 50, 0, 100, true, TRAIT_SPEED_COLOR);
+    private final TraitControl dietTrait = new TraitControl("Diet", 50, 0, 100, true, TRAIT_DIET_COLOR);
     private final JSpinner maxHealthInput = new JSpinner(new SpinnerNumberModel(100, 1, 400, 1));
     private final JSpinner maxEnergyInput = new JSpinner(new SpinnerNumberModel(100, 1, 400, 1));
 
@@ -492,7 +496,7 @@ public class MicrobeCreatorPanel extends JPanel {
         private final int max;
         private int value;
 
-        private TraitControl(String label, int initial, int min, int max, boolean ratio) {
+        private TraitControl(String label, int initial, int min, int max, boolean ratio, Color traitColor) {
             this.min = min;
             this.max = max;
             this.value = Math.max(min, Math.min(max, initial));
@@ -502,17 +506,17 @@ public class MicrobeCreatorPanel extends JPanel {
 
             JLabel title = new JLabel(label);
             title.setFont(LABEL_FONT);
-            title.setForeground(ACCENT_COLOR);
+            title.setForeground(traitColor);
             title.setAlignmentX(Component.LEFT_ALIGNMENT);
 
             slider = new JSlider(min, max, this.value);
             slider.setOpaque(false);
-            slider.setForeground(ACCENT_COLOR);
+            slider.setForeground(traitColor);
             slider.setAlignmentX(Component.LEFT_ALIGNMENT);
 
             valueLabel = new JLabel(formatValue(ratio, this.value), SwingConstants.RIGHT);
             valueLabel.setFont(VALUE_FONT);
-            valueLabel.setForeground(ACCENT_COLOR);
+            valueLabel.setForeground(traitColor);
             valueLabel.setPreferredSize(new Dimension(60, 22));
 
             slider.addChangeListener(e -> {
