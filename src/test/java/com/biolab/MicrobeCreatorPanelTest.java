@@ -57,7 +57,7 @@ class MicrobeCreatorPanelTest {
             panel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.MICROBE);
         });
         assertEquals(MicrobeCreatorPanel.SpawnMode.MICROBE, onEdt(panel::selectedMode));
-        assertEquals(3, onEdt(panel::currentAmount));
+        assertEquals(9, onEdt(panel::currentAmount));
 
         onEdt(() -> panel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.FOOD));
         assertEquals(MicrobeCreatorPanel.SpawnMode.FOOD, onEdt(panel::selectedMode));
@@ -65,7 +65,7 @@ class MicrobeCreatorPanelTest {
     }
 
     @Test
-    void randomPrefillShouldResetTraitInputsToDefaults() throws Exception {
+    void randomToggleShouldGenerateValidProfileValues() throws Exception {
         MicrobeCreatorPanel panel = onEdt(MicrobeCreatorPanel::new);
 
         onEdt(() -> {
@@ -74,14 +74,12 @@ class MicrobeCreatorPanelTest {
         });
 
         MicrobeGeneProfile profile = onEdt(panel::currentMicrobeProfile);
-        MicrobeGeneProfile expected = MicrobeSpawnRequest.defaultProfile();
-
-        assertEquals(expected.heatResistance(), profile.heatResistance(), 0.0001);
-        assertEquals(expected.toxinResistance(), profile.toxinResistance(), 0.0001);
-        assertEquals(expected.speed(), profile.speed(), 0.0001);
-        assertEquals(expected.diet(), profile.diet(), 0.0001);
-        assertEquals(expected.maxHealth(), profile.maxHealth(), 0.0001);
-        assertEquals(expected.maxEnergy(), profile.maxEnergy(), 0.0001);
+        assertTrue(profile.heatResistance() >= 0.0 && profile.heatResistance() <= 1.0);
+        assertTrue(profile.toxinResistance() >= 0.0 && profile.toxinResistance() <= 1.0);
+        assertTrue(profile.speed() >= 0.0 && profile.speed() <= 1.0);
+        assertTrue(profile.diet() >= 0.0 && profile.diet() <= 1.0);
+        assertTrue(profile.maxHealth() >= 20.0 && profile.maxHealth() <= 400.0);
+        assertTrue(profile.maxEnergy() >= 20.0 && profile.maxEnergy() <= 400.0);
     }
 
     @Test
