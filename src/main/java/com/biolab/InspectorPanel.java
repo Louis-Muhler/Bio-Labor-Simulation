@@ -844,6 +844,8 @@ public class InspectorPanel extends JPanel {
                     renderState.defense(),
                     renderState.strength(),
                     mc,
+                    1.35,
+                    PREVIEW_SCALE,
                     orig
             );
 
@@ -854,6 +856,7 @@ public class InspectorPanel extends JPanel {
                     size,
                     mc,
                     renderState.brightColor(),
+                    2.0f,
                     orig
             );
 

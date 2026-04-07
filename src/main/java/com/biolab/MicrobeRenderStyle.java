@@ -89,12 +89,32 @@ final class MicrobeRenderStyle {
                          Color baseColor,
                          Color brightColor,
                          Composite defaultComposite) {
+        drawBody(g2d, x, y, size, baseColor, brightColor, 1.0f, defaultComposite);
+    }
+
+    static void drawBody(Graphics2D g2d,
+                         int x,
+                         int y,
+                         int size,
+                         Color baseColor,
+                         Color brightColor,
+                         float rimStrokeWidth,
+                         Composite defaultComposite) {
         g2d.setComposite(AC_BRIGHT_FILL);
         g2d.setColor(brightColor);
         g2d.fillOval(x, y, size, size);
         g2d.setComposite(defaultComposite);
         g2d.setColor(baseColor);
         g2d.fillOval(x + 1, y + 1, size - 2, size - 2);
+
+        // Stronger rim helps the preview match the punchy core edge seen on canvas.
+        Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setColor(new Color(brightColor.getRed(), brightColor.getGreen(), brightColor.getBlue(), 220));
+        g2d.setStroke(new BasicStroke(Math.max(1.0f, rimStrokeWidth), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawOval(x, y, size - 1, size - 1);
+        g2d.setStroke(STROKE_1);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
     }
 
     static int sizeWithCarnivoreBonus(int baseSize, boolean carnivore) {
@@ -113,6 +133,19 @@ final class MicrobeRenderStyle {
                                    double strength,
                                    Color coreColor,
                                    Composite defaultComposite) {
+        drawPredatorSpikes(g2d, centerX, centerY, size, defense, strength, coreColor, 1.0, 1.0, defaultComposite);
+    }
+
+    static void drawPredatorSpikes(Graphics2D g2d,
+                                   double centerX,
+                                   double centerY,
+                                   int size,
+                                   double defense,
+                                   double strength,
+                                   Color coreColor,
+                                   double spikeScale,
+                                   double glowScale,
+                                   Composite defaultComposite) {
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
         float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
         float aggression = (float) Math.max(0.0, Math.min(1.0,
@@ -121,7 +154,10 @@ final class MicrobeRenderStyle {
             int spikes = 4 + (int) Math.round(aggression * 6.0);
             double coreRadius = size * 0.50;
             int innerR = Math.max(1, (int) Math.round(coreRadius * 0.20));
-            int tipR = (int) Math.round(coreRadius + size * (0.10 + aggression * 0.18));
+            int perSideGrowth = Math.max(2, (int) Math.round(2.0 * Math.max(1.0, glowScale)));
+            double glowReach = perSideGrowth * (1.0 + aggression * 2.0);
+            double baseReach = size * (0.06 + aggression * 0.10) * Math.max(1.0, spikeScale);
+            int tipR = (int) Math.round(coreRadius + glowReach + baseReach);
             int cx = (int) centerX;
             int cy = (int) centerY;
             int spikeAlpha = Math.max(100, Math.min(220, (int) (90 + aggression * 130)));
@@ -142,10 +178,13 @@ final class MicrobeRenderStyle {
             Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2d.setStroke(STROKE_1);
+            float spokeWidth = (float) Math.max(1.0, (size / 28.0) * Math.max(1.0, spikeScale * 0.9));
+            g2d.setStroke(new BasicStroke(spokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             for (int s = 0; s < spikes; s++) {
                 double angle = (Math.PI * 2.0 * s) / spikes;
-                double wing = (Math.PI / spikes) * 0.40;
+                double wing = (Math.PI / spikes) * (0.40
+                        + 0.08 * Math.min(2.0, Math.max(1.0, spikeScale))
+                        + 0.10 * Math.min(2.0, Math.max(1.0, glowScale) / 2.0));
 
                 int xLeft = cx + (int) Math.round(Math.cos(angle - wing) * innerR);
                 int yLeft = cy + (int) Math.round(Math.sin(angle - wing) * innerR);
