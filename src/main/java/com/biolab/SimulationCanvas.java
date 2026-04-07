@@ -426,10 +426,12 @@ public class SimulationCanvas extends JPanel {
                         my,
                         microbe.defense(),
                         microbe.strength(),
+                        microbeColor,
                         microbe.carnivore(),
                         microbe.lastAttackTime(),
                         nowMs,
                         microbe.selected(),
+                        true,
                         defaultComposite
                 );
 

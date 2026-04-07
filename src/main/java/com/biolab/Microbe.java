@@ -585,29 +585,43 @@ public class Microbe {
     }
 
     /**
-     * Computes the visual color based on genes.
-     */
-    private Color computeColor() {
-        int red = (int) (heatResistance * 255);
-        int green = (int) (toxinResistance * 255);
-        int blue = (int) (speed * 128);
-        return new Color(red, green, blue);
-    }
-
-    /**
      * Computes a brightened variant of the visual color (+40 per channel, clamped to 255).
      * Used for the inner glow effect in rendering.
      */
-    private Color computeBrightColor() {
+    private static Color computeBrightColor(Color color) {
         return new Color(
-                Math.min(255, cachedColor.getRed() + 40),
-                Math.min(255, cachedColor.getGreen() + 40),
-                Math.min(255, cachedColor.getBlue() + 40)
+                Math.min(255, color.getRed() + 40),
+                Math.min(255, color.getGreen() + 40),
+                Math.min(255, color.getBlue() + 40)
         );
     }
 
     /**
-     * Returns cached visual color based on genes: Red = Heat Resistance, Green = Toxin Resistance, Blue = Speed.
+     * Computes the visual color from Heat/Toxin genes and current energy ratio.
+     * Diet is intentionally excluded from color mapping.
+     */
+    private Color computeColor(double energyRatio) {
+        double clampedEnergy = clamp01(energyRatio);
+        int red = (int) Math.round(heatResistance * 255.0);
+        int green = (int) Math.round(toxinResistance * 255.0);
+        int blue = (int) Math.round(clampedEnergy * 255.0);
+        return new Color(red, green, blue);
+    }
+
+    private Color computeColor() {
+        double ratio;
+        synchronized (stateLock) {
+            ratio = maxEnergy <= 0.0 ? 0.0 : energy / maxEnergy;
+        }
+        return computeColor(ratio);
+    }
+
+    private Color computeBrightColor() {
+        return computeBrightColor(cachedColor);
+    }
+
+    /**
+     * Returns cached visual color.
      */
     public Color getColor() {
         return cachedColor;
@@ -964,16 +978,20 @@ public class Microbe {
      */
     public RenderState toRenderState() {
         double healthRatio;
+        double energyRatio;
         synchronized (stateLock) {
             healthRatio = maxHealth <= 0.0 ? 0.0 : clamp01(health / maxHealth);
+            energyRatio = maxEnergy <= 0.0 ? 0.0 : clamp01(energy / maxEnergy);
         }
+        Color renderColor = computeColor(energyRatio);
+        Color renderBrightColor = computeBrightColor(renderColor);
         return new RenderState(
                 id,
                 x,
                 y,
                 getSize(),
-                cachedColor,
-                cachedBrightColor,
+                renderColor,
+                renderBrightColor,
                 healthRatio,
                 isCarnivore(),
                 getStrengthTrait(),

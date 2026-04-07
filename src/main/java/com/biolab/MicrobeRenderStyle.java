@@ -11,8 +11,6 @@ final class MicrobeRenderStyle {
     private static final int DEFAULT_CARNIVORE_SIZE_BONUS = 2;
     private static final long ATTACK_FLASH_DURATION_MS = 300;
 
-    private static final Color DEFENSE_RING_COLOR_BASE = new Color(160, 230, 255);
-    private static final Color STRENGTH_SPIKE_COLOR = new Color(255, 210, 120, 160);
     private static final Color ATTACK_RING_COLOR = new Color(255, 30, 30);
     private static final Color ATTACK_RING_GLOW = new Color(255, 60, 60, 120);
     private static final Color SELECTION_GLOW_COLOR = new Color(0, 255, 255, 100);
@@ -80,49 +78,65 @@ final class MicrobeRenderStyle {
                                                double centerY,
                                                double defense,
                                                double strength,
+                                               Color coreColor,
                                                boolean carnivore,
                                                long lastAttackTime,
                                                long nowMs,
                                                boolean selected,
+                                               boolean showSelectionRing,
                                                Composite defaultComposite) {
-        float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
-        if (clampedDefense > 0.2f) {
-            g2d.setColor(new Color(
-                    DEFENSE_RING_COLOR_BASE.getRed(),
-                    DEFENSE_RING_COLOR_BASE.getGreen(),
-                    DEFENSE_RING_COLOR_BASE.getBlue(),
-                    (int) (40 + clampedDefense * 100)
-            ));
-            g2d.setStroke(new BasicStroke(1.0f + clampedDefense * 1.8f));
-            g2d.drawOval(x - 2, y - 2, size + 4, size + 4);
-            g2d.setStroke(STROKE_1);
-        }
-
         float clampedStrength = (float) Math.max(0.0, Math.min(1.0, strength));
-        float clampedDefenseForSpikes = (float) Math.max(0.0, Math.min(1.0, defense));
-        float spikeIntensity = (float) Math.max(0.0, Math.min(1.0,
-                clampedStrength * 0.70f + clampedDefenseForSpikes * 0.30f));
-        if (spikeIntensity > 0.35f) {
-            int spikes = 4 + (int) Math.round(spikeIntensity * 6.0);
-            int outerR = (int) Math.round(size * 0.62 + 2 + spikeIntensity * 4.0);
-            int innerR = Math.max(2, outerR - 3);
+        float clampedDefense = (float) Math.max(0.0, Math.min(1.0, defense));
+        float aggression = (float) Math.max(0.0, Math.min(1.0,
+                clampedStrength * 0.80f + clampedDefense * 0.20f));
+        if (aggression > 0.01f) {
+            int spikes = 4 + (int) Math.round(aggression * 6.0);
+            double coreRadius = size * 0.50;
+            int innerR = Math.max(1, (int) Math.round(coreRadius * 0.20));
+            int tipR = (int) Math.round(coreRadius + size * (0.10 + aggression * 0.18));
             int cx = (int) centerX;
             int cy = (int) centerY;
-            int alpha = Math.max(90, Math.min(230, (int) (95 + spikeIntensity * 135)));
-            g2d.setColor(new Color(
-                    STRENGTH_SPIKE_COLOR.getRed(),
-                    STRENGTH_SPIKE_COLOR.getGreen(),
-                    STRENGTH_SPIKE_COLOR.getBlue(),
-                    alpha
-            ));
+            int spikeAlpha = Math.max(100, Math.min(220, (int) (90 + aggression * 130)));
+            int lineAlpha = Math.max(120, Math.min(235, (int) (120 + aggression * 115)));
+            Color spikeColor = new Color(
+                    Math.min(255, coreColor.getRed() + 25),
+                    Math.min(255, coreColor.getGreen() + 25),
+                    Math.min(255, coreColor.getBlue() + 25),
+                    spikeAlpha
+            );
+            Color spikeLineColor = new Color(
+                    Math.min(255, coreColor.getRed() + 45),
+                    Math.min(255, coreColor.getGreen() + 45),
+                    Math.min(255, coreColor.getBlue() + 45),
+                    lineAlpha
+            );
+
+            Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setStroke(STROKE_1);
             for (int s = 0; s < spikes; s++) {
                 double angle = (Math.PI * 2.0 * s) / spikes;
-                int x1 = cx + (int) Math.round(Math.cos(angle) * innerR);
-                int y1 = cy + (int) Math.round(Math.sin(angle) * innerR);
-                int x2 = cx + (int) Math.round(Math.cos(angle) * (outerR + 2 + spikeIntensity * 2.0));
-                int y2 = cy + (int) Math.round(Math.sin(angle) * (outerR + 2 + spikeIntensity * 2.0));
-                g2d.drawLine(x1, y1, x2, y2);
+                double wing = (Math.PI / spikes) * 0.40;
+
+                int xLeft = cx + (int) Math.round(Math.cos(angle - wing) * innerR);
+                int yLeft = cy + (int) Math.round(Math.sin(angle - wing) * innerR);
+                int xRight = cx + (int) Math.round(Math.cos(angle + wing) * innerR);
+                int yRight = cy + (int) Math.round(Math.sin(angle + wing) * innerR);
+                int xTip = cx + (int) Math.round(Math.cos(angle) * tipR);
+                int yTip = cy + (int) Math.round(Math.sin(angle) * tipR);
+
+                Polygon spike = new Polygon(
+                        new int[]{xLeft, xTip, xRight},
+                        new int[]{yLeft, yTip, yRight},
+                        3
+                );
+                g2d.setColor(spikeColor);
+                g2d.fillPolygon(spike);
+
+                g2d.setColor(spikeLineColor);
+                g2d.drawLine(cx, cy, xTip, yTip);
             }
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
         }
 
         long msSinceAttack = nowMs - lastAttackTime;
@@ -149,7 +163,7 @@ final class MicrobeRenderStyle {
             g2d.setStroke(STROKE_1);
         }
 
-        if (selected) {
+        if (showSelectionRing && selected) {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setColor(SELECTION_GLOW_COLOR);
             g2d.setStroke(STROKE_3);

@@ -809,10 +809,11 @@ public class InspectorPanel extends JPanel {
             y += 40;
 
             // Scale factor so the on-canvas microbe (size=5 px) appears large here.
+            Microbe.RenderState renderState = microbe.toRenderState();
             int scaledCarnivoreBonus = (int) Math.max(1, Math.round(2.0 * PREVIEW_SCALE));
             int size = MicrobeRenderStyle.sizeWithCarnivoreBonus(
-                    (int) (microbe.getSize() * PREVIEW_SCALE),
-                    microbe.isCarnivore(),
+                    (int) (renderState.size() * PREVIEW_SCALE),
+                    renderState.carnivore(),
                     scaledCarnivoreBonus
             );
             int cx = CW / 2;
@@ -820,7 +821,7 @@ public class InspectorPanel extends JPanel {
             int x = cx - size / 2;
             int baseY = cy - size / 2;
 
-            Color mc = microbe.getColor();
+            Color mc = renderState.color();
 
             Composite orig = g2.getComposite();
 
@@ -830,8 +831,8 @@ public class InspectorPanel extends JPanel {
                     baseY,
                     size,
                     mc,
-                    microbe.getBrightColor(),
-                    microbe.getHealthRatio(),
+                    renderState.brightColor(),
+                    renderState.healthRatio(),
                     orig
             );
 
@@ -842,12 +843,14 @@ public class InspectorPanel extends JPanel {
                     size,
                     cx,
                     cy,
-                    microbe.getDefenseTrait(),
-                    microbe.getStrengthTrait(),
-                    microbe.isCarnivore(),
-                    microbe.getLastAttackTime(),
+                    renderState.defense(),
+                    renderState.strength(),
+                    mc,
+                    renderState.carnivore(),
+                    renderState.lastAttackTime(),
                     System.currentTimeMillis(),
-                    microbe.isSelected(),
+                    renderState.selected(),
+                    false,
                     orig
             );
         }
