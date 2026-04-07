@@ -374,6 +374,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
         WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine, settingsManager);
         microbeCreatorPanel = new MicrobeCreatorPanel();
+        microbeCreatorPanel.setRandomProfileSupplier(this::buildWorldAwareRandomBaseProfile);
         ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
         ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton creatorToggleButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
@@ -405,6 +406,44 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         microbeCreatorPanel.setVisible(false);
         setSpawnToolActive(false);
         overlayManager.repositionAllOverlays();
+    }
+
+    private MicrobeGeneProfile buildWorldAwareRandomBaseProfile() {
+        if (engine == null) {
+            return MicrobeSpawnRequest.defaultProfile();
+        }
+        SimulationState state;
+        try {
+            state = engine.captureState();
+        } catch (RuntimeException ex) {
+            return MicrobeSpawnRequest.defaultProfile();
+        }
+        if (state == null || state.microbes().isEmpty()) {
+            return MicrobeSpawnRequest.defaultProfile();
+        }
+        double heat = 0.0;
+        double toxin = 0.0;
+        double speed = 0.0;
+        double diet = 0.0;
+        double maxHealth = 0.0;
+        double maxEnergy = 0.0;
+        for (Microbe.PersistedState microbe : state.microbes()) {
+            heat += microbe.heatResistance();
+            toxin += microbe.toxinResistance();
+            speed += microbe.speed();
+            diet += microbe.diet();
+            maxHealth += microbe.maxHealth();
+            maxEnergy += microbe.maxEnergy();
+        }
+        int count = state.microbes().size();
+        return new MicrobeGeneProfile(
+                heat / count,
+                toxin / count,
+                speed / count,
+                diet / count,
+                Math.max(1.0, maxHealth / count),
+                Math.max(1.0, maxEnergy / count)
+        );
     }
 
     private void toggleSpawnToolFromCreator() {

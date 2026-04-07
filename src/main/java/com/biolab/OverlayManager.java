@@ -251,7 +251,10 @@ public class OverlayManager {
         JLayeredPane lp = layeredPaneSupplier.get();
         int topY = overlayTopY(lp);
         int panelX = leftViewerX();
-        int panelHeight = viewerAvailableHeight(lp);
+        int preferredHeight = microbeCreatorPanel.getPreferredSize() == null
+                ? viewerAvailableHeight(lp)
+                : microbeCreatorPanel.getPreferredSize().height;
+        int panelHeight = Math.min(viewerAvailableHeight(lp), Math.max(220, preferredHeight));
         int panelWidth = Math.min(MicrobeCreatorPanel.PANEL_WIDTH, maxLeftViewerWidth(lp));
         panelWidth = Math.max(260, panelWidth);
 

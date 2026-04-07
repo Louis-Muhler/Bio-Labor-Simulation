@@ -43,6 +43,19 @@ final class OverlayControlFactory {
         return checkBox;
     }
 
+    static JCheckBox createSettingsCheckBox(String text, boolean selected) {
+        JCheckBox checkBox = new JCheckBox(text);
+        checkBox.setSelected(selected);
+        checkBox.setForeground(OverlayTheme.ACCENT);
+        checkBox.setBackground(OverlayTheme.PANEL_BG);
+        checkBox.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        checkBox.setFocusPainted(false);
+        checkBox.setOpaque(true);
+        checkBox.setIcon(new SettingsCheckBoxIcon(false));
+        checkBox.setSelectedIcon(new SettingsCheckBoxIcon(true));
+        return checkBox;
+    }
+
     static JScrollPane createStyledScrollPane(JComponent content) {
         JScrollPane scrollPane = new JScrollPane(content);
         scrollPane.setOpaque(false);
@@ -170,6 +183,38 @@ final class OverlayControlFactory {
                 g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g2.drawLine(x + 4, y + 8, x + 7, y + 11);
                 g2.drawLine(x + 7, y + 11, x + 12, y + 5);
+            }
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return SIZE;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return SIZE;
+        }
+    }
+
+    private record SettingsCheckBoxIcon(boolean checked) implements Icon {
+        private static final int SIZE = 18;
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(OverlayTheme.CONTROL_BG);
+            g2.fillRoundRect(x, y, SIZE, SIZE, 4, 4);
+            g2.setColor(OverlayTheme.ACCENT);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(x, y, SIZE - 1, SIZE - 1, 4, 4);
+            if (checked) {
+                int pad = 4;
+                g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(x + pad, y + pad, x + SIZE - pad, y + SIZE - pad);
+                g2.drawLine(x + SIZE - pad, y + pad, x + pad, y + SIZE - pad);
             }
             g2.dispose();
         }

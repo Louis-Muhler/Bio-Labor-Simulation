@@ -137,15 +137,7 @@ public class SettingsOverlay extends JPanel {
      * @param text label shown next to the checkbox
      */
     private static JCheckBox createStyledCheckBox(String text) {
-        JCheckBox cb = new JCheckBox(text);
-        cb.setFont(BODY_FONT);
-        cb.setForeground(ACCENT);
-        cb.setBackground(PANEL_BG);
-        cb.setFocusPainted(false);
-        cb.setOpaque(true);
-        cb.setIcon(new CheckBoxIcon(false));
-        cb.setSelectedIcon(new CheckBoxIcon(true));
-        return cb;
+        return OverlayControlFactory.createSettingsCheckBox(text, false);
     }
 
     /**

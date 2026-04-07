@@ -78,8 +78,26 @@ class MicrobeCreatorPanelTest {
         assertTrue(profile.toxinResistance() >= 0.0 && profile.toxinResistance() <= 1.0);
         assertTrue(profile.speed() >= 0.0 && profile.speed() <= 1.0);
         assertTrue(profile.diet() >= 0.0 && profile.diet() <= 1.0);
-        assertTrue(profile.maxHealth() >= 20.0 && profile.maxHealth() <= 400.0);
-        assertTrue(profile.maxEnergy() >= 20.0 && profile.maxEnergy() <= 400.0);
+        assertTrue(profile.maxHealth() >= 1.0 && profile.maxHealth() <= 620.0);
+        assertTrue(profile.maxEnergy() >= 1.0 && profile.maxEnergy() <= 620.0);
+    }
+
+    @Test
+    void randomGenerationShouldUseConfiguredWorldBasedProfile() throws Exception {
+        MicrobeCreatorPanel panel = onEdt(MicrobeCreatorPanel::new);
+
+        onEdt(() -> {
+            panel.setRandomProfileSupplier(() -> new MicrobeGeneProfile(0.2, 0.3, 0.4, 0.5, 20.0, 30.0));
+            panel.setRandomEnabled(true);
+        });
+
+        MicrobeGeneProfile profile = onEdt(panel::currentMicrobeProfile);
+        assertTrue(profile.heatResistance() >= 0.0 && profile.heatResistance() <= 0.55);
+        assertTrue(profile.toxinResistance() >= 0.0 && profile.toxinResistance() <= 0.65);
+        assertTrue(profile.speed() >= 0.05 && profile.speed() <= 0.75);
+        assertTrue(profile.diet() >= 0.15 && profile.diet() <= 0.85);
+        assertTrue(profile.maxHealth() >= 11.0 && profile.maxHealth() <= 31.0);
+        assertTrue(profile.maxEnergy() >= 16.5 && profile.maxEnergy() <= 46.5);
     }
 
     @Test

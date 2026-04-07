@@ -92,6 +92,22 @@ class OverlayManagerLayoutTest {
         assertFalse(bundle.deactivateToolButton.isVisible());
     }
 
+    @Test
+    void microbeCreatorFoodModeShouldUseCompactPanelHeight() {
+        OverlayBundle bundle = newBundle(1280, 800, false);
+
+        bundle.microbeCreatorPanel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.MICROBE);
+        bundle.manager.positionMicrobeCreatorPanel();
+        int microbeHeight = bundle.microbeCreatorPanel.getBounds().height;
+
+        bundle.microbeCreatorPanel.setSelectedMode(MicrobeCreatorPanel.SpawnMode.FOOD);
+        bundle.manager.positionMicrobeCreatorPanel();
+        int foodHeight = bundle.microbeCreatorPanel.getBounds().height;
+
+        assertTrue(foodHeight < microbeHeight);
+        assertEquals(bundle.microbeCreatorPanel.getPreferredSize().height, foodHeight);
+    }
+
     private OverlayBundle newBundle(int width, int height, boolean hugeSavedStatsSize) {
         JLayeredPane layeredPane = new JLayeredPane();
         layeredPane.setSize(width, height);
