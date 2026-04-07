@@ -100,6 +100,18 @@ final class MicrobeRenderStyle {
                          Color brightColor,
                          float rimStrokeWidth,
                          Composite defaultComposite) {
+        drawBody(g2d, x, y, size, baseColor, brightColor, rimStrokeWidth, 1.0f, defaultComposite);
+    }
+
+    static void drawBody(Graphics2D g2d,
+                         int x,
+                         int y,
+                         int size,
+                         Color baseColor,
+                         Color brightColor,
+                         float rimStrokeWidth,
+                         float rimContrastBoost,
+                         Composite defaultComposite) {
         g2d.setComposite(AC_BRIGHT_FILL);
         g2d.setColor(brightColor);
         g2d.fillOval(x, y, size, size);
@@ -110,7 +122,12 @@ final class MicrobeRenderStyle {
         // Stronger rim helps the preview match the punchy core edge seen on canvas.
         Object oldAa = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2d.setColor(new Color(brightColor.getRed(), brightColor.getGreen(), brightColor.getBlue(), 220));
+        float boost = Math.max(1.0f, rimContrastBoost);
+        int rr = Math.min(255, (int) Math.round(brightColor.getRed() + (255 - brightColor.getRed()) * 0.22 * (boost - 1.0f)));
+        int rg = Math.min(255, (int) Math.round(brightColor.getGreen() + (255 - brightColor.getGreen()) * 0.22 * (boost - 1.0f)));
+        int rb = Math.min(255, (int) Math.round(brightColor.getBlue() + (255 - brightColor.getBlue()) * 0.22 * (boost - 1.0f)));
+        int ra = Math.min(255, Math.round(220 + 28 * (boost - 1.0f)));
+        g2d.setColor(new Color(rr, rg, rb, ra));
         g2d.setStroke(new BasicStroke(Math.max(1.0f, rimStrokeWidth), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2d.drawOval(x, y, size - 1, size - 1);
         g2d.setStroke(STROKE_1);

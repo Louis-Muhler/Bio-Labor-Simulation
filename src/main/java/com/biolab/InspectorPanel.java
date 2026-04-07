@@ -846,7 +846,7 @@ public class InspectorPanel extends JPanel {
                     mc,
                     1.35,
                     PREVIEW_SCALE,
-                    1.12,
+                    2,
                     orig
             );
 
@@ -857,7 +857,8 @@ public class InspectorPanel extends JPanel {
                     size,
                     mc,
                     renderState.brightColor(),
-                    MicrobeRenderStyle.computeRimStrokeWidth(size, renderState.defense(), 1.12),
+                    MicrobeRenderStyle.computeRimStrokeWidth(size, renderState.defense(), 2.75),
+                    2f,
                     orig
             );
 
