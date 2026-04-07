@@ -2,7 +2,9 @@ package com.biolab;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicSpinnerUI;
 import java.awt.*;
+import java.awt.event.MouseEvent;
 import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
@@ -149,9 +151,9 @@ public class MicrobeCreatorPanel extends JPanel {
         microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT, MAX_HEALTH_COLOR);
         microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT, MAX_ENERGY_COLOR);
         microbeSection.add(microbeHealthRow);
-        microbeSection.add(Box.createVerticalStrut(6));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
         microbeSection.add(microbeEnergyRow);
-        microbeSection.add(Box.createVerticalStrut(10));
+        microbeSection.add(Box.createVerticalStrut(TRAIT_BLOCK_TOP_GAP));
 
         previewShell = OverlayControlFactory.wrapInInnerFrame(previewCanvas);
         previewShell.setPreferredSize(new Dimension(1, 186));
@@ -174,6 +176,8 @@ public class MicrobeCreatorPanel extends JPanel {
         body.add(activateButton);
 
         registerLivePreviewListeners();
+        styleSpinnerChrome(maxHealthInput, MAX_HEALTH_COLOR);
+        styleSpinnerChrome(maxEnergyInput, MAX_ENERGY_COLOR);
         styleSpinnerField(amountSpinner);
         styleSpinnerField(maxHealthInput);
         styleSpinnerField(maxEnergyInput);
@@ -220,6 +224,13 @@ public class MicrobeCreatorPanel extends JPanel {
             textField.setForeground(color);
             textField.setCaretColor(color);
         }
+    }
+
+    private static void styleSpinnerChrome(JSpinner spinner, Color color) {
+        spinner.setUI(new ColoredSpinnerUI(color));
+        spinner.setOpaque(false);
+        spinner.setBorder(BorderFactory.createEmptyBorder());
+        spinner.setBackground(OverlayTheme.CONTROL_BG);
     }
 
     public boolean isRandomEnabled() {
@@ -600,6 +611,105 @@ public class MicrobeCreatorPanel extends JPanel {
         @Override
         public String toString() {
             return String.format(Locale.ROOT, "TraitControl[value=%s]", value);
+        }
+    }
+
+    private static final class ColoredSpinnerUI extends BasicSpinnerUI {
+        private final Color accent;
+
+        private ColoredSpinnerUI(Color accent) {
+            this.accent = accent;
+        }
+
+        @Override
+        public void installUI(JComponent c) {
+            super.installUI(c);
+            c.setOpaque(false);
+        }
+
+        @Override
+        public void paint(Graphics g, JComponent c) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = c.getWidth();
+            int h = c.getHeight();
+            g2.setColor(OverlayTheme.CONTROL_BG);
+            g2.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.setColor(accent);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 10, 10);
+            g2.dispose();
+            super.paint(g, c);
+        }
+
+        @Override
+        protected Component createNextButton() {
+            JButton button = createArrowButton(true);
+            button.setName("Spinner.nextButton");
+            installNextButtonListeners(button);
+            return button;
+        }
+
+        @Override
+        protected Component createPreviousButton() {
+            JButton button = createArrowButton(false);
+            button.setName("Spinner.previousButton");
+            installPreviousButtonListeners(button);
+            return button;
+        }
+
+        private JButton createArrowButton(boolean up) {
+            JButton btn = new JButton() {
+                private boolean hovered;
+
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    Color hoverColor = new Color(
+                            Math.min(255, accent.getRed() + 35),
+                            Math.min(255, accent.getGreen() + 35),
+                            Math.min(255, accent.getBlue() + 35)
+                    );
+                    g2.setColor(hovered ? hoverColor : accent);
+                    g2.setStroke(new BasicStroke(hovered ? 3f : 2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+                    int aw = 4;
+                    int ah = 3;
+                    if (up) {
+                        g2.drawLine(cx - aw, cy + ah, cx, cy - ah);
+                        g2.drawLine(cx, cy - ah, cx + aw, cy + ah);
+                    } else {
+                        g2.drawLine(cx - aw, cy - ah, cx, cy + ah);
+                        g2.drawLine(cx, cy + ah, cx + aw, cy - ah);
+                    }
+                    g2.dispose();
+                }
+
+                @Override
+                protected void processMouseEvent(MouseEvent e) {
+                    super.processMouseEvent(e);
+                    switch (e.getID()) {
+                        case MouseEvent.MOUSE_ENTERED -> {
+                            hovered = true;
+                            repaint();
+                        }
+                        case MouseEvent.MOUSE_EXITED -> {
+                            hovered = false;
+                            repaint();
+                        }
+                        default -> {
+                        }
+                    }
+                }
+            };
+            btn.setOpaque(false);
+            btn.setContentAreaFilled(false);
+            btn.setBorderPainted(false);
+            btn.setFocusPainted(false);
+            btn.setPreferredSize(new Dimension(24, 14));
+            return btn;
         }
     }
 }
