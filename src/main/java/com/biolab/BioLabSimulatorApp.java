@@ -42,6 +42,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private ModernButton runtimeSpeedButton;
     private MicrobeCreatorPanel microbeCreatorPanel;
     private boolean spawnToolActive;
+    private Timer inspectorRestoreTimer;
 
     private volatile Microbe selectedMicrobe;
     private boolean gameplayParkedInMenu;
@@ -154,12 +155,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
+            public void componentMoved(java.awt.event.ComponentEvent e) {
+                scheduleInspectorRestoreAfterWindowMotion();
+            }
+
+            @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
                 positionGlobalSettingsButton();
                 syncGameplayOverlayVisibilityByState();
                 refreshOverlayBounds();
                 // Enforce min-zoom and clamp camera to prevent out-of-bounds view
                 if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
+                scheduleInspectorRestoreAfterWindowMotion();
             }
 
             @Override
@@ -168,8 +175,29 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 syncGameplayOverlayVisibilityByState();
                 refreshOverlayBounds();
                 if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
+                scheduleInspectorRestoreAfterWindowMotion();
             }
         });
+    }
+
+    private void scheduleInspectorRestoreAfterWindowMotion() {
+        if (inspectorRestoreTimer == null) {
+            inspectorRestoreTimer = new Timer(180, e -> restoreInspectorAfterWindowMotionIfNeeded());
+            inspectorRestoreTimer.setRepeats(false);
+        }
+        inspectorRestoreTimer.restart();
+    }
+
+    private void restoreInspectorAfterWindowMotionIfNeeded() {
+        if (!isGameplaySession() || overlayManager == null || isSelectionBlockedByUi()) {
+            return;
+        }
+        Microbe current = selectedMicrobe;
+        if (current == null || current.isDead()) {
+            return;
+        }
+        overlayManager.getInspectorPanel().setSelectedMicrobe(current);
+        overlayManager.getInspectorPanel().showPanel();
     }
 
     private void refreshOverlayBounds() {
@@ -350,7 +378,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
         ModernButton creatorToggleButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
-        ModernButton deactivateToolButton = new ModernButton("DEACTIVATE TOOL");
+        ModernButton deactivateToolButton = new ModernButton("Activate Spawn Tool");
         runtimeSpeedButton = speedButton;
 
         overlayManager = new OverlayManager(this::getLayeredPane,

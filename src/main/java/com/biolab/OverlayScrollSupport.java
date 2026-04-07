@@ -27,19 +27,24 @@ final class OverlayScrollSupport {
 
         java.awt.event.MouseWheelListener wheelHandler = e -> applyWheelDelta(scrollPane, e, unit);
         scrollPane.addMouseWheelListener(wheelHandler);
+        scrollPane.getViewport().addMouseWheelListener(wheelHandler);
         content.addMouseWheelListener(wheelHandler);
         return scrollPane;
     }
 
     private static void applyWheelDelta(JScrollPane scrollPane, MouseWheelEvent e, int unit) {
         JScrollBar bar = scrollPane.getVerticalScrollBar();
+        if (bar == null) {
+            return;
+        }
         int maxValue = Math.max(bar.getMinimum(), bar.getMaximum() - bar.getVisibleAmount());
         int delta = e.getWheelRotation() * unit;
         int next = Math.max(bar.getMinimum(), Math.min(maxValue, bar.getValue() + delta));
         if (next != bar.getValue()) {
             bar.setValue(next);
-            e.consume();
         }
+        // Always consume to keep wheel events inside the overlay and avoid canvas zoom side effects.
+        e.consume();
     }
 }
 
