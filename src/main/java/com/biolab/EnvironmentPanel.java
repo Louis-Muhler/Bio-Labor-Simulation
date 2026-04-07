@@ -52,7 +52,7 @@ public class EnvironmentPanel extends JPanel {
     };
 
     private static final String[] SLIDER_LABELS = {"Temperature", "Toxicity"};
-    private static final String FOOD_LABEL = "Food Spawn";
+    private static final String FOOD_LABEL = "Food";
     private static final double FOOD_STEP_PER_CLICK = 0.25;
     private static final double MAX_FOOD_SPAWN_PER_TICK = 1000000;
     private static final int FOOD_SPINNER_HEIGHT = 30;
@@ -299,8 +299,8 @@ public class EnvironmentPanel extends JPanel {
 
         foodLabel.setBounds(x, y, labelW, 18);
         foodValueLabel.setBounds(x + contentWidth - valueW, y, valueW, 18);
-        y += 22;
-        foodSpawnSpinner.setBounds(x, y, contentWidth, FOOD_SPINNER_HEIGHT);
+        y += 20;
+        foodSpawnSpinner.setBounds(x, y + 9, contentWidth, FOOD_SPINNER_HEIGHT);
     }
 
     private record TriangleIcon(Color color) implements Icon {
