@@ -187,7 +187,7 @@ public class MicrobeCreatorPanel extends JPanel {
         styleSpinnerField(maxEnergyInput);
         tintSpinnerText(maxHealthInput, MAX_HEALTH_COLOR);
         tintSpinnerText(maxEnergyInput, MAX_ENERGY_COLOR);
-        randomProfileSupplier = () -> MicrobeSpawnRequest.randomizedProfile(MicrobeSpawnRequest.defaultProfile());
+        randomProfileSupplier = MicrobeSpawnRequest::defaultProfile;
 
         JScrollPane scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(body, new Insets(0, 0, 0, 0), 18);
         contentPanel.add(scrollPane, BorderLayout.CENTER);
@@ -262,8 +262,11 @@ public class MicrobeCreatorPanel extends JPanel {
 
         MicrobeGeneProfile baseProfile = currentMicrobeProfile();
         boolean randomEnabled = randomCheck.isSelected();
+        MicrobeGeneProfile randomAnchor = randomEnabled
+                ? resolveRandomAnchorProfile(baseProfile)
+                : baseProfile;
         MicrobeGeneProfile firstProfile = randomEnabled
-                ? MicrobeSpawnRequest.randomizedProfile(baseProfile)
+                ? MicrobeSpawnRequest.randomizedProfile(randomAnchor)
                 : baseProfile;
 
         if (randomEnabled) {
@@ -277,7 +280,7 @@ public class MicrobeCreatorPanel extends JPanel {
                 worldY,
                 currentAmount(),
                 randomEnabled,
-                baseProfile,
+                randomAnchor,
                 firstProfile
         ));
     }
@@ -391,7 +394,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
     void setRandomProfileSupplier(Supplier<MicrobeGeneProfile> randomProfileSupplier) {
         this.randomProfileSupplier = randomProfileSupplier == null
-                ? () -> MicrobeSpawnRequest.randomizedProfile(MicrobeSpawnRequest.defaultProfile())
+                ? MicrobeSpawnRequest::defaultProfile
                 : randomProfileSupplier;
     }
 
@@ -468,6 +471,15 @@ public class MicrobeCreatorPanel extends JPanel {
             base = MicrobeSpawnRequest.defaultProfile();
         }
         return widenProfileVariance(base);
+    }
+
+    private MicrobeGeneProfile resolveRandomAnchorProfile(MicrobeGeneProfile fallback) {
+        Supplier<MicrobeGeneProfile> supplier = randomProfileSupplier;
+        MicrobeGeneProfile anchor = supplier == null ? null : supplier.get();
+        if (anchor != null) {
+            return anchor;
+        }
+        return fallback == null ? MicrobeSpawnRequest.defaultProfile() : fallback;
     }
 
     private int computePreferredPanelHeight(boolean microbeMode) {
