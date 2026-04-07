@@ -51,10 +51,14 @@ class MicrobeBehaviorSystemTest {
     }
 
     private static void runOneChunk(List<Microbe> microbes) {
-        SpatialGrid foodGrid = new SpatialGrid(600, 600, 30);
+        runOneChunk(microbes, 30);
+    }
+
+    private static void runOneChunk(List<Microbe> microbes, int cellSize) {
+        SpatialGrid foodGrid = new SpatialGrid(600, 600, cellSize);
         foodGrid.rebuild(List.of());
 
-        MicrobeGrid microbeGrid = new MicrobeGrid(600, 600, 30);
+        MicrobeGrid microbeGrid = new MicrobeGrid(600, 600, cellSize);
         microbeGrid.rebuild(microbes);
 
         MicrobeBehaviorSystem behaviorSystem = new MicrobeBehaviorSystem(
@@ -106,6 +110,20 @@ class MicrobeBehaviorSystemTest {
         assertEquals(healthAfterFirstHit, healthAfterSecondStep, 0.0001,
                 "Second immediate step should be blocked by attack cooldown");
     }
+
+    @Test
+    void attackRangeShouldNotMissPreyAcrossSecondCellRing() {
+        // distance=32 is inside attack range for large bodies, but outside a strict 3x3 lookup from col 0.
+        Microbe attacker = createPersistedMicrobe(29, 100, 1.0, 1.0, 0.0, 1.0,
+                220.0, 220.0, 220.0, 20.0);
+        Microbe prey = createPersistedMicrobe(61, 100, 1.0, 1.0, 0.0, 0.0,
+                220.0, 220.0, 220.0, 20.0);
+        List<Microbe> microbes = new ArrayList<>(List.of(attacker, prey));
+
+        double preyBefore = prey.getHealth();
+        runOneChunk(microbes, 30);
+
+        assertTrue(prey.getHealth() < preyBefore,
+                "Carnivore should damage reachable prey even when it is in the second cell ring");
+    }
 }
-
-

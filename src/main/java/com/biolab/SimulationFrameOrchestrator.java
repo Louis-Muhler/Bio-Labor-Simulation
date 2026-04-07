@@ -2,6 +2,7 @@ package com.biolab;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -37,11 +38,33 @@ final class SimulationFrameOrchestrator {
         this.logger = logger;
     }
 
+    private void cancelAllFutures() {
+        for (Future<?> future : futureBuffer) {
+            if (!future.isDone()) {
+                future.cancel(true);
+            }
+        }
+    }
+
+    private void drainFuturesBestEffort() {
+        for (Future<?> future : futureBuffer) {
+            if (!future.isDone()) {
+                try {
+                    future.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException | CancellationException ignored) {
+                    // Frame is already being aborted; remaining failures are expected.
+                }
+            }
+        }
+    }
+
     SimulationFrameResult runFrame(List<Microbe> microbeSnapshot,
-                                List<FoodPellet> foodSnapshot,
+                                   List<FoodPellet> foodSnapshot,
                                    int spawnedFoodCount,
-                                double temperature,
-                                double toxicity) throws InterruptedException {
+                                   double temperature,
+                                   double toxicity) throws InterruptedException {
         int microbeCount = microbeSnapshot.size();
         if (microbeCount == 0) {
             return populationCommitSystem.finalizeEmptyFrame(spawnedFoodCount);
@@ -64,8 +87,16 @@ final class SimulationFrameOrchestrator {
         for (Future<?> future : futureBuffer) {
             try {
                 future.get();
+            } catch (InterruptedException e) {
+                cancelAllFutures();
+                drainFuturesBestEffort();
+                throw e;
             } catch (ExecutionException e) {
-                logger.log(Level.SEVERE, "Error during microbe chunk processing", e.getCause());
+                cancelAllFutures();
+                drainFuturesBestEffort();
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                logger.log(Level.SEVERE, "Error during microbe chunk processing; aborting frame commit", cause);
+                throw new IllegalStateException("Chunk processing failed", cause);
             }
         }
 

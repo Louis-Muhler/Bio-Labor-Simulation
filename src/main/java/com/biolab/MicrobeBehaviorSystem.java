@@ -27,6 +27,7 @@ final class MicrobeBehaviorSystem {
     private static final double MAX_STEER_DELTA = 1.2;
     private static final long BASE_ATTACK_COOLDOWN_MS = 330;
     private static final long ATTACK_COOLDOWN_PER_LOAD_MS = 80;
+    private static final int MAX_MICROBE_SIZE = 13;
 
     private final int worldWidth;
     private final int worldHeight;
@@ -86,7 +87,8 @@ final class MicrobeBehaviorSystem {
             microbe.move(worldWidth, worldHeight);
             microbe.updateHealth(temperature, toxicity);
 
-            microbeGrid.fillNearbyMicrobes(microbe.getX(), microbe.getY(), nearbyMicrobes);
+            double microbeQueryRadius = (microbe.getSize() + MAX_MICROBE_SIZE) * ATTACK_RANGE_FACTOR;
+            microbeGrid.fillNearbyMicrobes(microbe.getX(), microbe.getY(), microbeQueryRadius, nearbyMicrobes);
             if (microbe.isCarnivore()) {
                 processCarnivoreBehaviour(microbe, nearbyMicrobes);
             } else {
@@ -133,16 +135,16 @@ final class MicrobeBehaviorSystem {
         }
 
         double scaledDamage = computeScaledDamage(microbe, prey);
-        double stolenEnergy = prey.takeDamageAndTransferEnergy(scaledDamage);
-        microbe.eat(stolenEnergy * computeAbsorbEfficiency(microbe));
-        microbe.markAttack();
 
         double kbDist = Math.max(0.1, dist);
         double preyMass = 1.0 + prey.getCapacityLoad() * 0.50;
         double kScale = BASE_KNOCKBACK_FORCE * (0.75 + microbe.getStrengthTrait() * 0.40) / preyMass;
         double kx = (dx / kbDist) * kScale;
         double ky = (dy / kbDist) * kScale;
-        prey.applyKnockback(kx, ky);
+
+        double stolenEnergy = prey.takeDamageAndTransferEnergyWithKnockback(scaledDamage, kx, ky);
+        microbe.eat(stolenEnergy * computeAbsorbEfficiency(microbe));
+        microbe.markAttack();
     }
 
     private void processHerbivoreBehaviour(Microbe microbe, List<Microbe> neighbours, List<FoodPellet> nearbyFood) {

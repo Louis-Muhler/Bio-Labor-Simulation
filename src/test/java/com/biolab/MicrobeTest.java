@@ -445,5 +445,19 @@ class MicrobeTest {
         assertTrue(baselineTransfer <= 100.0 && tankTransfer <= 220.0,
                 "Transferred energy must never exceed victim's available energy");
     }
+
+    @Test
+    void combinedDamageAndKnockbackShouldApplyBothEffects() {
+        Microbe victim = createFromPersistedState(180.0, 180.0, 160.0, 140.0, 20, 0.8, 0.8, 0.2, 0.2);
+        Microbe.PersistedState before = victim.toPersistedState();
+
+        double transferred = victim.takeDamageAndTransferEnergyWithKnockback(22.0, 3.0, -2.0);
+        Microbe.PersistedState after = victim.toPersistedState();
+
+        assertTrue(transferred >= 0.0, "Transfer should be non-negative");
+        assertTrue(after.health() < before.health(), "Combined call should apply damage");
+        assertTrue(after.velocityX() != before.velocityX() || after.velocityY() != before.velocityY(),
+                "Combined call should also apply knockback velocity");
+    }
 }
 

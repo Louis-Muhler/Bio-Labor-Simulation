@@ -88,16 +88,24 @@ public class MicrobeGrid {
      * Writes nearby microbes into a caller-provided buffer to avoid per-query allocations.
      */
     public void fillNearbyMicrobes(double x, double y, List<Microbe> out) {
+        fillNearbyMicrobes(x, y, cellSize, out);
+    }
+
+    /**
+     * Writes nearby microbes within a world-space query radius into the caller buffer.
+     */
+    public void fillNearbyMicrobes(double x, double y, double queryRadius, List<Microbe> out) {
         out.clear();
         int centerCol = Math.min((int) (x / cellSize), cols - 1);
         int centerRow = Math.min((int) (y / cellSize), rows - 1);
         centerCol = Math.max(0, centerCol);
         centerRow = Math.max(0, centerRow);
 
-        int minCol = Math.max(0, centerCol - 1);
-        int maxCol = Math.min(cols - 1, centerCol + 1);
-        int minRow = Math.max(0, centerRow - 1);
-        int maxRow = Math.min(rows - 1, centerRow + 1);
+        int cellRadius = Math.max(1, (int) Math.ceil(Math.max(0.0, queryRadius) / cellSize));
+        int minCol = Math.max(0, centerCol - cellRadius);
+        int maxCol = Math.min(cols - 1, centerCol + cellRadius);
+        int minRow = Math.max(0, centerRow - cellRadius);
+        int maxRow = Math.min(rows - 1, centerRow + cellRadius);
 
         for (int row = minRow; row <= maxRow; row++) {
             for (int col = minCol; col <= maxCol; col++) {
@@ -110,4 +118,3 @@ public class MicrobeGrid {
     }
 
 }
-

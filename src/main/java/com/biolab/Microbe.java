@@ -499,8 +499,10 @@ public class Microbe {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         double angle = random.nextDouble() * 2 * Math.PI;
         double magnitude = 0.8 + speed * 2.8;
-        this.velocityX = Math.cos(angle) * magnitude;
-        this.velocityY = Math.sin(angle) * magnitude;
+        synchronized (stateLock) {
+            this.velocityX = Math.cos(angle) * magnitude;
+            this.velocityY = Math.sin(angle) * magnitude;
+        }
     }
 
     /**
@@ -518,12 +520,17 @@ public class Microbe {
         if (hasAdrenaline) {
             energyCost *= ADRENALINE_ENERGY_MULT;
         }
+
+        double baseVX;
+        double baseVY;
         synchronized (stateLock) {
             energy -= energyCost;
+            baseVX = velocityX;
+            baseVY = velocityY;
         }
 
-        double appliedVX = hasAdrenaline ? velocityX * ADRENALINE_SPEED_MULT : velocityX;
-        double appliedVY = hasAdrenaline ? velocityY * ADRENALINE_SPEED_MULT : velocityY;
+        double appliedVX = hasAdrenaline ? baseVX * ADRENALINE_SPEED_MULT : baseVX;
+        double appliedVY = hasAdrenaline ? baseVY * ADRENALINE_SPEED_MULT : baseVY;
 
         double vitality = getVitality();
         double energySpeedFactor = 0.30 + getEnergyRatio() * 0.70;
@@ -533,13 +540,23 @@ public class Microbe {
         x += appliedVX * vitality * energySpeedFactor * agilityFactor;
         y += appliedVY * vitality * energySpeedFactor * agilityFactor;
 
-        // Bounce off world boundaries
-        if (x < 0 || x > width) {
-            velocityX = -velocityX;
+        boolean bounceX = (x < 0 || x > width);
+        boolean bounceY = (y < 0 || y > height);
+        if (bounceX || bounceY) {
+            synchronized (stateLock) {
+                if (bounceX) {
+                    velocityX = -velocityX;
+                }
+                if (bounceY) {
+                    velocityY = -velocityY;
+                }
+            }
+        }
+
+        if (bounceX) {
             x = Math.max(0, Math.min(width, x));
         }
-        if (y < 0 || y > height) {
-            velocityY = -velocityY;
+        if (bounceY) {
             y = Math.max(0, Math.min(height, y));
         }
 
@@ -782,11 +799,15 @@ public class Microbe {
      * @param forceX horizontal velocity delta (before damping)
      * @param forceY vertical velocity delta (before damping)
      */
+    private void applyVelocityImpulseLocked(double forceX, double forceY) {
+        double sizeFactor = Math.max(0.5, getSize() / 5.0);
+        this.velocityX += (forceX * KNOCKBACK_DAMPING) / sizeFactor;
+        this.velocityY += (forceY * KNOCKBACK_DAMPING) / sizeFactor;
+    }
+
     public void applyKnockback(double forceX, double forceY) {
-        double sizeFactor = getSize() / 5.0;
         synchronized (stateLock) {
-            this.velocityX += (forceX * KNOCKBACK_DAMPING) / sizeFactor;
-            this.velocityY += (forceY * KNOCKBACK_DAMPING) / sizeFactor;
+            applyVelocityImpulseLocked(forceX, forceY);
         }
     }
 
@@ -833,29 +854,44 @@ public class Microbe {
      * @param damage raw damage amount (positive value)
      * @return energy awarded to the attacker (≥ 0)
      */
+    private double applyDamageAndTransferEnergyLocked(double damage) {
+        double vitality = getVitality();
+        double scaledDamage = Math.max(0.0, damage) / vitality;
+        double healthBeforeHit = Math.max(0.0, health);
+        double actualDamage = Math.min(healthBeforeHit, scaledDamage);
+
+        health -= actualDamage;
+        // Trigger the adrenaline/panic response on any hit
+        adrenalineTimer = System.currentTimeMillis();
+
+        // Transfer only what was actually "harvested" by this hit, capped by victim's current energy.
+        double transferEfficiency = Math.max(0.35, ENERGY_TRANSFER_BASE_FACTOR - capacityLoad() * ENERGY_TRANSFER_BULK_PENALTY);
+        double potentialTransfer = maxHealth > 0.0
+                ? (actualDamage / maxHealth) * maxEnergy * transferEfficiency
+                : 0.0;
+        double energyTransferred = Math.min(energy, potentialTransfer);
+        energy -= energyTransferred;
+
+        if (health < 0) {
+            health = 0;
+        }
+        return energyTransferred;
+    }
+
     public double takeDamageAndTransferEnergy(double damage) {
         synchronized (stateLock) {
-            double vitality = getVitality();
-            double scaledDamage = Math.max(0.0, damage) / vitality;
-            double healthBeforeHit = Math.max(0.0, health);
-            double actualDamage = Math.min(healthBeforeHit, scaledDamage);
+            return applyDamageAndTransferEnergyLocked(damage);
+        }
+    }
 
-            health -= actualDamage;
-            // Trigger the adrenaline/panic response on any hit
-            adrenalineTimer = System.currentTimeMillis();
-
-            // Transfer only what was actually "harvested" by this hit, capped by victim's current energy.
-            double transferEfficiency = Math.max(0.35, ENERGY_TRANSFER_BASE_FACTOR - capacityLoad() * ENERGY_TRANSFER_BULK_PENALTY);
-            double potentialTransfer = maxHealth > 0.0
-                    ? (actualDamage / maxHealth) * maxEnergy * transferEfficiency
-                    : 0.0;
-            double energyTransferred = Math.min(energy, potentialTransfer);
-            energy -= energyTransferred;
-
-            if (health < 0) {
-                health = 0;
-            }
-            return energyTransferred;
+    /**
+     * Applies combat damage and knockback in one victim lock section.
+     */
+    public double takeDamageAndTransferEnergyWithKnockback(double damage, double forceX, double forceY) {
+        synchronized (stateLock) {
+            double transferred = applyDamageAndTransferEnergyLocked(damage);
+            applyVelocityImpulseLocked(forceX, forceY);
+            return transferred;
         }
     }
 
@@ -1125,9 +1161,13 @@ public class Microbe {
     public PersistedState toPersistedState() {
         double h;
         double e;
+        double vx;
+        double vy;
         synchronized (stateLock) {
             h = health;
             e = energy;
+            vx = velocityX;
+            vy = velocityY;
         }
         return new PersistedState(
                 id,
@@ -1135,8 +1175,8 @@ public class Microbe {
                 absoluteGeneration,
                 x,
                 y,
-                velocityX,
-                velocityY,
+                vx,
+                vy,
                 heatResistance,
                 toxinResistance,
                 speed,
