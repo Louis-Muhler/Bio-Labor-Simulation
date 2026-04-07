@@ -19,6 +19,8 @@ public class MicrobeCreatorPanel extends JPanel {
     private static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 16);
     private static final Font LABEL_FONT = new Font("Segoe UI", Font.PLAIN, 12);
     private static final Font VALUE_FONT = new Font("Consolas", Font.PLAIN, 12);
+    private static final int MICROBE_MODE_HEIGHT = 620;
+    private static final int FOOD_MODE_HEIGHT = 380;
 
     private final ModernButton microbeModeButton = new ModernButton("MICROBE");
     private final ModernButton foodModeButton = new ModernButton("FOOD");
@@ -35,8 +37,14 @@ public class MicrobeCreatorPanel extends JPanel {
     private final JPanel microbeHealthRow;
     private final JPanel microbeEnergyRow;
     private final JPanel previewShell;
-    private final JLabel foodHint;
     private final ModernButton activateButton;
+    private final JPanel randomAmountRow;
+    private final JPanel amountOnlyRow;
+    private final JPanel body;
+    private final JPanel heatRow;
+    private final JPanel toxinRow;
+    private final JPanel speedRow;
+    private final JPanel dietRow;
     private Runnable activateSpawnToolAction;
     private boolean spawnToolActive;
     private SpawnMode spawnMode = SpawnMode.MICROBE;
@@ -44,7 +52,7 @@ public class MicrobeCreatorPanel extends JPanel {
     public MicrobeCreatorPanel() {
         setOpaque(false);
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(PANEL_WIDTH, 620));
+        setPreferredSize(new Dimension(PANEL_WIDTH, MICROBE_MODE_HEIGHT));
 
         JPanel content = new JPanel(new BorderLayout(0, 8));
         content.setOpaque(false);
@@ -53,50 +61,64 @@ public class MicrobeCreatorPanel extends JPanel {
         JLabel title = new JLabel("ENTITY SPAWNER", SwingConstants.CENTER);
         title.setForeground(ACCENT_COLOR);
         title.setFont(TITLE_FONT);
-        JPanel header = new JPanel();
+        JPanel header = new JPanel(new BorderLayout(0, 8));
         header.setOpaque(false);
-        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-        header.add(title);
-        header.add(Box.createVerticalStrut(8));
+        header.add(title, BorderLayout.NORTH);
 
         JPanel separator = new JPanel();
         separator.setOpaque(true);
         separator.setBackground(new Color(40, 40, 50));
-        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 2));
-        separator.setPreferredSize(new Dimension(10, 2));
-        header.add(separator);
-        header.add(Box.createVerticalStrut(10));
+        separator.setPreferredSize(new Dimension(1, 2));
 
         JPanel modeRow = new JPanel(new GridLayout(1, 2, 8, 0));
         modeRow.setOpaque(false);
-        microbeModeButton.setPreferredSize(new Dimension(120, 34));
-        foodModeButton.setPreferredSize(new Dimension(120, 34));
+        microbeModeButton.setPreferredSize(new Dimension(1, 34));
+        foodModeButton.setPreferredSize(new Dimension(1, 34));
         microbeModeButton.addActionListener(e -> setSelectedMode(SpawnMode.MICROBE));
         foodModeButton.addActionListener(e -> setSelectedMode(SpawnMode.FOOD));
         modeRow.add(microbeModeButton);
         modeRow.add(foodModeButton);
-        header.add(modeRow);
+        JPanel lowerHeader = new JPanel();
+        lowerHeader.setOpaque(false);
+        lowerHeader.setLayout(new BoxLayout(lowerHeader, BoxLayout.Y_AXIS));
+        lowerHeader.add(separator);
+        lowerHeader.add(Box.createVerticalStrut(10));
+        lowerHeader.add(modeRow);
+        header.add(lowerHeader, BorderLayout.CENTER);
         content.add(header, BorderLayout.NORTH);
 
-        JPanel body = new JPanel();
+        body = new JPanel();
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setBorder(new EmptyBorder(8, 6, 8, 6));
+        body.setBorder(new EmptyBorder(8, 0, 8, 0));
 
         randomCheck.addActionListener(e -> applyGeneratedProfile(MicrobeSpawnRequest.randomizedProfile(MicrobeSpawnRequest.defaultProfile())));
-        body.add(randomCheck);
-        body.add(Box.createVerticalStrut(8));
-
-        body.add(rowWithLabel("Amount", amountSpinner));
+        randomAmountRow = new JPanel(new BorderLayout(8, 0));
+        randomAmountRow.setOpaque(false);
+        randomAmountRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        randomAmountRow.add(randomCheck, BorderLayout.WEST);
+        JPanel amountCompact = rowWithLabel("Amount", amountSpinner);
+        amountCompact.setMaximumSize(new Dimension(165, 36));
+        randomAmountRow.add(amountCompact, BorderLayout.EAST);
+        body.add(randomAmountRow);
         body.add(Box.createVerticalStrut(10));
 
-        body.add(heatTrait.component());
+        amountOnlyRow = rowWithLabel("Amount", amountSpinner);
+        amountOnlyRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        body.add(amountOnlyRow);
+        body.add(Box.createVerticalStrut(10));
+
+        heatRow = wrapTraitRow(heatTrait);
+        body.add(heatRow);
         body.add(Box.createVerticalStrut(6));
-        body.add(toxinTrait.component());
+        toxinRow = wrapTraitRow(toxinTrait);
+        body.add(toxinRow);
         body.add(Box.createVerticalStrut(6));
-        body.add(speedTrait.component());
+        speedRow = wrapTraitRow(speedTrait);
+        body.add(speedRow);
         body.add(Box.createVerticalStrut(6));
-        body.add(dietTrait.component());
+        dietRow = wrapTraitRow(dietTrait);
+        body.add(dietRow);
         body.add(Box.createVerticalStrut(8));
 
         microbeHealthRow = rowWithLabel("Max Health", maxHealthInput);
@@ -107,21 +129,16 @@ public class MicrobeCreatorPanel extends JPanel {
         body.add(Box.createVerticalStrut(10));
 
         previewShell = OverlayControlFactory.wrapInInnerFrame(previewCanvas);
-        previewShell.setPreferredSize(new Dimension(280, 190));
-        previewShell.setMaximumSize(new Dimension(Integer.MAX_VALUE, 190));
+        previewShell.setPreferredSize(new Dimension(1, 168));
+        previewShell.setMaximumSize(new Dimension(Integer.MAX_VALUE, 168));
+        previewShell.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(previewShell);
         body.add(Box.createVerticalStrut(10));
 
-        foodHint = new JLabel("Food mode uses Amount + Spawn Tool only.");
-        foodHint.setFont(VALUE_FONT);
-        foodHint.setForeground(ACCENT_COLOR);
-        foodHint.setAlignmentX(Component.LEFT_ALIGNMENT);
-        body.add(foodHint);
-        body.add(Box.createVerticalStrut(10));
-
         activateButton = new ModernButton("Activate Spawn Tool");
-        activateButton.setPreferredSize(new Dimension(220, 38));
+        activateButton.setPreferredSize(new Dimension(1, 38));
         activateButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        activateButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         activateButton.addActionListener(e -> {
             if (activateSpawnToolAction != null) {
                 activateSpawnToolAction.run();
@@ -199,14 +216,15 @@ public class MicrobeCreatorPanel extends JPanel {
         boolean microbeMode = spawnMode == SpawnMode.MICROBE;
 
         randomCheck.setVisible(microbeMode);
-        heatTrait.component().setVisible(microbeMode);
-        toxinTrait.component().setVisible(microbeMode);
-        speedTrait.component().setVisible(microbeMode);
-        dietTrait.component().setVisible(microbeMode);
+        randomAmountRow.setVisible(microbeMode);
+        amountOnlyRow.setVisible(!microbeMode);
+        heatRow.setVisible(microbeMode);
+        toxinRow.setVisible(microbeMode);
+        speedRow.setVisible(microbeMode);
+        dietRow.setVisible(microbeMode);
         microbeHealthRow.setVisible(microbeMode);
         microbeEnergyRow.setVisible(microbeMode);
         previewShell.setVisible(microbeMode);
-        foodHint.setVisible(!microbeMode);
 
         microbeModeButton.setDimmed(microbeMode);
         foodModeButton.setDimmed(!microbeMode);
@@ -214,6 +232,8 @@ public class MicrobeCreatorPanel extends JPanel {
         if (microbeMode) {
             updatePreviewFromControls();
         }
+        setPreferredSize(new Dimension(PANEL_WIDTH, microbeMode ? MICROBE_MODE_HEIGHT : FOOD_MODE_HEIGHT));
+        body.revalidate();
         revalidate();
         repaint();
     }
@@ -277,9 +297,18 @@ public class MicrobeCreatorPanel extends JPanel {
         row.add(amountLabel, BorderLayout.WEST);
 
         OverlayControlFactory.styleSpinner(spinner);
-        spinner.setMaximumSize(new Dimension(110, 30));
+        spinner.setPreferredSize(new Dimension(105, 30));
+        spinner.setMaximumSize(new Dimension(105, 30));
         row.add(spinner, BorderLayout.EAST);
 
+        return row;
+    }
+
+    private JPanel wrapTraitRow(TraitControl control) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.add(control.component(), BorderLayout.CENTER);
         return row;
     }
 
@@ -355,72 +384,84 @@ public class MicrobeCreatorPanel extends JPanel {
     }
 
     private static final class TraitControl {
-        private final JPanel panel = new JPanel(new BorderLayout(6, 2));
+        private final JPanel panel = new JPanel();
         private final JSlider slider;
-        private final JSpinner spinner;
+        private final JLabel valueLabel;
         private Runnable onValueChanged;
+        private final int min;
+        private final int max;
+        private int value;
 
         private TraitControl(String label, int initial, int min, int max, boolean ratio) {
+            this.min = min;
+            this.max = max;
+            this.value = Math.max(min, Math.min(max, initial));
             panel.setOpaque(false);
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
             panel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
             JLabel title = new JLabel(label);
             title.setFont(LABEL_FONT);
             title.setForeground(ACCENT_COLOR);
+            title.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-            slider = new JSlider(min, max, initial);
+            slider = new JSlider(min, max, this.value);
             slider.setOpaque(false);
             slider.setForeground(ACCENT_COLOR);
+            slider.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-            spinner = new JSpinner(new SpinnerNumberModel(initial, min, max, 1));
-            OverlayControlFactory.styleSpinner(spinner);
-            spinner.setPreferredSize(new Dimension(78, 28));
+            valueLabel = new JLabel(formatValue(ratio, this.value), SwingConstants.RIGHT);
+            valueLabel.setFont(VALUE_FONT);
+            valueLabel.setForeground(ACCENT_COLOR);
+            valueLabel.setPreferredSize(new Dimension(60, 22));
 
             slider.addChangeListener(e -> {
-                int value = slider.getValue();
-                if (!spinner.getValue().equals(value)) {
-                    spinner.setValue(value);
-                }
-                fireChanged();
-            });
-            spinner.addChangeListener(e -> {
-                int value = ((Number) spinner.getValue()).intValue();
-                if (slider.getValue() != value) {
-                    slider.setValue(value);
-                }
+                this.value = slider.getValue();
+                valueLabel.setText(formatValue(ratio, this.value));
                 fireChanged();
             });
 
-            JPanel top = new JPanel(new BorderLayout(6, 0));
+            JPanel top = new JPanel(new BorderLayout(8, 0));
             top.setOpaque(false);
+            top.setAlignmentX(Component.LEFT_ALIGNMENT);
             top.add(title, BorderLayout.WEST);
-            top.add(spinner, BorderLayout.EAST);
+            top.add(valueLabel, BorderLayout.EAST);
 
-            panel.add(top, BorderLayout.NORTH);
-            panel.add(slider, BorderLayout.CENTER);
+            panel.add(top);
+            panel.add(Box.createVerticalStrut(2));
+            panel.add(slider);
         }
 
         private JComponent component() {
             return panel;
         }
 
+        private static String formatValue(boolean percent, int value) {
+            return percent ? (value + " %") : String.valueOf(value);
+        }
+
         private double ratioValue() {
-            return ((Number) spinner.getValue()).doubleValue() / 100.0;
+            return value / 100.0;
         }
 
         private void setRatioValue(double value) {
-            spinner.setValue((int) Math.round(Math.max(0.0, Math.min(1.0, value)) * 100.0));
+            int next = (int) Math.round(Math.max(0.0, Math.min(1.0, value)) * 100.0);
+            setValue(next, true);
         }
 
         private double numericValue() {
-            return ((Number) spinner.getValue()).doubleValue();
+            return value;
         }
 
         private void setNumericValue(double value) {
             int next = (int) Math.round(value);
-            int min = slider.getMinimum();
-            int max = slider.getMaximum();
-            spinner.setValue(Math.max(min, Math.min(max, next)));
+            setValue(next, false);
+        }
+
+        private void setValue(int next, boolean percent) {
+            value = Math.max(min, Math.min(max, next));
+            slider.setValue(value);
+            valueLabel.setText(formatValue(percent, value));
         }
 
         private void setOnValueChanged(Runnable onValueChanged) {
@@ -435,7 +476,7 @@ public class MicrobeCreatorPanel extends JPanel {
 
         @Override
         public String toString() {
-            return String.format(Locale.ROOT, "TraitControl[value=%s]", spinner.getValue());
+            return String.format(Locale.ROOT, "TraitControl[value=%s]", value);
         }
     }
 }
