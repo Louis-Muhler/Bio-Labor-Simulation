@@ -35,6 +35,7 @@ public class OverlayManager {
      */
     private static final int SETTINGS_ENV_GAP = 12;
     private static final int ENV_STATS_GAP = 8;
+    private static final int STATS_CREATOR_GAP = 8;
     private static final int LEFT_VIEWER_TO_SPECIMEN_GAP = 12;
     /**
      * Fixed height of the environment panel (content does not change).
@@ -46,14 +47,17 @@ public class OverlayManager {
     private final InspectorPanel inspectorPanel;
     private final EnvironmentPanel environmentPanel;
     private final WorldStatsPanel worldStatsPanel;
+    private final MicrobeCreatorPanel microbeCreatorPanel;
     private final ModernButton envToggleButton;
     private final ModernButton statsToggleButton;
+    private final ModernButton creatorToggleButton;
     private final ModernButton speedButton;
     private final JPanel populationOverlay;
     private final JLabel populationLabel;
     private boolean inspectorVisibleBeforeHide;
     private boolean environmentVisibleBeforeHide;
     private boolean statsVisibleBeforeHide;
+    private boolean creatorVisibleBeforeHide;
 
     // ────────────────────────────────────────────────────────────────────
     // Construction
@@ -74,12 +78,34 @@ public class OverlayManager {
                           ModernButton envToggleButton,
                           ModernButton statsToggleButton,
                           ModernButton speedButton) {
+        this(layeredPaneSupplier,
+                inspectorPanel,
+                environmentPanel,
+                worldStatsPanel,
+                null,
+                envToggleButton,
+                statsToggleButton,
+                null,
+                speedButton);
+    }
+
+    public OverlayManager(Supplier<JLayeredPane> layeredPaneSupplier,
+                          InspectorPanel inspectorPanel,
+                          EnvironmentPanel environmentPanel,
+                          WorldStatsPanel worldStatsPanel,
+                          MicrobeCreatorPanel microbeCreatorPanel,
+                          ModernButton envToggleButton,
+                          ModernButton statsToggleButton,
+                          ModernButton creatorToggleButton,
+                          ModernButton speedButton) {
         this.layeredPaneSupplier = layeredPaneSupplier;
         this.inspectorPanel = inspectorPanel;
         this.environmentPanel = environmentPanel;
         this.worldStatsPanel = worldStatsPanel;
+        this.microbeCreatorPanel = microbeCreatorPanel;
         this.envToggleButton = envToggleButton;
         this.statsToggleButton = statsToggleButton;
+        this.creatorToggleButton = creatorToggleButton;
         this.speedButton = speedButton;
 
         // Transparent panel – no background box, only the label itself is visible
@@ -189,6 +215,25 @@ public class OverlayManager {
         worldStatsPanel.repaint();
     }
 
+    public void positionMicrobeCreatorPanel() {
+        if (microbeCreatorPanel == null) {
+            return;
+        }
+        JLayeredPane lp = layeredPaneSupplier.get();
+        int topY = overlayTopY(lp);
+        int panelX = leftViewerX();
+        int panelHeight = viewerAvailableHeight(lp);
+        int panelWidth = Math.min(MicrobeCreatorPanel.PANEL_WIDTH, maxLeftViewerWidth(lp));
+        panelWidth = Math.max(260, panelWidth);
+
+        if (microbeCreatorPanel.getParent() != lp) {
+            lp.add(microbeCreatorPanel, JLayeredPane.PALETTE_LAYER);
+        }
+        microbeCreatorPanel.setBounds(panelX, topY, panelWidth, panelHeight);
+        microbeCreatorPanel.revalidate();
+        microbeCreatorPanel.repaint();
+    }
+
     /** Places the environment toggle button directly below the settings button. */
     public void positionEnvToggleButton() {
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -212,6 +257,21 @@ public class OverlayManager {
         statsToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
         statsToggleButton.revalidate();
         statsToggleButton.repaint();
+    }
+
+    public void positionCreatorToggleButton() {
+        if (creatorToggleButton == null) {
+            return;
+        }
+        JLayeredPane lp = layeredPaneSupplier.get();
+        int topY = overlayTopY(lp) + (BTN_SIZE * 3) + SETTINGS_ENV_GAP + ENV_STATS_GAP + STATS_CREATOR_GAP;
+
+        if (creatorToggleButton.getParent() != lp) {
+            lp.add(creatorToggleButton, JLayeredPane.PALETTE_LAYER);
+        }
+        creatorToggleButton.setBounds(OVERLAY_EDGE_MARGIN, topY, BTN_SIZE, BTN_SIZE);
+        creatorToggleButton.revalidate();
+        creatorToggleButton.repaint();
     }
 
     /**
@@ -263,12 +323,16 @@ public class OverlayManager {
         positionInspectorPanel();
         positionEnvToggleButton();
         positionStatsToggleButton();
+        positionCreatorToggleButton();
         positionFloatingControls();
         if (environmentPanel.isVisible()) {
             positionEnvironmentPanel();
         }
         if (worldStatsPanel.isVisible()) {
             positionWorldStatsPanel();
+        }
+        if (microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
+            positionMicrobeCreatorPanel();
         }
     }
 
@@ -311,6 +375,10 @@ public class OverlayManager {
                 worldStatsPanel.hidePanel();
                 statsToggleButton.setDimmed(false);
             }
+            if (microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
+                microbeCreatorPanel.setVisible(false);
+                if (creatorToggleButton != null) creatorToggleButton.setDimmed(false);
+            }
             environmentPanel.setVisible(true);
             positionEnvironmentPanel();
             envToggleButton.setDimmed(true);
@@ -328,9 +396,37 @@ public class OverlayManager {
                 environmentPanel.setVisible(false);
                 envToggleButton.setDimmed(false);
             }
+            if (microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
+                microbeCreatorPanel.setVisible(false);
+                if (creatorToggleButton != null) creatorToggleButton.setDimmed(false);
+            }
             worldStatsPanel.showPanel();
             positionWorldStatsPanel();
             statsToggleButton.setDimmed(true);
+        }
+        lp.repaint();
+    }
+
+    public void toggleMicrobeCreatorPanel() {
+        if (microbeCreatorPanel == null || creatorToggleButton == null) {
+            return;
+        }
+        JLayeredPane lp = layeredPaneSupplier.get();
+        if (microbeCreatorPanel.isVisible()) {
+            microbeCreatorPanel.setVisible(false);
+            creatorToggleButton.setDimmed(false);
+        } else {
+            if (environmentPanel.isVisible()) {
+                environmentPanel.setVisible(false);
+                envToggleButton.setDimmed(false);
+            }
+            if (worldStatsPanel.isVisible()) {
+                worldStatsPanel.hidePanel();
+                statsToggleButton.setDimmed(false);
+            }
+            microbeCreatorPanel.setVisible(true);
+            positionMicrobeCreatorPanel();
+            creatorToggleButton.setDimmed(true);
         }
         lp.repaint();
     }
@@ -360,30 +456,43 @@ public class OverlayManager {
         if (visible) {
             inspectorPanel.setVisible(inspectorVisibleBeforeHide);
             boolean wantStats = statsVisibleBeforeHide;
-            boolean wantEnv = environmentVisibleBeforeHide && !wantStats;
+            boolean wantCreator = creatorVisibleBeforeHide;
+            boolean wantEnv = environmentVisibleBeforeHide && !wantStats && !wantCreator;
             environmentPanel.setVisible(wantEnv);
             if (wantStats) {
                 worldStatsPanel.showPanel();
             } else {
                 worldStatsPanel.hidePanel();
             }
+            if (microbeCreatorPanel != null) {
+                microbeCreatorPanel.setVisible(wantCreator && !wantStats && !wantEnv);
+            }
             envToggleButton.setDimmed(wantEnv);
             statsToggleButton.setDimmed(wantStats);
+            if (creatorToggleButton != null) {
+                creatorToggleButton.setDimmed(microbeCreatorPanel != null && microbeCreatorPanel.isVisible());
+            }
         } else {
             inspectorVisibleBeforeHide = inspectorPanel.isVisible();
             environmentVisibleBeforeHide = environmentPanel.isVisible();
             statsVisibleBeforeHide = worldStatsPanel.isVisible();
+            creatorVisibleBeforeHide = microbeCreatorPanel != null && microbeCreatorPanel.isVisible();
             inspectorPanel.setVisible(false);
             environmentPanel.setVisible(false);
             worldStatsPanel.hidePanel();
+            if (microbeCreatorPanel != null) {
+                microbeCreatorPanel.setVisible(false);
+            }
         }
         envToggleButton.setVisible(visible);
         statsToggleButton.setVisible(visible);
+        if (creatorToggleButton != null) creatorToggleButton.setVisible(visible);
         speedButton.setVisible(visible);
         populationOverlay.setVisible(visible);
         if (!visible) {
             envToggleButton.setDimmed(false);
             statsToggleButton.setDimmed(false);
+            if (creatorToggleButton != null) creatorToggleButton.setDimmed(false);
             inspectorPanel.hidePanel();
         }
         JLayeredPane lp = layeredPaneSupplier.get();
@@ -398,8 +507,14 @@ public class OverlayManager {
         lp.remove(inspectorPanel);
         lp.remove(environmentPanel);
         lp.remove(worldStatsPanel);
+        if (microbeCreatorPanel != null) {
+            lp.remove(microbeCreatorPanel);
+        }
         lp.remove(envToggleButton);
         lp.remove(statsToggleButton);
+        if (creatorToggleButton != null) {
+            lp.remove(creatorToggleButton);
+        }
         lp.remove(speedButton);
         lp.remove(populationOverlay);
         lp.repaint();

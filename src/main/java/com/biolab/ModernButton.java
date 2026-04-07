@@ -93,6 +93,7 @@ public class ModernButton extends JButton {
             case STOP -> ModernButton::drawStopIcon;
             case ENVIRONMENT -> ModernButton::drawEnvironmentIcon;
             case CHART -> ModernButton::drawChartIcon;
+            case CREATOR -> ModernButton::drawCreatorIcon;
             case NONE -> null;
         };
     }
@@ -216,6 +217,15 @@ public class ModernButton extends JButton {
         g2d.fillOval(x + 6, y - 5, 3, 3);
     }
 
+    private static void drawCreatorIcon(Graphics2D g2d, Point pos) {
+        int x = pos.x;
+        int y = pos.y;
+        g2d.setStroke(ICON_STROKE_1_5_ROUND);
+        g2d.drawOval(x - 9, y - 9, 18, 18);
+        g2d.drawLine(x - 4, y, x + 4, y);
+        g2d.drawLine(x, y - 4, x, y + 4);
+    }
+
 
     private static void drawStopIcon(Graphics2D g2d, Point pos) {
         int size = 6;
@@ -310,6 +320,7 @@ public class ModernButton extends JButton {
         PAUSE,
         STOP,
         ENVIRONMENT,
-        CHART
+        CHART,
+        CREATOR
     }
 }

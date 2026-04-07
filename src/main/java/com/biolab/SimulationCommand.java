@@ -47,6 +47,28 @@ public interface SimulationCommand {
         };
     }
 
+    static SimulationCommand spawnMicrobes(MicrobeSpawnRequest request) {
+        return runtime -> {
+            if (request == null) {
+                return;
+            }
+            for (int i = 0; i < request.amount(); i++) {
+                runtime.spawnMicrobe(request.createMicrobeForIndex(i));
+            }
+        };
+    }
+
+    static SimulationCommand spawnFood(FoodSpawnRequest request) {
+        return runtime -> {
+            if (request == null) {
+                return;
+            }
+            for (int i = 0; i < request.amount(); i++) {
+                runtime.spawnFood(new FoodPellet(request.worldX(), request.worldY()));
+            }
+        };
+    }
+
     default CommandKey coalescingKey() {
         return null;
     }

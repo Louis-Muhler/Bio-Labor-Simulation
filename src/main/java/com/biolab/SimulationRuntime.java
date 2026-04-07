@@ -30,6 +30,10 @@ public interface SimulationRuntime {
 
     void spawnMicrobe(Microbe microbe);
 
+    default void spawnFood(FoodPellet foodPellet) {
+        // Optional runtime capability used by spawn commands.
+    }
+
     void setFoodSpawnRate(double rate);
 
     void enqueueCommand(SimulationCommand command);

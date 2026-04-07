@@ -44,6 +44,8 @@ public class SimulationCanvas extends JPanel {
     private static final Font DEBUG_STATS_FONT = new Font("Consolas", Font.BOLD, 12);
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
     private static final double SIM_TICKS_PER_SIM_SECOND = 30.0;
+    private static final int PLACEMENT_HOLD_INTERVAL_MS = 120;
+    private static final int PLACEMENT_INDICATOR_RADIUS = 12;
 
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
     // Avoids AlphaComposite.getInstance() per frame for debug overlays.
@@ -122,6 +124,10 @@ public class SimulationCanvas extends JPanel {
     private long accumulatedSimTicksInWindow;
     private double measuredSimTicksPerSecond;
     private double measuredSimSecondsPerSecond;
+    private PlacementTool placementTool;
+    private Point placementMousePoint;
+    private boolean placementHoldActive;
+    private javax.swing.Timer placementHoldTimer;
 
     // ─────────────────────────────────────────────────────────────────────
     // Construction
@@ -139,6 +145,14 @@ public class SimulationCanvas extends JPanel {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
                 if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+                    if (placementTool != null) {
+                        placementMousePoint = e.getPoint();
+                        placeFromScreen(placementMousePoint.x, placementMousePoint.y);
+                        placementHoldActive = true;
+                        ensurePlacementHoldTimer().start();
+                        repaint();
+                        return;
+                    }
                     Microbe clicked = findMicrobeAtScreenPos(e.getX(), e.getY());
                     if (clicked != null) {
                         selectionListener.onMicrobeSelected(clicked);
@@ -156,6 +170,14 @@ public class SimulationCanvas extends JPanel {
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+                    placementHoldActive = false;
+                    if (placementHoldTimer != null) {
+                        placementHoldTimer.stop();
+                    }
+                    if (placementTool != null) {
+                        setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                        return;
+                    }
                     if (isDragging) {
                         int dx = Math.abs(e.getX() - pressMouseX);
                         int dy = Math.abs(e.getY() - pressMouseY);
@@ -172,6 +194,11 @@ public class SimulationCanvas extends JPanel {
         addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
             public void mouseDragged(java.awt.event.MouseEvent e) {
+                placementMousePoint = e.getPoint();
+                if (placementTool != null) {
+                    repaint();
+                    return;
+                }
                 if (isDragging) {
                     int dx = e.getX() - lastMouseX;
                     int dy = e.getY() - lastMouseY;
@@ -180,6 +207,14 @@ public class SimulationCanvas extends JPanel {
                     clampCamera();
                     lastMouseX = e.getX();
                     lastMouseY = e.getY();
+                    repaint();
+                }
+            }
+
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                if (placementTool != null) {
+                    placementMousePoint = e.getPoint();
                     repaint();
                 }
             }
@@ -285,11 +320,10 @@ public class SimulationCanvas extends JPanel {
      * position, or {@code null} if no microbe is there.
      */
     private Microbe findMicrobeAtScreenPos(int screenX, int screenY) {
-        double worldX = (screenX - getWidth() / 2.0) / zoom + cameraX;
-        double worldY = (screenY - getHeight() / 2.0) / zoom + cameraY;
+        Point.Double world = screenToWorld(screenX, screenY);
         SimulationSnapshot snapshot = engine.getRenderSnapshot();
         for (Microbe.RenderState m : snapshot.microbes()) {
-            if (m.contains(worldX, worldY)) {
+            if (m.contains(world.x, world.y)) {
                 return engine.findMicrobeById(m.id());
             }
         }
@@ -492,6 +526,18 @@ public class SimulationCanvas extends JPanel {
             // ── Restore screen-space transform ────────────────────────────
             g2d.setTransform(originalTransform);
 
+            if (placementTool != null && placementMousePoint != null) {
+                Point.Double world = screenToWorld(placementMousePoint.x, placementMousePoint.y);
+                int sx = worldToScreenX(world.x);
+                int sy = worldToScreenY(world.y);
+                g2d.setColor(new Color(0, 255, 255, 170));
+                g2d.setStroke(STROKE_1);
+                g2d.drawOval(sx - PLACEMENT_INDICATOR_RADIUS, sy - PLACEMENT_INDICATOR_RADIUS,
+                        PLACEMENT_INDICATOR_RADIUS * 2, PLACEMENT_INDICATOR_RADIUS * 2);
+                g2d.drawLine(sx - 4, sy, sx + 4, sy);
+                g2d.drawLine(sx, sy - 4, sx, sy + 4);
+            }
+
             if (debugOn) {
                 drawDebugStats(g2d);
             }
@@ -552,6 +598,56 @@ public class SimulationCanvas extends JPanel {
         g2d.drawString(line2, x + 7, y + 6 + fm.getHeight() + fm.getAscent());
     }
 
+    public void setPlacementTool(PlacementTool tool) {
+        placementTool = tool;
+        placementHoldActive = false;
+        if (placementHoldTimer != null) {
+            placementHoldTimer.stop();
+        }
+        if (tool == null) {
+            placementMousePoint = null;
+            setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+        } else {
+            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        }
+        repaint();
+    }
+
+    private javax.swing.Timer ensurePlacementHoldTimer() {
+        if (placementHoldTimer == null) {
+            placementHoldTimer = new javax.swing.Timer(PLACEMENT_HOLD_INTERVAL_MS, e -> {
+                if (!placementHoldActive || placementTool == null || placementMousePoint == null) {
+                    return;
+                }
+                placeFromScreen(placementMousePoint.x, placementMousePoint.y);
+            });
+        }
+        return placementHoldTimer;
+    }
+
+    private void placeFromScreen(int screenX, int screenY) {
+        if (placementTool == null) {
+            return;
+        }
+        Point.Double world = screenToWorld(screenX, screenY);
+        placementTool.placeAt(world.x, world.y);
+    }
+
+    private Point.Double screenToWorld(int screenX, int screenY) {
+        return new Point.Double(
+                (screenX - getWidth() / 2.0) / zoom + cameraX,
+                (screenY - getHeight() / 2.0) / zoom + cameraY
+        );
+    }
+
+    private int worldToScreenX(double worldX) {
+        return (int) Math.round((worldX - cameraX) * zoom + getWidth() / 2.0);
+    }
+
+    private int worldToScreenY(double worldY) {
+        return (int) Math.round((worldY - cameraY) * zoom + getHeight() / 2.0);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Inner interface
     // ─────────────────────────────────────────────────────────────────────
@@ -563,6 +659,11 @@ public class SimulationCanvas extends JPanel {
 
         /** Called when the user clicks on empty space, clearing the selection. */
         void onSelectionCleared();
+    }
+
+    @FunctionalInterface
+    public interface PlacementTool {
+        void placeAt(double worldX, double worldY);
     }
 }
 

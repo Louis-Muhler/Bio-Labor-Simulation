@@ -829,72 +829,11 @@ public class InspectorPanel extends JPanel {
             drawCentered(g2, "SPECIMEN", CW / 2, y);
             y += 40;
 
-            // Scale factor so the on-canvas microbe (size=5 px) appears large here.
             Microbe.RenderState renderState = microbe.toRenderState();
-            int scaledCarnivoreBonus = (int) Math.max(1, Math.round(2.0 * PREVIEW_SCALE));
-            int size = MicrobeRenderStyle.sizeWithCarnivoreBonus(
-                    (int) (renderState.size() * PREVIEW_SCALE),
-                    renderState.carnivore(),
-                    scaledCarnivoreBonus
-            );
+            int previewSize = (int) (renderState.size() * PREVIEW_SCALE);
             int cx = CW / 2;
-            int cy = y + size;  // leave room for glow above
-            int x = cx - size / 2;
-            int baseY = cy - size / 2;
-
-            Color mc = renderState.color();
-
-            Composite orig = g2.getComposite();
-
-            MicrobeRenderStyle.drawGlow(
-                    g2,
-                    x,
-                    baseY,
-                    size,
-                    mc,
-                    renderState.healthRatio(),
-                    PREVIEW_SCALE,
-                    orig
-            );
-
-            MicrobeRenderStyle.drawPredatorSpikes(
-                    g2,
-                    cx,
-                    cy,
-                    size,
-                    renderState.defense(),
-                    renderState.strength(),
-                    mc,
-                    1.35,
-                    PREVIEW_SCALE,
-                    2,
-                    orig
-            );
-
-            MicrobeRenderStyle.drawBody(
-                    g2,
-                    x,
-                    baseY,
-                    size,
-                    mc,
-                    renderState.brightColor(),
-                    MicrobeRenderStyle.computeRimStrokeWidth(size, renderState.defense(), 2.75),
-                    2f,
-                    orig
-            );
-
-            MicrobeRenderStyle.drawCombatAndSelectionOverlays(
-                    g2,
-                    x,
-                    baseY,
-                    size,
-                    renderState.carnivore(),
-                    renderState.lastAttackTime(),
-                    System.currentTimeMillis(),
-                    renderState.selected(),
-                    false,
-                    orig
-            );
+            int cy = y + previewSize;
+            MicrobePreviewRenderer.paintPreview(g2, renderState, cx, cy, PREVIEW_SCALE);
         }
 
         private record LineagePoint(int generation,

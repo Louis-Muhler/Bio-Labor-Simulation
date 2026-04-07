@@ -390,6 +390,52 @@ public class Microbe {
     }
 
     /**
+     * Creates a sandbox-spawned microbe with explicit trait values.
+     */
+    public static Microbe createSpawned(double x,
+                                        double y,
+                                        double heatResistance,
+                                        double toxinResistance,
+                                        double speed,
+                                        double diet,
+                                        double maxHealth,
+                                        double maxEnergy) {
+        double clampedHeat = clamp01(heatResistance);
+        double clampedToxin = clamp01(toxinResistance);
+        double clampedSpeed = clamp01(speed);
+        double clampedDiet = clamp01(diet);
+        double sanitizedMaxHealth = sanitizeMaxHealth(maxHealth);
+        double sanitizedMaxEnergy = sanitizeMaxEnergy(maxEnergy);
+        Microbe microbe = new Microbe(
+                ID_COUNTER.getAndIncrement(),
+                -1,
+                1,
+                x,
+                y,
+                clampedHeat,
+                clampedToxin,
+                clampedSpeed,
+                clampedDiet,
+                sanitizedMaxHealth,
+                sanitizedMaxEnergy,
+                sanitizedMaxHealth,
+                sanitizedMaxEnergy * INITIAL_ENERGY_RATIO,
+                0,
+                0.0,
+                0.0,
+                false,
+                0L,
+                -1,
+                -1,
+                AiState.WANDER,
+                0L,
+                List.of()
+        );
+        microbe.randomizeVelocity();
+        return microbe;
+    }
+
+    /**
      * Mutates a gene value slightly.
      */
     private double mutate(double value) {

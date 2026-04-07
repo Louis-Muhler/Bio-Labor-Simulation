@@ -8,8 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class OverlayManagerLayoutTest {
 
@@ -20,14 +19,36 @@ class OverlayManagerLayoutTest {
         bundle.manager.positionInspectorPanel();
         bundle.manager.positionEnvironmentPanel();
         bundle.manager.positionWorldStatsPanel();
+        bundle.manager.positionMicrobeCreatorPanel();
 
         Rectangle env = bundle.environmentPanel.getBounds();
         Rectangle stats = bundle.worldStatsPanel.getBounds();
+        Rectangle creator = bundle.microbeCreatorPanel.getBounds();
         Rectangle inspector = bundle.inspectorPanel.getBounds();
 
         assertEquals(env.x, stats.x);
         assertEquals(env.y, stats.y);
+        assertEquals(env.x, creator.x);
+        assertEquals(env.y, creator.y);
         assertEquals(inspector.y, stats.y);
+    }
+
+    @Test
+    void leftViewerTogglesShouldRemainMutuallyExclusiveWithCreator() {
+        OverlayBundle bundle = newBundle(1280, 800, false);
+
+        bundle.manager.toggleEnvironmentPanel();
+        assertTrue(bundle.environmentPanel.isVisible());
+
+        bundle.manager.toggleMicrobeCreatorPanel();
+        assertTrue(bundle.microbeCreatorPanel.isVisible());
+        assertFalse(bundle.environmentPanel.isVisible());
+        assertFalse(bundle.worldStatsPanel.isVisible());
+
+        bundle.manager.toggleWorldStatsPanel();
+        assertTrue(bundle.worldStatsPanel.isVisible());
+        assertFalse(bundle.microbeCreatorPanel.isVisible());
+        assertFalse(bundle.environmentPanel.isVisible());
     }
 
     @Test
@@ -79,19 +100,27 @@ class OverlayManagerLayoutTest {
 
         ModernButton envButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
         ModernButton statsButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
+        ModernButton creatorButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
+        MicrobeCreatorPanel microbeCreatorPanel = new MicrobeCreatorPanel();
 
         OverlayManager manager = new OverlayManager(
                 () -> layeredPane,
                 inspectorPanel,
                 environmentPanel,
                 worldStatsPanel,
+                microbeCreatorPanel,
                 envButton,
                 statsButton,
+                creatorButton,
                 speedButton
         );
 
-        return new OverlayBundle(layeredPane, manager, inspectorPanel, environmentPanel, worldStatsPanel);
+        environmentPanel.setVisible(false);
+        worldStatsPanel.hidePanel();
+        microbeCreatorPanel.setVisible(false);
+
+        return new OverlayBundle(layeredPane, manager, inspectorPanel, environmentPanel, worldStatsPanel, microbeCreatorPanel);
     }
 
     private record OverlayBundle(
@@ -99,7 +128,8 @@ class OverlayManagerLayoutTest {
             OverlayManager manager,
             InspectorPanel inspectorPanel,
             EnvironmentPanel environmentPanel,
-            WorldStatsPanel worldStatsPanel
+            WorldStatsPanel worldStatsPanel,
+            MicrobeCreatorPanel microbeCreatorPanel
     ) {
     }
 

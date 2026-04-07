@@ -40,6 +40,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private final SettingsFlowCoordinator settingsFlowCoordinator;
     private final AppUiStateMachine uiStateMachine;
     private ModernButton runtimeSpeedButton;
+    private MicrobeCreatorPanel microbeCreatorPanel;
 
     private volatile Microbe selectedMicrobe;
     private boolean gameplayParkedInMenu;
@@ -332,6 +333,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         engine = null;
         canvas = null;
         overlayManager = null;
+        microbeCreatorPanel = null;
         runtimeSpeedButton = null;
         selectedMicrobe = null;
         sessionSaveCoordinator.clearSessionContext();
@@ -341,22 +343,43 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         InspectorPanel inspectorPanel = new InspectorPanel();
         EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
         WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine, settingsManager);
+        microbeCreatorPanel = new MicrobeCreatorPanel();
         ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
         ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
+        ModernButton creatorToggleButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
         ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
         runtimeSpeedButton = speedButton;
 
         overlayManager = new OverlayManager(this::getLayeredPane,
-                inspectorPanel, environmentPanel, worldStatsPanel, envToggleButton, statsToggleButton, speedButton);
+                inspectorPanel,
+                environmentPanel,
+                worldStatsPanel,
+                microbeCreatorPanel,
+                envToggleButton,
+                statsToggleButton,
+                creatorToggleButton,
+                speedButton);
 
         envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
         statsToggleButton.addActionListener(e -> overlayManager.toggleWorldStatsPanel());
+        creatorToggleButton.addActionListener(e -> overlayManager.toggleMicrobeCreatorPanel());
         speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
+        microbeCreatorPanel.setActivateSpawnToolAction(this::activateSpawnToolFromCreator);
 
         inspectorPanel.setVisible(false);
         environmentPanel.setVisible(false);
         worldStatsPanel.hidePanel();
+        microbeCreatorPanel.setVisible(false);
         overlayManager.repositionAllOverlays();
+    }
+
+    private void activateSpawnToolFromCreator() {
+        if (canvas == null || engine == null || microbeCreatorPanel == null) {
+            return;
+        }
+        canvas.setPlacementTool((worldX, worldY) ->
+                engine.enqueueCommand(microbeCreatorPanel.buildSpawnCommand(worldX, worldY))
+        );
     }
 
     private void showMainMenu() {
@@ -468,7 +491,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         Microbe prev = selectedMicrobe;
         if (prev != null) prev.setSelected(false);
         selectedMicrobe = null;
-        if (canvas != null) canvas.stopFollowing();
+        if (canvas != null) {
+            canvas.stopFollowing();
+            canvas.setPlacementTool(null);
+        }
         gameplayParkedInMenu = true;
         showMainMenu();
     }

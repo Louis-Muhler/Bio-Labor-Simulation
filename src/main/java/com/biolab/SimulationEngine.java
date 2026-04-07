@@ -262,6 +262,15 @@ public class SimulationEngine implements SimulationRuntime {
         }
     }
 
+    @Override
+    public void spawnFood(FoodPellet foodPellet) {
+        synchronized (frameMutationLock) {
+            synchronized (worldState.dataLock()) {
+                renderSnapshot = context.stateCoordinator().spawnFood(foodPellet);
+            }
+        }
+    }
+
     /**
      * Main simulation update called every frame.
      * Uses thread pool to process microbes concurrently.
