@@ -387,6 +387,7 @@ public class SaveBrowserOverlay extends JPanel {
             cancelInlineRename();
         }
         editingIndex = index;
+        renderer.setEditingIndex(index);
         Rectangle rowBounds = list.getCellBounds(index, index);
         if (rowBounds == null) {
             cancelInlineRename();
@@ -438,6 +439,7 @@ public class SaveBrowserOverlay extends JPanel {
 
     private void cancelInlineRename() {
         editingIndex = -1;
+        renderer.setEditingIndex(-1);
         inlineRenameEditor.setVisible(false);
         inlineRenameEditor.setText("");
         list.requestFocusInWindow();

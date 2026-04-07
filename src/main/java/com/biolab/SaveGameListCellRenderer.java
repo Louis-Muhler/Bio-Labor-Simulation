@@ -9,6 +9,7 @@ import java.awt.*;
  */
 public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetadata> {
     private int hoveredIndex = -1;
+    private int editingIndex = -1;
     private final RowPanel row = new RowPanel();
     private final EmptyBorder basePadding = new EmptyBorder(8, 12, 8, 12);
     private final JLabel name = new JLabel();
@@ -46,6 +47,10 @@ public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetada
         this.hoveredIndex = hoveredIndex;
     }
 
+    public void setEditingIndex(int editingIndex) {
+        this.editingIndex = editingIndex;
+    }
+
     @Override
     public Component getListCellRendererComponent(JList<? extends SaveGameMetadata> list,
                                                   SaveGameMetadata value,
@@ -60,7 +65,7 @@ public class SaveGameListCellRenderer implements ListCellRenderer<SaveGameMetada
                 BorderFactory.createEmptyBorder(0, 0, 0, 0),
                 new EmptyBorder(7, 11, 7, 11))
                 : basePadding);
-        name.setText(value.listName());
+        name.setText(index == editingIndex ? "" : value.listName());
         metaTop.setText(value.listMetaPrimary());
         metaBottom.setText(value.listMetaSecondary());
 
