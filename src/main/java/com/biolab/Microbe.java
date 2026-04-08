@@ -66,6 +66,9 @@ public class Microbe {
     // Cached rendering values – immutable after construction
     private final Color cachedColor;
     private final Color cachedBrightColor;
+    private volatile Color cachedDynamicColor;
+    private volatile Color cachedDynamicBrightColor;
+    private volatile int lastEnergyColorBucket = -1;
     private final double toxinResistance;
     private final double speed;
     private static final double BASE_MAX_HEALTH = 100.0;
@@ -195,6 +198,9 @@ public class Microbe {
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
+        this.cachedDynamicColor = this.cachedColor;
+        this.cachedDynamicBrightColor = this.cachedBrightColor;
+        this.lastEnergyColorBucket = toEnergyBucket(getEnergyRatio());
         randomizeVelocity();
     }
 
@@ -251,6 +257,9 @@ public class Microbe {
         this.unmodifiableAncestry = Collections.unmodifiableList(this.ancestry);
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
+        this.cachedDynamicColor = this.cachedColor;
+        this.cachedDynamicBrightColor = this.cachedBrightColor;
+        this.lastEnergyColorBucket = toEnergyBucket(getEnergyRatio());
     }
 
     /**
@@ -303,6 +312,9 @@ public class Microbe {
         this.unmodifiableAncestry = Collections.unmodifiableList(this.ancestry);
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
+        this.cachedDynamicColor = this.cachedColor;
+        this.cachedDynamicBrightColor = this.cachedBrightColor;
+        this.lastEnergyColorBucket = toEnergyBucket(getEnergyRatio());
         randomizeVelocity();
     }
 
@@ -405,6 +417,9 @@ public class Microbe {
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
         this.cachedColor = computeColor();
         this.cachedBrightColor = computeBrightColor();
+        this.cachedDynamicColor = this.cachedColor;
+        this.cachedDynamicBrightColor = this.cachedBrightColor;
+        this.lastEnergyColorBucket = toEnergyBucket(getEnergyRatio());
         randomizeVelocity();
     }
 
@@ -498,6 +513,10 @@ public class Microbe {
 
     private static double clampRatio(double ratio) {
         return clamp(ratio, 0.0, 1.0);
+    }
+
+    private static int toEnergyBucket(double energyRatio) {
+        return (int) Math.round(clamp01(energyRatio) * 100.0);
     }
 
     private static double computeCapacityLoad(double maxHealth, double maxEnergy) {
@@ -1193,8 +1212,16 @@ public class Microbe {
             healthRatio = maxHealth <= 0.0 ? 0.0 : clamp01(health / maxHealth);
             energyRatio = maxEnergy <= 0.0 ? 0.0 : clamp01(energy / maxEnergy);
         }
-        Color renderColor = computeColor(energyRatio);
-        Color renderBrightColor = computeBrightColor(renderColor);
+        int energyBucket = toEnergyBucket(energyRatio);
+        Color renderColor = cachedDynamicColor;
+        Color renderBrightColor = cachedDynamicBrightColor;
+        if (renderColor == null || renderBrightColor == null || energyBucket != lastEnergyColorBucket) {
+            renderColor = computeColor(energyRatio);
+            renderBrightColor = computeBrightColor(renderColor);
+            cachedDynamicColor = renderColor;
+            cachedDynamicBrightColor = renderBrightColor;
+            lastEnergyColorBucket = energyBucket;
+        }
         return new RenderState(
                 id,
                 position.x(),
