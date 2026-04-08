@@ -69,9 +69,8 @@ public class MicrobeGrid {
 
         // Insert each living microbe into its cell
         for (Microbe microbe : snapshot) {
-            if (microbe.isDead()) continue; // Skip dead microbes
+            if (microbe == null || microbe.isDead()) continue;
             Microbe.PositionSnapshot position = microbe.getPositionSnapshot();
-
             int col = Math.min((int) (position.x() / cellSize), cols - 1);
             int row = Math.min((int) (position.y() / cellSize), rows - 1);
             col = Math.max(0, col);

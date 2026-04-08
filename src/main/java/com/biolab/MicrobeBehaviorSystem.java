@@ -79,8 +79,12 @@ final class MicrobeBehaviorSystem {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<Microbe> nearbyMicrobes = new ArrayList<>(64);
         List<FoodPellet> nearbyFood = new ArrayList<>(64);
+        List<Microbe> newbornBuffer = new ArrayList<>(16);
 
         for (int i = start; i < end; i++) {
+            if (Thread.currentThread().isInterrupted()) {
+                break;
+            }
             Microbe microbe = snapshot.get(i);
             if (microbe.isDead()) continue;
 
@@ -96,7 +100,13 @@ final class MicrobeBehaviorSystem {
                 processHerbivoreBehaviour(microbe, nearbyMicrobes, nearbyFood);
             }
 
-            tryReproduce(microbe, random);
+            tryReproduce(microbe, random, newbornBuffer);
+        }
+
+        if (!newbornBuffer.isEmpty()) {
+            synchronized (newMicrobes) {
+                newMicrobes.addAll(newbornBuffer);
+            }
         }
     }
 
@@ -211,11 +221,14 @@ final class MicrobeBehaviorSystem {
         return new FoodCandidate(best, bestDistSq);
     }
 
-    private void tryReproduce(Microbe microbe, ThreadLocalRandom random) {
+    private void tryReproduce(Microbe microbe, ThreadLocalRandom random, List<Microbe> newbornBuffer) {
         if (!microbe.canReproduce()) return;
 
         int retryCount = 0;
         while (retryCount < MAX_REPRODUCTION_ATTEMPTS) {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
             int currentSlots = availableReproductionSlots.get();
             if (currentSlots <= 0) break;
 
@@ -227,9 +240,7 @@ final class MicrobeBehaviorSystem {
                         microbe.getX() + offsetX,
                         microbe.getY() + offsetY
                 );
-                synchronized (newMicrobes) {
-                    newMicrobes.add(child);
-                }
+                newbornBuffer.add(child);
                 microbe.resetReproduction();
                 break;
             }

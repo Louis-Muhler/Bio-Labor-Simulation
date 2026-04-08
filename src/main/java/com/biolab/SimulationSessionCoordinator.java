@@ -3,7 +3,6 @@ package com.biolab;
 import javax.swing.*;
 import java.awt.*;
 import java.util.logging.Logger;
-
 /**
  * Owns gameplay-session runtime objects (engine, canvas, overlays, loop) and their lifecycle.
  */

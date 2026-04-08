@@ -126,4 +126,33 @@ class MicrobeBehaviorSystemTest {
         assertTrue(prey.getHealth() < preyBefore,
                 "Carnivore should damage reachable prey even when it is in the second cell ring");
     }
+
+    @Test
+    void processChunkShouldAbortCooperativelyWhenThreadIsInterrupted() {
+        List<Microbe> microbes = new ArrayList<>();
+        for (int i = 0; i < 500; i++) {
+            microbes.add(new Microbe(100 + i % 10, 100 + i % 10));
+        }
+
+        SpatialGrid foodGrid = new SpatialGrid(600, 600, 30);
+        foodGrid.rebuild(List.of());
+        MicrobeGrid microbeGrid = new MicrobeGrid(600, 600, 30);
+        microbeGrid.rebuild(microbes);
+
+        MicrobeBehaviorSystem behaviorSystem = new MicrobeBehaviorSystem(
+                600,
+                600,
+                new AtomicInteger(1000),
+                new ArrayList<>()
+        );
+
+        Thread.currentThread().interrupt();
+        try {
+            behaviorSystem.processChunk(microbes, foodGrid, microbeGrid, 0, microbes.size(), 0.2, 0.2);
+            assertTrue(Thread.currentThread().isInterrupted(),
+                    "processChunk should not consume interrupt status");
+        } finally {
+            Thread.interrupted();
+        }
+    }
 }

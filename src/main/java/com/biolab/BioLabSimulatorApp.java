@@ -405,7 +405,16 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void returnToMainMenuFromGameplay() {
-        sessionSaveCoordinator.saveCurrentWorld(simulationSessionCoordinator.engine(), isGameplaySession());
+        SimulationRuntime runtime = simulationSessionCoordinator.engine();
+        boolean gameplaySession = isGameplaySession();
+        SwingWorker<Void, Void> menuSaveWorker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                sessionSaveCoordinator.saveCurrentWorld(runtime, gameplaySession);
+                return null;
+            }
+        };
+        menuSaveWorker.execute();
         settingsFlowCoordinator.closeForMenuReturn();
         sessionSaveCoordinator.stopAutoSave();
         simulationSessionCoordinator.resetRuntimeSpeedToDefault();

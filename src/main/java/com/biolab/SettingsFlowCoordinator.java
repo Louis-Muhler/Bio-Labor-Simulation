@@ -55,7 +55,15 @@ final class SettingsFlowCoordinator {
         if (settingsOverlay != null) return;
 
         if (gameplaySessionSupplier.getAsBoolean()) {
-            sessionSaveCoordinator.saveCurrentWorld(engineSupplier.get(), true);
+            SimulationRuntime runtime = engineSupplier.get();
+            SwingWorker<Void, Void> preSettingsSave = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    sessionSaveCoordinator.saveCurrentWorld(runtime, true);
+                    return null;
+                }
+            };
+            preSettingsSave.execute();
         }
 
         stateBeforeSettings = uiStateMachine.current();
