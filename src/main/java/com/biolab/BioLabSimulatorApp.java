@@ -30,21 +30,14 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     private final SaveGameRepository saveRepository;
     private final JPanel content;
 
-    private SimulationRuntime engine;
-    private SimulationCanvas canvas;
-    private OverlayManager overlayManager;
-    private SimulationLoopController loopController;
+    private final SimulationSessionCoordinator simulationSessionCoordinator;
+    private final MicrobeSelectionCoordinator selectionCoordinator;
     private ModernButton globalSettingsButton;
     private final SessionSaveCoordinator sessionSaveCoordinator;
     private final UiFlowCoordinator uiFlowCoordinator;
     private final SettingsFlowCoordinator settingsFlowCoordinator;
     private final AppUiStateMachine uiStateMachine;
-    private ModernButton runtimeSpeedButton;
-    private MicrobeCreatorPanel microbeCreatorPanel;
-    private boolean spawnToolActive;
     private Timer inspectorRestoreTimer;
-
-    private volatile Microbe selectedMicrobe;
     private boolean gameplayParkedInMenu;
 
     private int windowWidth;
@@ -64,6 +57,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 new AsyncSaveService(),
                 LOGGER,
                 settingsManager.getAutosaveIntervalSeconds()
+        );
+        simulationSessionCoordinator = new SimulationSessionCoordinator(
+                this,
+                settingsManager,
+                sessionSaveCoordinator
+        );
+        selectionCoordinator = new MicrobeSelectionCoordinator(
+                this::isSelectionBlockedByUi,
+                simulationSessionCoordinator::engine,
+                simulationSessionCoordinator::canvas,
+                simulationSessionCoordinator::overlayManager,
+                this::getLayeredPane
         );
         uiStateMachine = new AppUiStateMachine(AppUiState.BOOT);
         uiFlowCoordinator = new UiFlowCoordinator(
@@ -86,9 +91,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 this,
                 settingsManager,
                 sessionSaveCoordinator,
-                () -> engine,
+                simulationSessionCoordinator::engine,
                 this::isGameplaySession,
-                () -> loopController,
+                simulationSessionCoordinator::loopController,
                 this::getContentTopY,
                 uiStateMachine,
                 this::transitionOrRecover,
@@ -134,6 +139,18 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     // UI setup
     // -------------------------------------------------------------------------
 
+    static OptionalLong findPersistedSelectedMicrobeId(SimulationState state) {
+        return MicrobeSelectionCoordinator.findPersistedSelectedMicrobeId(state);
+    }
+
+    private void scheduleInspectorRestoreAfterWindowMotion() {
+        if (inspectorRestoreTimer == null) {
+            inspectorRestoreTimer = new Timer(180, e -> restoreInspectorAfterWindowMotionIfNeeded());
+            inspectorRestoreTimer.setRepeats(false);
+        }
+        inspectorRestoreTimer.restart();
+    }
+
     private void setupUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setBackground(new Color(18, 18, 18));
@@ -149,8 +166,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         positionGlobalSettingsButton();
 
         setLocationRelativeTo(null);
-        if (overlayManager != null) {
-            overlayManager.repositionAllOverlays();
+        if (simulationSessionCoordinator.overlayManager() != null) {
+            simulationSessionCoordinator.repositionOverlays();
         }
 
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -165,7 +182,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 syncGameplayOverlayVisibilityByState();
                 refreshOverlayBounds();
                 // Enforce min-zoom and clamp camera to prevent out-of-bounds view
-                if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
+                SimulationCanvas runtimeCanvas = simulationSessionCoordinator.canvas();
+                if (runtimeCanvas != null) SwingUtilities.invokeLater(runtimeCanvas::clampZoomAndCamera);
                 scheduleInspectorRestoreAfterWindowMotion();
             }
 
@@ -174,30 +192,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                 positionGlobalSettingsButton();
                 syncGameplayOverlayVisibilityByState();
                 refreshOverlayBounds();
-                if (canvas != null) SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
+                SimulationCanvas runtimeCanvas = simulationSessionCoordinator.canvas();
+                if (runtimeCanvas != null) SwingUtilities.invokeLater(runtimeCanvas::clampZoomAndCamera);
                 scheduleInspectorRestoreAfterWindowMotion();
             }
         });
-    }
-
-    private void scheduleInspectorRestoreAfterWindowMotion() {
-        if (inspectorRestoreTimer == null) {
-            inspectorRestoreTimer = new Timer(180, e -> restoreInspectorAfterWindowMotionIfNeeded());
-            inspectorRestoreTimer.setRepeats(false);
-        }
-        inspectorRestoreTimer.restart();
-    }
-
-    private void restoreInspectorAfterWindowMotionIfNeeded() {
-        if (!isGameplaySession() || overlayManager == null || isSelectionBlockedByUi()) {
-            return;
-        }
-        Microbe current = selectedMicrobe;
-        if (current == null || current.isDead()) {
-            return;
-        }
-        overlayManager.getInspectorPanel().setSelectedMicrobe(current);
-        overlayManager.getInspectorPanel().showPanel();
     }
 
     private void refreshOverlayBounds() {
@@ -205,19 +204,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         uiFlowCoordinator.refreshOverlayBounds(getWidth(), getHeight());
     }
 
-    private void syncGameplayOverlayVisibilityByState() {
-        if (overlayManager == null) {
+    private void restoreInspectorAfterWindowMotionIfNeeded() {
+        if (!isGameplaySession()) {
             return;
         }
-        AppUiState current = uiStateMachine.current();
-        boolean settingsOverGameplay = settingsFlowCoordinator.settingsOverGameplay(current);
-        boolean showGameplayOverlays = current == AppUiState.GAMEPLAY || settingsOverGameplay;
-        if (showGameplayOverlays) {
-            overlayManager.repositionAllOverlays();
-            overlayManager.setGameplayOverlaysVisible(true);
-        } else {
-            overlayManager.setGameplayOverlaysVisible(false);
-        }
+        selectionCoordinator.restoreInspectorAfterWindowMotionIfNeeded();
     }
 
     private void positionGlobalSettingsButton() {
@@ -239,6 +230,26 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     // -------------------------------------------------------------------------
     // Display mode
+    // -------------------------------------------------------------------------
+
+    private void syncGameplayOverlayVisibilityByState() {
+        if (simulationSessionCoordinator.overlayManager() == null) {
+            return;
+        }
+        AppUiState current = uiStateMachine.current();
+        boolean settingsOverGameplay = settingsFlowCoordinator.settingsOverGameplay(current);
+        boolean showGameplayOverlays = current == AppUiState.GAMEPLAY || settingsOverGameplay;
+        if (showGameplayOverlays) {
+            simulationSessionCoordinator.repositionOverlays();
+            simulationSessionCoordinator.setGameplayOverlaysVisible(true);
+        } else {
+            simulationSessionCoordinator.setGameplayOverlaysVisible(false);
+        }
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Settings overlay
     // -------------------------------------------------------------------------
 
     /**
@@ -275,27 +286,8 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
             positionGlobalSettingsButton();
             syncGameplayOverlayVisibilityByState();
             refreshOverlayBounds();
-            if (canvas != null) canvas.clampZoomAndCamera();
-        });
-    }
-
-
-    // -------------------------------------------------------------------------
-    // Settings overlay
-    // -------------------------------------------------------------------------
-
-    private void setupShutdownHook() {
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                if (isGameplaySession()) {
-                    sessionSaveCoordinator.saveCurrentWorld(engine, true);
-                }
-                sessionSaveCoordinator.shutdown();
-                uiStateMachine.transitionTo(AppUiState.SHUTDOWN);
-                if (loopController != null) loopController.stop();
-                if (engine != null && engine.isRunning()) engine.shutdown();
-            }
+            SimulationCanvas runtimeCanvas = simulationSessionCoordinator.canvas();
+            if (runtimeCanvas != null) runtimeCanvas.clampZoomAndCamera();
         });
     }
 
@@ -303,193 +295,32 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         startSimulationSession(PREVIEW_WORLD, false);
     }
 
-    private void startSimulationSession(WorldConfig config, boolean showGameOverlays) {
-        teardownSession();
-        gameplayParkedInMenu = false;
-
-        engine = new SimulationEngine(config.worldWidth(), config.worldHeight(),
-                config.initialPopulation(), config.maxPopulation());
-        engine.getEnvironment().setTemperature(config.temperature());
-        engine.getEnvironment().setToxicity(config.toxicity());
-        engine.setFoodSpawnRate(config.foodSpawnRate());
-
-        canvas = new SimulationCanvas(config.worldWidth(), config.worldHeight(),
-                windowWidth, windowHeight, engine, this);
-
-        content.removeAll();
-        content.add(canvas, BorderLayout.CENTER);
-
-        loopController = new SimulationLoopController(
-                engine,
-                canvas,
-                this::checkDeadSelectedMicrobe,
-                population -> {
-                    if (overlayManager != null) {
-                        SwingUtilities.invokeLater(() -> overlayManager.updatePopulationLabel(population));
-                    }
-                }
-        );
-        loopController.setRenderFps(showGameOverlays ? settingsManager.getSimulationFps() : 60);
-        loopController.start();
-
-        if (showGameOverlays) {
-            createRuntimeOverlays();
-            sessionSaveCoordinator.startAutoSave(() -> engine, this::isGameplaySession);
-        } else {
-            sessionSaveCoordinator.stopAutoSave();
-        }
-
-        revalidate();
-        repaint();
-        SwingUtilities.invokeLater(canvas::clampZoomAndCamera);
-    }
-
-    private void teardownSession() {
-        if (isGameplaySession()) {
-            sessionSaveCoordinator.saveCurrentWorld(engine, true);
-        }
-        deactivateSpawnTool();
-        sessionSaveCoordinator.stopAutoSave();
-        if (overlayManager != null) {
-            overlayManager.removeAllOverlays();
-        }
-        if (loopController != null) {
-            loopController.stop();
-            loopController = null;
-        }
-        if (engine != null && engine.isRunning()) {
-            engine.shutdown();
-        }
-        engine = null;
-        canvas = null;
-        overlayManager = null;
-        microbeCreatorPanel = null;
-        runtimeSpeedButton = null;
-        selectedMicrobe = null;
-        sessionSaveCoordinator.clearSessionContext();
-    }
-
-    private void createRuntimeOverlays() {
-        InspectorPanel inspectorPanel = new InspectorPanel();
-        EnvironmentPanel environmentPanel = new EnvironmentPanel(engine);
-        WorldStatsPanel worldStatsPanel = new WorldStatsPanel(engine, settingsManager);
-        microbeCreatorPanel = new MicrobeCreatorPanel();
-        microbeCreatorPanel.setRandomProfileSupplier(this::buildWorldAwareRandomBaseProfile);
-        ModernButton envToggleButton = new ModernButton("", ModernButton.ButtonIcon.ENVIRONMENT);
-        ModernButton statsToggleButton = new ModernButton("", ModernButton.ButtonIcon.CHART);
-        ModernButton creatorToggleButton = new ModernButton("", ModernButton.ButtonIcon.CREATOR);
-        ModernButton speedButton = new ModernButton("1x", ModernButton.ButtonIcon.SPEED_UP);
-        ModernButton deactivateToolButton = new ModernButton("Deactivate Spawn Tool");
-        runtimeSpeedButton = speedButton;
-
-        overlayManager = new OverlayManager(this::getLayeredPane,
-                inspectorPanel,
-                environmentPanel,
-                worldStatsPanel,
-                microbeCreatorPanel,
-                envToggleButton,
-                statsToggleButton,
-                creatorToggleButton,
-                speedButton,
-                deactivateToolButton);
-
-        envToggleButton.addActionListener(e -> overlayManager.toggleEnvironmentPanel());
-        statsToggleButton.addActionListener(e -> overlayManager.toggleWorldStatsPanel());
-        creatorToggleButton.addActionListener(e -> overlayManager.toggleMicrobeCreatorPanel());
-        speedButton.addActionListener(e -> speedButton.setDisplayText(loopController.cycleSpeed()));
-        microbeCreatorPanel.setActivateSpawnToolAction(this::toggleSpawnToolFromCreator);
-        microbeCreatorPanel.setLayoutRefreshAction(() -> {
-            if (overlayManager != null && microbeCreatorPanel != null && microbeCreatorPanel.isVisible()) {
-                overlayManager.positionMicrobeCreatorPanel();
+    private void setupShutdownHook() {
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                uiStateMachine.transitionTo(AppUiState.SHUTDOWN);
+                simulationSessionCoordinator.teardownSession();
+                sessionSaveCoordinator.shutdown();
             }
         });
-        deactivateToolButton.addActionListener(e -> deactivateSpawnTool());
-
-        inspectorPanel.setVisible(false);
-        environmentPanel.setVisible(false);
-        worldStatsPanel.hidePanel();
-        microbeCreatorPanel.setVisible(false);
-        setSpawnToolActive(false);
-        overlayManager.repositionAllOverlays();
-    }
-
-    private MicrobeGeneProfile buildWorldAwareRandomBaseProfile() {
-        if (engine == null) {
-            return MicrobeSpawnRequest.defaultProfile();
-        }
-        SimulationState state;
-        try {
-            state = engine.captureState();
-        } catch (RuntimeException ex) {
-            return MicrobeSpawnRequest.defaultProfile();
-        }
-        if (state == null || state.microbes().isEmpty()) {
-            return MicrobeSpawnRequest.defaultProfile();
-        }
-        double heat = 0.0;
-        double toxin = 0.0;
-        double speed = 0.0;
-        double diet = 0.0;
-        double maxHealth = 0.0;
-        double maxEnergy = 0.0;
-        for (Microbe.PersistedState microbe : state.microbes()) {
-            heat += microbe.heatResistance();
-            toxin += microbe.toxinResistance();
-            speed += microbe.speed();
-            diet += microbe.diet();
-            maxHealth += microbe.maxHealth();
-            maxEnergy += microbe.maxEnergy();
-        }
-        int count = state.microbes().size();
-        return new MicrobeGeneProfile(
-                heat / count,
-                toxin / count,
-                speed / count,
-                diet / count,
-                Math.max(1.0, maxHealth / count),
-                Math.max(1.0, maxEnergy / count)
-        );
-    }
-
-    private void toggleSpawnToolFromCreator() {
-        if (spawnToolActive) {
-            deactivateSpawnTool();
-        } else {
-            activateSpawnTool();
-        }
-    }
-
-    private void activateSpawnTool() {
-        if (canvas == null || engine == null || microbeCreatorPanel == null) {
-            return;
-        }
-        canvas.setPlacementTool((worldX, worldY) ->
-                engine.enqueueCommand(microbeCreatorPanel.buildSpawnCommand(worldX, worldY))
-        );
-        setSpawnToolActive(true);
-    }
-
-    private void deactivateSpawnTool() {
-        if (canvas != null) {
-            canvas.setPlacementTool(null);
-        }
-        setSpawnToolActive(false);
-    }
-
-    private void setSpawnToolActive(boolean active) {
-        spawnToolActive = active;
-        if (microbeCreatorPanel != null) {
-            microbeCreatorPanel.setSpawnToolActive(active);
-        }
-        if (overlayManager != null) {
-            overlayManager.setSpawnToolActive(active);
-            overlayManager.repositionAllOverlays();
-        }
     }
 
     private void showMainMenu() {
         if (!transitionOrRecover(AppUiState.PREVIEW_MENU)) return;
         uiFlowCoordinator.showMainMenu();
+    }
+
+    private void startSimulationSession(WorldConfig config, boolean showGameOverlays) {
+        gameplayParkedInMenu = false;
+        selectionCoordinator.forceClearSelection();
+        simulationSessionCoordinator.startSession(
+                config,
+                showGameOverlays,
+                content,
+                this,
+                selectionCoordinator::checkDeadSelectedMicrobe
+        );
     }
 
     private void createWorldAndStart(WorldConfig config) {
@@ -499,6 +330,11 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         uiFlowCoordinator.removeSaveBrowser(false);
 
         try {
+            SimulationRuntime engine = simulationSessionCoordinator.engine();
+            if (engine == null) {
+                sessionSaveCoordinator.markSessionStarted(config.mapName(), null);
+                return;
+            }
             SimulationState state = engine.captureState();
             SaveGameMetadata createdSave = saveRepository.createNewSave(config, state);
             sessionSaveCoordinator.markSessionStarted(config.mapName(), createdSave);
@@ -508,18 +344,6 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                     "World was created, but initial save failed: " + ex.getMessage(),
                     "Save Warning", JOptionPane.WARNING_MESSAGE);
         }
-    }
-
-    static OptionalLong findPersistedSelectedMicrobeId(SimulationState state) {
-        if (state == null) {
-            return OptionalLong.empty();
-        }
-        for (Microbe.PersistedState microbe : state.microbes()) {
-            if (microbe.selected()) {
-                return OptionalLong.of(microbe.id());
-            }
-        }
-        return OptionalLong.empty();
     }
 
     private void loadSaveAndStart(SaveGameMetadata metadata) {
@@ -547,7 +371,10 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                     );
                     startSimulationSession(config, true);
                     transitionOrRecover(AppUiState.GAMEPLAY);
-                    engine.loadState(state);
+                    SimulationRuntime engine = simulationSessionCoordinator.engine();
+                    if (engine != null) {
+                        engine.loadState(state);
+                    }
                     sessionSaveCoordinator.markSessionStarted(metadata.mapName(), metadata);
 
                     uiFlowCoordinator.removeMainMenu();
@@ -566,40 +393,21 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
     }
 
     private void restoreInspectorSelectionFromLoadedState(SimulationState state) {
-        OptionalLong selectedId = findPersistedSelectedMicrobeId(state);
-        if (selectedId.isEmpty()) {
-            onSelectionCleared();
-            return;
-        }
-        Microbe selected = engine.findMicrobeById(selectedId.getAsLong());
-        if (selected == null || selected.isDead()) {
-            onSelectionCleared();
-            return;
-        }
-        onMicrobeSelected(selected);
+        selectionCoordinator.restoreInspectorSelectionFromLoadedState(state);
     }
 
     private boolean isGameplaySession() {
-        return overlayManager != null;
+        return simulationSessionCoordinator.isGameplaySession();
     }
 
     private void returnToMainMenuFromGameplay() {
-        sessionSaveCoordinator.saveCurrentWorld(engine, isGameplaySession());
+        sessionSaveCoordinator.saveCurrentWorld(simulationSessionCoordinator.engine(), isGameplaySession());
         settingsFlowCoordinator.closeForMenuReturn();
         sessionSaveCoordinator.stopAutoSave();
-        if (loopController != null && runtimeSpeedButton != null) {
-            runtimeSpeedButton.setDisplayText(loopController.resetSpeedToDefault());
-        }
-        if (overlayManager != null) {
-            overlayManager.setGameplayOverlaysVisible(false);
-        }
-        Microbe prev = selectedMicrobe;
-        if (prev != null) prev.setSelected(false);
-        selectedMicrobe = null;
-        if (canvas != null) {
-            canvas.stopFollowing();
-        }
-        deactivateSpawnTool();
+        simulationSessionCoordinator.resetRuntimeSpeedToDefault();
+        simulationSessionCoordinator.setGameplayOverlaysVisible(false);
+        selectionCoordinator.forceClearSelection();
+        simulationSessionCoordinator.deactivateSpawnTool();
         gameplayParkedInMenu = true;
         showMainMenu();
     }
@@ -632,15 +440,13 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         if (uiStateMachine.current() == AppUiState.SHUTDOWN) {
             return;
         }
-        deactivateSpawnTool();
+        simulationSessionCoordinator.deactivateSpawnTool();
         settingsFlowCoordinator.clearOverlayAndResume();
         uiFlowCoordinator.clearSaveBrowser();
-        if (engine == null || canvas == null) {
+        if (simulationSessionCoordinator.engine() == null || simulationSessionCoordinator.canvas() == null) {
             startPreviewSession();
         }
-        if (overlayManager != null) {
-            overlayManager.setGameplayOverlaysVisible(false);
-        }
+        simulationSessionCoordinator.setGameplayOverlaysVisible(false);
         uiStateMachine.forceState(AppUiState.PREVIEW_MENU);
         if (!uiFlowCoordinator.isMainMenuVisible()) {
             showMainMenu();
@@ -659,7 +465,7 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
         windowWidth = settingsManager.getWindowWidth();
         windowHeight = settingsManager.getWindowHeight();
         sessionSaveCoordinator.setAutosaveIntervalSeconds(settingsManager.getAutosaveIntervalSeconds());
-        if (loopController != null) loopController.setRenderFps(settingsManager.getSimulationFps());
+        simulationSessionCoordinator.setRenderFps(settingsManager.getSimulationFps());
         applyDisplayMode();
     }
 
@@ -678,56 +484,12 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
      */
     @Override
     public void onMicrobeSelected(Microbe microbe) {
-        if (isSelectionBlockedByUi()) return;
-        Microbe prev = selectedMicrobe;
-        if (prev != null) prev.setSelected(false);
-        selectedMicrobe = microbe;
-        if (microbe != null) microbe.setSelected(true);
-        if (overlayManager != null) {
-            overlayManager.getInspectorPanel().setSelectedMicrobe(microbe);
-            overlayManager.getInspectorPanel().showPanel();
-        }
-        canvas.startFollowing(microbe);
+        selectionCoordinator.onMicrobeSelected(microbe);
     }
 
     /** Called by the canvas when the user clicks empty space to deselect. */
     @Override
     public void onSelectionCleared() {
-        if (isSelectionBlockedByUi()) return;
-        Microbe prev = selectedMicrobe;
-        if (prev != null) prev.setSelected(false);
-        selectedMicrobe = null;
-        canvas.stopFollowing();
-        if (overlayManager != null) overlayManager.getInspectorPanel().hidePanel();
-        getLayeredPane().repaint();
-    }
-
-    /**
-     * Checks if the currently selected microbe has died and performs auto-selection:
-     * Priority 1 – a living child of the dead microbe.
-     * Priority 2 – any random living microbe.
-     * The camera smoothly pans to the new target.
-     */
-    private void checkDeadSelectedMicrobe() {
-        Microbe current = selectedMicrobe;
-        if (current == null || !current.isDead()) return;
-
-        // Find replacement before clearing state
-        Microbe replacement = engine.findLivingChild(current.getId());
-        if (replacement == null) replacement = engine.findRandomLivingMicrobe();
-
-        final Microbe next = replacement;
-        selectedMicrobe = null;
-
-        SwingUtilities.invokeLater(() -> {
-            current.setSelected(false);
-            if (next != null) {
-                onMicrobeSelected(next);
-            } else {
-                if (overlayManager != null) overlayManager.getInspectorPanel().hidePanel();
-                canvas.stopFollowing();
-                getLayeredPane().repaint();
-            }
-        });
+        selectionCoordinator.onSelectionCleared();
     }
 }
