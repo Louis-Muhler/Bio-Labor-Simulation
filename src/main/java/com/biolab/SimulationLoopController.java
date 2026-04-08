@@ -196,12 +196,9 @@ public class SimulationLoopController {
             try {
                 if (remainingNs > OS_SLEEP_THRESHOLD_NS) {
                     long coarseNs = remainingNs - OS_SLEEP_GUARD_NS;
-                    long sleepMs = coarseNs / 1_000_000L;
-                    if (sleepMs > 0L) {
-                        //noinspection BusyWait
-                        Thread.sleep(sleepMs);
-                        continue;
-                    }
+                    //noinspection BusyWait
+                    Thread.sleep(coarseNs / 1_000_000L);
+                    continue;
                 }
                 if (remainingNs > YIELD_THRESHOLD_NS) {
                     Thread.yield();
