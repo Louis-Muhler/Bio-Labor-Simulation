@@ -91,7 +91,6 @@ public class InspectorPanel extends JPanel {
                 new Insets(INSET, INSET, INSET, INSET),
                 18
         );
-        contentCanvas.recalculatePreferredSize();
 
         add(scrollPane, BorderLayout.CENTER);
     }
@@ -115,18 +114,32 @@ public class InspectorPanel extends JPanel {
 
     public void setSelectedMicrobe(Microbe microbe) {
         contentCanvas.selectedMicrobe = microbe;
-        contentCanvas.recalculatePreferredSize();
-        scrollPane.getVerticalScrollBar().setValue(0);
+        refreshContentSizeForSelection();
+        resetScrollToTopSafely();
         scrollPane.revalidate();
         repaint();
     }
 
     public void showPanel() {
         setVisible(true);
-        contentCanvas.recalculatePreferredSize();
-        scrollPane.getVerticalScrollBar().setValue(0);
+        refreshContentSizeForSelection();
+        resetScrollToTopSafely();
         scrollPane.revalidate();
         repaint();
+    }
+
+    private void refreshContentSizeForSelection() {
+        Microbe selected = contentCanvas.selectedMicrobe;
+        if (selected != null && !selected.isDead()) {
+            contentCanvas.recalculatePreferredSize();
+        }
+    }
+
+    private void resetScrollToTopSafely() {
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        if (vertical != null) {
+            vertical.setValue(0);
+        }
     }
 
     static List<Integer> selectEvenlyDistributedIndices(int totalPoints, int maxVisiblePoints) {

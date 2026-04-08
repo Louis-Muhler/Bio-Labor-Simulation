@@ -38,10 +38,10 @@ final class OverlayScrollSupport {
             return;
         }
         int maxValue = Math.max(bar.getMinimum(), bar.getMaximum() - bar.getVisibleAmount());
-        double rotation = e.getPreciseWheelRotation();
-        if (rotation == 0.0) {
-            rotation = e.getWheelRotation();
-        }
+        double preciseRotation = e.getPreciseWheelRotation();
+        double effectiveRotation = preciseRotation != 0.0
+                ? preciseRotation
+                : (double) e.getWheelRotation();
 
         int baseIncrement;
         if (e.getScrollType() == MouseWheelEvent.WHEEL_BLOCK_SCROLL) {
@@ -50,9 +50,9 @@ final class OverlayScrollSupport {
             baseIncrement = Math.max(1, unit * Math.max(1, e.getScrollAmount()));
         }
 
-        int delta = (int) Math.round(rotation * baseIncrement);
-        if (delta == 0 && rotation != 0.0) {
-            delta = rotation > 0.0 ? 1 : -1;
+        int delta = (int) Math.round(effectiveRotation * baseIncrement);
+        if (delta == 0 && effectiveRotation != 0.0) {
+            delta = effectiveRotation > 0.0 ? 1 : -1;
         }
 
         int next = Math.max(bar.getMinimum(), Math.min(maxValue, bar.getValue() + delta));
