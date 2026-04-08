@@ -1,6 +1,5 @@
 package com.biolab;
 
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -36,15 +35,20 @@ final class SimulationUpdateService {
         this.logger = logger;
     }
 
-    private static SimulationSnapshot buildFallbackSnapshot(FramePreparationSystem.FrameBatch frameData) {
-        return new SimulationSnapshot(
-                frameData.microbeSnapshot().stream().map(Microbe::toRenderState).toList(),
-                List.copyOf(frameData.foodSnapshot())
-        );
+    private SimulationFrameResult stopRuntimeAndKeepLastConsistentSnapshot(SimulationSnapshot currentSnapshot,
+                                                                           String reason,
+                                                                           Throwable cause) {
+        logger.log(Level.SEVERE, reason + " - runtime will be stopped to avoid committing partial frame mutations", cause);
+        if (runtime.isRunning()) {
+            runtime.shutdown();
+        }
+        return new SimulationFrameResult(currentSnapshot, 0, 0);
     }
 
     SimulationFrameResult runUpdate(SimulationSnapshot currentSnapshot, double foodSpawnRate) {
         synchronized (frameMutationLock) {
+            // Frame invariant: publish either a fully committed frame or keep the last
+            // known-good snapshot; partial worker mutations must never be published.
             if (executorService.isShutdown()) return new SimulationFrameResult(currentSnapshot, 0, 0);
 
             commandProcessor.processPending(runtime, logger);
@@ -63,11 +67,17 @@ final class SimulationUpdateService {
                 );
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.log(Level.WARNING, "Simulation thread interrupted during processing", e);
-                return new SimulationFrameResult(buildFallbackSnapshot(frameData), 0, 0);
+                return stopRuntimeAndKeepLastConsistentSnapshot(
+                        currentSnapshot,
+                        "Simulation thread interrupted during frame processing",
+                        e
+                );
             } catch (RuntimeException e) {
-                logger.log(Level.SEVERE, "Simulation frame aborted due to worker failure", e);
-                return new SimulationFrameResult(buildFallbackSnapshot(frameData), 0, 0);
+                return stopRuntimeAndKeepLastConsistentSnapshot(
+                        currentSnapshot,
+                        "Simulation frame aborted due to worker failure",
+                        e
+                );
             }
         }
     }

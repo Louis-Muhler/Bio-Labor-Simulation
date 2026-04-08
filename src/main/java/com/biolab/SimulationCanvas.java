@@ -45,6 +45,7 @@ public class SimulationCanvas extends JPanel {
     private static final BasicStroke STROKE_DEBUG_LINE = new BasicStroke(1.2f);
     private static final double SIM_TICKS_PER_SIM_SECOND = 30.0;
     private static final int PLACEMENT_HOLD_INTERVAL_MS = 120;
+    private static final int DEFAULT_DEBUG_VISION_RADIUS = 30;
 
     // ── Pre-cached AlphaComposite instances ───────────────────────────────
     // Avoids AlphaComposite.getInstance() per frame for debug overlays.
@@ -501,7 +502,10 @@ public class SimulationCanvas extends JPanel {
                     g2d.setStroke(STROKE_DEBUG_LINE);
 
                     // Vision / aggro radius circle
-                    int visionR = SimulationEngine.getSpatialCellSize();
+                    int debugVisionRadius = engine.getDebugVisionRadius();
+                    int visionR = Math.max(1, debugVisionRadius > 0
+                            ? debugVisionRadius
+                            : DEFAULT_DEBUG_VISION_RADIUS);
                     g2d.setComposite(AC_DEBUG_VISION);
                     g2d.setColor(DEBUG_VISION_COLOR);
                     g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);
@@ -569,10 +573,7 @@ public class SimulationCanvas extends JPanel {
     }
 
     private long readCurrentSimulationTick() {
-        if (engine instanceof SimulationEngine simulationEngine) {
-            return simulationEngine.getSimulationTick();
-        }
-        return 0L;
+        return engine.getSimulationTick();
     }
 
     private void drawDebugStats(Graphics2D g2d) {

@@ -8,12 +8,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class SimulationUpdateServiceTest {
 
-    private static SimulationUpdateService createService(WorldState worldState, ExecutorService executorService) {
+    private static SimulationUpdateService createService(WorldState worldState,
+                                                         ExecutorService executorService,
+                                                         SimulationRuntime runtime) {
         AtomicInteger reproductionSlots = new AtomicInteger();
         FramePreparationSystem prep = new FramePreparationSystem(worldState, reproductionSlots, 1000, 600, 600, 2000);
         MicrobeBehaviorSystem behaviorSystem = new MicrobeBehaviorSystem(
@@ -36,7 +37,7 @@ class SimulationUpdateServiceTest {
                 new Object(),
                 executorService,
                 new SimulationCommandProcessor(128),
-                new NoopRuntime(),
+                runtime,
                 new Environment(),
                 prep,
                 orchestrator,
@@ -45,41 +46,45 @@ class SimulationUpdateServiceTest {
     }
 
     @Test
-    void workerFailureShouldAbortCommitAndReturnFallbackSnapshot() {
+    void workerFailureShouldAbortCommitAndKeepLastKnownGoodSnapshot() {
         WorldState worldState = new WorldState();
         Microbe broken = new ThrowingMicrobe(100, 100);
         worldState.population().microbes().add(broken);
         worldState.index().byId().put(broken.getId(), broken);
+        NoopRuntime runtime = new NoopRuntime();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            SimulationUpdateService service = createService(worldState, executor);
+            SimulationUpdateService service = createService(worldState, executor, runtime);
             SimulationFrameResult result = service.runUpdate(new SimulationSnapshot(List.of(), List.of()), 0.0);
 
-            assertEquals(1, result.snapshot().microbes().size(), "Fallback snapshot should include current microbes");
+            assertEquals(0, result.snapshot().microbes().size(), "Failure path must keep last known-good snapshot");
             assertEquals(0, result.spawnedFoodCount());
             assertEquals(0, result.consumedFoodCount());
+            assertFalse(runtime.isRunning(), "Runtime should be stopped after worker failure");
         } finally {
             executor.shutdownNow();
         }
     }
 
     @Test
-    void interruptDuringFrameShouldPreserveInterruptFlagAndReturnFallbackSnapshot() {
+    void interruptDuringFrameShouldPreserveInterruptFlagAndKeepLastKnownGoodSnapshot() {
         WorldState worldState = new WorldState();
         Microbe microbe = new Microbe(120, 120);
         worldState.population().microbes().add(microbe);
         worldState.index().byId().put(microbe.getId(), microbe);
+        NoopRuntime runtime = new NoopRuntime();
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            SimulationUpdateService service = createService(worldState, executor);
+            SimulationUpdateService service = createService(worldState, executor, runtime);
 
             Thread.currentThread().interrupt();
             SimulationFrameResult result = service.runUpdate(new SimulationSnapshot(List.of(), List.of()), 0.0);
 
             assertTrue(Thread.currentThread().isInterrupted(), "Interrupt flag should be preserved");
-            assertEquals(1, result.snapshot().microbes().size(), "Interrupted path should still provide a coherent snapshot");
+            assertEquals(0, result.snapshot().microbes().size(), "Interrupted path must keep last known-good snapshot");
+            assertFalse(runtime.isRunning(), "Runtime should be stopped after interrupted frame abort");
         } finally {
             // Clear for test isolation.
             Thread.interrupted();
@@ -99,6 +104,8 @@ class SimulationUpdateServiceTest {
     }
 
     private static final class NoopRuntime implements SimulationRuntime {
+        private volatile boolean running = true;
+
         @Override
         public SimulationSnapshot getRenderSnapshot() {
             return new SimulationSnapshot(List.of(), List.of());
@@ -176,11 +183,12 @@ class SimulationUpdateServiceTest {
 
         @Override
         public boolean isRunning() {
-            return true;
+            return running;
         }
 
         @Override
         public void shutdown() {
+            running = false;
         }
     }
 }

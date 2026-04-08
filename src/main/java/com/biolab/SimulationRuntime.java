@@ -24,6 +24,14 @@ public interface SimulationRuntime {
 
     boolean isDebugModeEnabled();
 
+    default long getSimulationTick() {
+        return 0L;
+    }
+
+    default int getDebugVisionRadius() {
+        return 0;
+    }
+
     void update();
 
     void loadState(SimulationState state);

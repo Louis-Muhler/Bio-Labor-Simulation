@@ -644,12 +644,14 @@ public class Microbe {
 
         double currentHealth;
         double currentEnergy;
+        int currentAge;
         synchronized (stateLock) {
             currentHealth = health;
             currentEnergy = energy;
+            currentAge = age;
         }
 
-        return age >= REPRODUCTION_AGE
+        return currentAge >= REPRODUCTION_AGE
                 && currentHealth > maxHealth * requiredHealthRatio
                 && currentEnergy >= maxEnergy * requiredEnergyRatio;
     }
@@ -768,13 +770,13 @@ public class Microbe {
      * Called on the parent after a child is spawned.
      */
     public void resetReproduction() {
-        age = 0;
         double load = capacityLoad();
         double healthCostRatio = clampRatio(BASE_REPRODUCTION_HEALTH_COST_RATIO
                 + load * REPRODUCTION_HEALTH_COST_PER_LOAD);
         double energyCostRatio = clampRatio(BASE_REPRODUCTION_ENERGY_COST_RATIO
                 + load * REPRODUCTION_ENERGY_COST_PER_LOAD);
         synchronized (stateLock) {
+            age = 0;
             health = Math.max(0.0, health - maxHealth * healthCostRatio);
             energy = Math.max(0.0, energy - maxEnergy * energyCostRatio);
         }
@@ -1040,7 +1042,9 @@ public class Microbe {
      * Returns the current age in simulation cycles.
      */
     public int getAge() {
-        return age;
+        synchronized (stateLock) {
+            return age;
+        }
     }
 
     /**
@@ -1175,11 +1179,13 @@ public class Microbe {
         double e;
         double vx;
         double vy;
+        int persistedAge;
         synchronized (stateLock) {
             h = health;
             e = energy;
             vx = velocityX;
             vy = velocityY;
+            persistedAge = age;
         }
         return new PersistedState(
                 id,
@@ -1197,7 +1203,7 @@ public class Microbe {
                 maxEnergy,
                 h,
                 e,
-                age,
+                persistedAge,
                 isSelected,
                 lastAttackTime,
                 targetX,

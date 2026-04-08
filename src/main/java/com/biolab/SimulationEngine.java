@@ -149,6 +149,16 @@ public class SimulationEngine implements SimulationRuntime {
         return debugModeService.isEnabled();
     }
 
+    @Override
+    public long getSimulationTick() {
+        return simulationTick;
+    }
+
+    @Override
+    public int getDebugVisionRadius() {
+        return SPATIAL_CELL_SIZE;
+    }
+
     private static double perTickAverage(int countOverSampleWindow) {
         return Math.max(0.0, countOverSampleWindow / 30.0);
     }
@@ -390,12 +400,6 @@ public class SimulationEngine implements SimulationRuntime {
         foodConsumedPerSecond = sample.metricValues().getOrDefault(WorldMetricId.FOOD_CONSUMED_PER_SEC, 0.0);
     }
 
-    /**
-     * Returns the current absolute simulation tick counter.
-     */
-    public long getSimulationTick() {
-        return simulationTick;
-    }
 
     /**
      * Sets the target food spawn amount per tick.

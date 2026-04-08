@@ -17,6 +17,8 @@ final class PopulationCommitSystem {
     }
 
     SimulationFrameResult finalizeFrame(int spawnedFoodCount) {
+        // Commit phase invariant: all world-list mutations happen under dataLock,
+        // and only after worker processing completed successfully for this frame.
         synchronized (worldState.dataLock()) {
             List<Microbe> microbes = worldState.population().microbes();
             List<Microbe> newMicrobes = worldState.population().newMicrobes();
@@ -56,6 +58,7 @@ final class PopulationCommitSystem {
     }
 
     SimulationFrameResult finalizeEmptyFrame(int spawnedFoodCount) {
+        // Even empty frames run cleanup under the same commit lock to keep semantics uniform.
         synchronized (worldState.dataLock()) {
             List<FoodPellet> foodPellets = worldState.food().pellets();
             int consumedFoodCount = (int) foodPellets.stream().filter(FoodPellet::isConsumed).count();
