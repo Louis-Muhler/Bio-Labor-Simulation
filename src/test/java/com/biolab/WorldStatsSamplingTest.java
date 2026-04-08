@@ -138,7 +138,11 @@ class WorldStatsSamplingTest {
             }
 
             // Flush async appender so tick-30 sample is visible to direct store queries.
-            engine.captureState();
+            List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
+            assertTrue(
+                    flushedHistory.stream().anyMatch(sample -> sample.tick() == 30L),
+                    "captureState() should flush async stats so the tick-30 sample is visible"
+            );
 
             List<WorldStatsSample> samples = engine.getWorldStatsStore().queryRangeByTick(
                     EnumSet.of(
@@ -205,7 +209,11 @@ class WorldStatsSamplingTest {
             }
 
             // Flush async appender so tick-30 sample is visible to direct store queries.
-            engine.captureState();
+            List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
+            assertTrue(
+                    flushedHistory.stream().anyMatch(sample -> sample.tick() == 30L),
+                    "captureState() should flush async stats so the tick-30 sample is visible"
+            );
 
             List<WorldStatsSample> samples = engine.getWorldStatsStore().queryRangeByTick(
                     EnumSet.of(WorldMetricId.AVG_STRENGTH, WorldMetricId.AVG_DEFENSE),
