@@ -57,7 +57,7 @@ Run from the project root:
 ```powershell
 mvn clean compile
 mvn test
-mvn exec:java -Dexec.mainClass="com.biolab.BioLabSimulatorApp"
+mvn exec:java "-Dexec.mainClass=com.biolab.BioLabSimulatorApp"
 ```
 
 Optional package build:
