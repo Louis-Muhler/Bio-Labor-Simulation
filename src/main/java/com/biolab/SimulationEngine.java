@@ -16,6 +16,7 @@ public class SimulationEngine implements SimulationRuntime {
     private static final Logger LOGGER = Logger.getLogger(SimulationEngine.class.getName());
 
     private static final int MAX_QUEUED_COMMANDS = 4096;
+    private static final long STATS_SAMPLE_INTERVAL_TICKS = 30L;
 
     private final WorldState worldState;
     private final Environment environment;
@@ -41,10 +42,10 @@ public class SimulationEngine implements SimulationRuntime {
     private volatile SimulationSnapshot renderSnapshot;
     private static final int SPATIAL_CELL_SIZE = 30;
     /**
-     * Serializes full-frame world mutation with state capture/load operations.
+     * Coordinates frame execution with exclusive state operations (capture/load/spawn).
      * This guarantees that persistence never interleaves with worker-thread updates.
      */
-    private final Object frameMutationLock = new Object();
+    private final FrameMutationCoordinator frameMutationCoordinator = new FrameMutationCoordinator();
     private final SimulationEngineContext context;
     private final WorldStatsStore worldStatsStore;
     private final WorldStatsSampleAppender worldStatsAppender;
@@ -96,7 +97,7 @@ public class SimulationEngine implements SimulationRuntime {
         this.worldStatsAppender = new WorldStatsSampleAppender(worldStatsStore, LOGGER);
         this.context = SimulationEngineContext.create(
                 MAX_QUEUED_COMMANDS,
-                frameMutationLock,
+                frameMutationCoordinator,
                 executorService,
                 environment,
                 debugModeService,
@@ -217,12 +218,16 @@ public class SimulationEngine implements SimulationRuntime {
         return renderSnapshot.microbes().size();
     }
 
+    private static boolean isStatsSampleTick(long tick) {
+        return tick > 0L && tick % STATS_SAMPLE_INTERVAL_TICKS == 0L;
+    }
+
     /**
      * Captures a serializable snapshot of the full simulation state.
      */
     public SimulationState captureState() {
-        synchronized (frameMutationLock) {
-            worldStatsAppender.flush();
+        return frameMutationCoordinator.runExclusive(() -> {
+            ensureWorldStatsFlushed("captureState");
             synchronized (worldState.dataLock()) {
                 return context.stateCoordinator().captureState(
                         foodSpawnRate,
@@ -230,25 +235,7 @@ public class SimulationEngine implements SimulationRuntime {
                         worldStatsStore.snapshotAll()
                 );
             }
-        }
-    }
-
-    /**
-     * Replaces the current world with a previously captured simulation state.
-     */
-    public void loadState(SimulationState state) {
-        synchronized (frameMutationLock) {
-            worldStatsAppender.flush();
-            synchronized (worldState.dataLock()) {
-                renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
-                simulationTick = Math.max(0L, state.simulationTick());
-                worldStatsStore.replaceAll(state.worldStatsHistory());
-                worldStatsStore.backfillDerivedTraitMetrics();
-                spawnedSinceLastSample = 0;
-                consumedSinceLastSample = 0;
-                recomputeLatestRatesFromStore();
-            }
-        }
+        });
     }
 
     /**
@@ -259,26 +246,44 @@ public class SimulationEngine implements SimulationRuntime {
     }
 
     /**
+     * Replaces the current world with a previously captured simulation state.
+     */
+    public void loadState(SimulationState state) {
+        frameMutationCoordinator.runExclusive(() -> {
+            ensureWorldStatsFlushed("loadState");
+            synchronized (worldState.dataLock()) {
+                renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
+                simulationTick = Math.max(0L, state.simulationTick());
+                worldStatsStore.replaceAll(state.worldStatsHistory());
+                worldStatsStore.backfillDerivedTraitMetrics();
+                spawnedSinceLastSample = 0;
+                consumedSinceLastSample = 0;
+                recomputeLatestRatesFromStore();
+            }
+        });
+    }
+
+    /**
      * Directly adds a microbe to the simulation.
      * Intended for sandbox / debug use only – bypasses population caps.
      *
      * @param microbe the microbe to inject
      */
     public void spawnMicrobe(Microbe microbe) {
-        synchronized (frameMutationLock) {
+        frameMutationCoordinator.runExclusive(() -> {
             synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().spawnMicrobe(microbe);
             }
-        }
+        });
     }
 
     @Override
     public void spawnFood(FoodPellet foodPellet) {
-        synchronized (frameMutationLock) {
+        frameMutationCoordinator.runExclusive(() -> {
             synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().spawnFood(foodPellet);
             }
-        }
+        });
     }
 
     /**
@@ -293,13 +298,19 @@ public class SimulationEngine implements SimulationRuntime {
         spawnedSinceLastSample += Math.max(0, frameResult.spawnedFoodCount());
         consumedSinceLastSample += Math.max(0, frameResult.consumedFoodCount());
 
-        if (simulationTick > 0 && simulationTick % 30L == 0L) {
+        if (isStatsSampleTick(simulationTick)) {
             // Keep variable names for binary compatibility; values are now stored as averages per tick.
             foodSpawnedPerSecond = perTickAverage(spawnedSinceLastSample);
             foodConsumedPerSecond = perTickAverage(consumedSinceLastSample);
             worldStatsAppender.submit(buildWorldStatsSample(System.currentTimeMillis()));
             spawnedSinceLastSample = 0;
             consumedSinceLastSample = 0;
+        }
+    }
+
+    private void ensureWorldStatsFlushed(String operationName) {
+        if (!worldStatsAppender.flush()) {
+            throw new IllegalStateException("Timed out while flushing world stats before " + operationName);
         }
     }
 

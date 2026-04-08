@@ -11,6 +11,7 @@ import java.util.logging.Logger;
  * Single-consumer append worker that decouples stats-store writes from the simulation thread.
  */
 final class WorldStatsSampleAppender {
+    private static final long FLUSH_TIMEOUT_SECONDS = 5L;
     private static final Runnable POISON = () -> {
     };
 
@@ -20,6 +21,7 @@ final class WorldStatsSampleAppender {
     private final Logger logger;
 
     private volatile boolean running = true;
+    private volatile boolean acceptingSubmissions = true;
 
     WorldStatsSampleAppender(WorldStatsStore store, Logger logger) {
         this.store = store;
@@ -30,22 +32,37 @@ final class WorldStatsSampleAppender {
     }
 
     void submit(WorldStatsSample sample) {
-        if (!running || sample == null) {
+        if (!acceptingSubmissions || sample == null) {
             return;
         }
-        queue.offer(() -> store.append(sample));
+        boolean enqueued = queue.offer(() -> store.append(sample));
+        if (!enqueued) {
+            logger.warning("Failed to enqueue world stats sample; sample will be dropped");
+        }
     }
 
-    void flush() {
+    /**
+     * Drains all tasks enqueued before this call returns true.
+     */
+    boolean flush() {
         if (!running) {
-            return;
+            return true;
         }
         CountDownLatch latch = new CountDownLatch(1);
-        queue.offer(latch::countDown);
+        if (!queue.offer(latch::countDown)) {
+            logger.warning("Failed to enqueue world stats flush barrier");
+            return false;
+        }
         try {
-            latch.await(5, TimeUnit.SECONDS);
+            boolean completed = latch.await(FLUSH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!completed) {
+                logger.warning("Timed out while flushing world stats appender");
+            }
+            return completed;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            logger.log(Level.WARNING, "Interrupted while flushing world stats appender", e);
+            return false;
         }
     }
 
@@ -53,9 +70,14 @@ final class WorldStatsSampleAppender {
         if (!running) {
             return;
         }
-        flush();
+        acceptingSubmissions = false;
+        if (!flush()) {
+            logger.warning("Proceeding with world stats appender shutdown after incomplete flush");
+        }
         running = false;
-        queue.offer(POISON);
+        if (!queue.offer(POISON)) {
+            logger.warning("Failed to enqueue world stats appender shutdown marker");
+        }
         try {
             worker.join(1_500);
         } catch (InterruptedException e) {

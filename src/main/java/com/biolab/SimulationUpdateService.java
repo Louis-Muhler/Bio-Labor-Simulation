@@ -8,7 +8,7 @@ import java.util.logging.Logger;
  * Runs one simulation frame update while preserving the engine's lock semantics.
  */
 final class SimulationUpdateService {
-    private final Object frameMutationLock;
+    private final FrameMutationCoordinator frameMutationCoordinator;
     private final ExecutorService executorService;
     private final SimulationCommandProcessor commandProcessor;
     private final SimulationRuntime runtime;
@@ -17,7 +17,7 @@ final class SimulationUpdateService {
     private final SimulationFrameOrchestrator frameOrchestrator;
     private final Logger logger;
 
-    SimulationUpdateService(Object frameMutationLock,
+    SimulationUpdateService(FrameMutationCoordinator frameMutationCoordinator,
                             ExecutorService executorService,
                             SimulationCommandProcessor commandProcessor,
                             SimulationRuntime runtime,
@@ -25,7 +25,7 @@ final class SimulationUpdateService {
                             FramePreparationSystem framePreparationSystem,
                             SimulationFrameOrchestrator frameOrchestrator,
                             Logger logger) {
-        this.frameMutationLock = frameMutationLock;
+        this.frameMutationCoordinator = frameMutationCoordinator;
         this.executorService = executorService;
         this.commandProcessor = commandProcessor;
         this.runtime = runtime;
@@ -46,11 +46,24 @@ final class SimulationUpdateService {
     }
 
     SimulationFrameResult runUpdate(SimulationSnapshot currentSnapshot, double foodSpawnRate) {
-        synchronized (frameMutationLock) {
-            // Frame invariant: publish either a fully committed frame or keep the last
-            // known-good snapshot; partial worker mutations must never be published.
-            if (executorService.isShutdown()) return new SimulationFrameResult(currentSnapshot, 0, 0);
+        // Frame invariant: publish either a fully committed frame or keep the last
+        // known-good snapshot; partial worker mutations must never be published.
+        if (executorService.isShutdown()) return new SimulationFrameResult(currentSnapshot, 0, 0);
 
+        boolean frameStarted = false;
+        try {
+            frameMutationCoordinator.beginFrame();
+            frameStarted = true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return stopRuntimeAndKeepLastConsistentSnapshot(
+                    currentSnapshot,
+                    "Simulation thread interrupted while waiting for exclusive world mutation",
+                    e
+            );
+        }
+
+        try {
             commandProcessor.processPending(runtime, logger);
 
             if (Thread.currentThread().isInterrupted()) {
@@ -65,27 +78,29 @@ final class SimulationUpdateService {
             final double tox = environment.getToxicity();
             FramePreparationSystem.FrameBatch frameData = framePreparationSystem.prepare(foodSpawnRate);
 
-            try {
-                return frameOrchestrator.runFrame(
-                        frameData.microbeSnapshot(),
-                        frameData.foodSnapshot(),
-                        frameData.spawnedFoodCount(),
-                        temp,
-                        tox
-                );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return stopRuntimeAndKeepLastConsistentSnapshot(
-                        currentSnapshot,
-                        "Simulation thread interrupted during frame processing",
-                        e
-                );
-            } catch (RuntimeException e) {
-                return stopRuntimeAndKeepLastConsistentSnapshot(
-                        currentSnapshot,
-                        "Simulation frame aborted due to worker failure",
-                        e
-                );
+            return frameOrchestrator.runFrame(
+                    frameData.microbeSnapshot(),
+                    frameData.foodSnapshot(),
+                    frameData.spawnedFoodCount(),
+                    temp,
+                    tox
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return stopRuntimeAndKeepLastConsistentSnapshot(
+                    currentSnapshot,
+                    "Simulation thread interrupted during frame processing",
+                    e
+            );
+        } catch (RuntimeException e) {
+            return stopRuntimeAndKeepLastConsistentSnapshot(
+                    currentSnapshot,
+                    "Simulation frame aborted due to worker failure",
+                    e
+            );
+        } finally {
+            if (frameStarted) {
+                frameMutationCoordinator.endFrame();
             }
         }
     }

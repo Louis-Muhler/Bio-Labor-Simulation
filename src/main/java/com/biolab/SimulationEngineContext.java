@@ -16,7 +16,7 @@ record SimulationEngineContext(
 ) {
     static SimulationEngineContext create(
             int maxQueuedCommands,
-            Object frameMutationLock,
+            FrameMutationCoordinator frameMutationCoordinator,
             ExecutorService executorService,
             Environment environment,
             DebugModeService debugModeService,
@@ -68,7 +68,7 @@ record SimulationEngineContext(
         );
 
         SimulationUpdateService updateService = new SimulationUpdateService(
-                frameMutationLock,
+                frameMutationCoordinator,
                 executorService,
                 commandProcessor,
                 runtime,

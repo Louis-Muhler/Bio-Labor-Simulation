@@ -34,7 +34,7 @@ class SimulationUpdateServiceTest {
         );
 
         return new SimulationUpdateService(
-                new Object(),
+                new FrameMutationCoordinator(),
                 executorService,
                 new SimulationCommandProcessor(128),
                 runtime,

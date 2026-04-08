@@ -143,10 +143,8 @@ class WorldStatsSamplingTest {
                     30,
                     1
             );
-            assertTrue(
-                    preFlushSamples.isEmpty(),
-                    "Before captureState(), tick-30 should not yet be visible in the async store"
-            );
+            assertTrue(preFlushSamples.size() <= 1,
+                    "Async appender may expose tick-30 before flush, but never duplicate it");
 
             // Flush async appender so tick-30 sample is visible to direct store queries.
             List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
@@ -226,10 +224,8 @@ class WorldStatsSamplingTest {
                     30,
                     1
             );
-            assertTrue(
-                    preFlushSamples.isEmpty(),
-                    "Before captureState(), tick-30 should not yet be visible in the async store"
-            );
+            assertTrue(preFlushSamples.size() <= 1,
+                    "Async appender may expose tick-30 before flush, but never duplicate it");
 
             // Flush async appender so tick-30 sample is visible to direct store queries.
             List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
