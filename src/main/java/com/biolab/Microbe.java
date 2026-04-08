@@ -380,6 +380,7 @@ public class Microbe {
         this.absoluteGeneration = 1;
         this.x = x;
         this.y = y;
+        this.positionSnapshot = new PositionSnapshot(x, y);
         ThreadLocalRandom random = ThreadLocalRandom.current();
         this.heatResistance = 0.35 + random.nextDouble() * 0.45;
         this.toxinResistance = 0.35 + random.nextDouble() * 0.45;
@@ -389,6 +390,7 @@ public class Microbe {
         this.maxEnergy = createSeedMaxEnergy(this.speed);
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
+        this.dead = (this.health <= 0.0 || this.energy <= 0.0);
         this.age = 0;
         this.ancestry = new ArrayList<>();
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);

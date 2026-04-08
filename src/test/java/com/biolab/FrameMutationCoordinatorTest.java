@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -82,7 +83,61 @@ class FrameMutationCoordinatorTest {
         assertInstanceOf(IllegalStateException.class, failure.get(), "Interrupted wait should fail fast");
         assertTrue(interruptObserved.get(), "Interrupt status should be preserved");
     }
+
+    @Test
+    void pendingExclusiveMutationShouldNotStarveBehindContinuousNewFrames() throws Exception {
+        FrameMutationCoordinator coordinator = new FrameMutationCoordinator();
+        coordinator.beginFrame();
+
+        AtomicBoolean exclusiveEntered = new AtomicBoolean(false);
+        CountDownLatch exclusiveDone = new CountDownLatch(1);
+
+        Thread exclusive = new Thread(() -> {
+            coordinator.runExclusive(() -> {
+                exclusiveEntered.set(true);
+                return null;
+            });
+            exclusiveDone.countDown();
+        }, "exclusive-request");
+        exclusive.start();
+
+        long waitingDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (exclusive.getState() != Thread.State.WAITING && System.nanoTime() < waitingDeadline) {
+            Thread.onSpinWait();
+        }
+        assertEquals(Thread.State.WAITING, exclusive.getState(), "Exclusive request should wait while frame is active");
+
+        AtomicBoolean keepFraming = new AtomicBoolean(true);
+        AtomicInteger frameAttempts = new AtomicInteger();
+        Thread framer = new Thread(() -> {
+            while (keepFraming.get()) {
+                try {
+                    coordinator.beginFrame();
+                    frameAttempts.incrementAndGet();
+                    coordinator.endFrame();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }, "aggressive-frame-starter");
+        framer.start();
+
+        coordinator.endFrame();
+
+        assertTrue(exclusiveDone.await(1, TimeUnit.SECONDS),
+                "Exclusive mutation should run promptly even when new frames compete");
+        assertTrue(exclusiveEntered.get(), "Exclusive mutation action should execute");
+
+        keepFraming.set(false);
+        framer.interrupt();
+        framer.join(1_000);
+        exclusive.join(1_000);
+        assertFalse(exclusive.isAlive(), "Exclusive requester should terminate");
+        assertTrue(frameAttempts.get() >= 0);
+    }
 }
+
 
 
 

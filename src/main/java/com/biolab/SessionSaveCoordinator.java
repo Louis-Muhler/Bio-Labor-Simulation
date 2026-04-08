@@ -61,7 +61,13 @@ final class SessionSaveCoordinator {
             return;
         }
 
-        final SimulationState state = engine.captureState();
+        final SimulationState state;
+        try {
+            state = engine.captureState();
+        } catch (RuntimeException ex) {
+            logger.log(Level.WARNING, "Failed to capture state for autosave", ex);
+            return;
+        }
         final long playedSeconds = elapsedSessionSeconds();
         final SaveGameMetadata existingSave = currentSave;
         final String worldName = currentWorldName;
@@ -130,12 +136,28 @@ final class SessionSaveCoordinator {
     }
 
     private void scheduleAutosaveTask() {
-        autosaveTask = autosaveExecutor.scheduleAtFixedRate(
-                () -> saveCurrentWorld(autosaveEngineSupplier.get(), autosaveGameplaySessionSupplier.getAsBoolean()),
-                autosaveIntervalSeconds,
-                autosaveIntervalSeconds,
-                TimeUnit.SECONDS
-        );
+        try {
+            autosaveTask = autosaveExecutor.scheduleAtFixedRate(
+                    () -> {
+                        try {
+                            Supplier<SimulationRuntime> engineSupplier = autosaveEngineSupplier;
+                            BooleanSupplier gameplaySupplier = autosaveGameplaySessionSupplier;
+                            if (engineSupplier == null || gameplaySupplier == null) {
+                                return;
+                            }
+                            saveCurrentWorld(engineSupplier.get(), gameplaySupplier.getAsBoolean());
+                        } catch (RuntimeException ex) {
+                            logger.log(Level.WARNING, "Autosave tick failed unexpectedly", ex);
+                        }
+                    },
+                    autosaveIntervalSeconds,
+                    autosaveIntervalSeconds,
+                    TimeUnit.SECONDS
+            );
+        } catch (RuntimeException ex) {
+            autosaveTask = null;
+            logger.log(Level.WARNING, "Failed to schedule autosave task", ex);
+        }
     }
 
     synchronized void stopAutoSave() {

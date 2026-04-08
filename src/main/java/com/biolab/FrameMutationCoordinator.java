@@ -12,10 +12,11 @@ final class FrameMutationCoordinator {
     private boolean frameInProgress;
     private boolean exclusiveMutationInProgress;
     private Thread frameOwner;
+    private int pendingExclusiveMutations;
 
     void beginFrame() throws InterruptedException {
         synchronized (this) {
-            while (exclusiveMutationInProgress || frameInProgress) {
+            while (exclusiveMutationInProgress || frameInProgress || pendingExclusiveMutations > 0) {
                 wait();
             }
             frameInProgress = true;
@@ -38,14 +39,18 @@ final class FrameMutationCoordinator {
         }
 
         synchronized (this) {
+            pendingExclusiveMutations++;
             while (frameInProgress || exclusiveMutationInProgress) {
                 try {
                     wait();
                 } catch (InterruptedException e) {
+                    pendingExclusiveMutations--;
+                    notifyAll();
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Interrupted while waiting for exclusive world mutation", e);
                 }
             }
+            pendingExclusiveMutations--;
             exclusiveMutationInProgress = true;
         }
 

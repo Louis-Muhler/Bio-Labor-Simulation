@@ -126,6 +126,16 @@ class MicrobeTest {
     }
 
     @Test
+    void debugConstructorShouldInitializePositionSnapshot() {
+        Microbe microbe = new Microbe(42.5, 84.25, 1.0);
+        Microbe.PositionSnapshot position = microbe.getPositionSnapshot();
+        assertNotNull(position, "Debug constructor must initialize position snapshot");
+        assertEquals(42.5, position.x(), 0.0001);
+        assertEquals(84.25, position.y(), 0.0001);
+        assertDoesNotThrow(microbe::toRenderState, "Render snapshot must be available for debug-constructed microbes");
+    }
+
+    @Test
     void positionSnapshotShouldNotExposeMixedXYUnderConcurrentUpdates() throws Exception {
         Microbe microbe = new Microbe(0, 0);
         AtomicBoolean writerDone = new AtomicBoolean(false);

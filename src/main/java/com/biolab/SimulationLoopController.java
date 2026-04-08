@@ -136,8 +136,14 @@ public class SimulationLoopController {
                 long startTime = System.nanoTime();
 
                 if (!paused) {
-                    engine.update();
-                    onDeadMicrobeCheck.run();
+                    try {
+                        engine.update();
+                        onDeadMicrobeCheck.run();
+                    } catch (RuntimeException e) {
+                        LOGGER.log(Level.SEVERE, "Unhandled runtime exception in simulation loop; stopping loop", e);
+                        running = false;
+                        break;
+                    }
 
                     // Repaint only when enough time has elapsed for the chosen render FPS.
                     long now = System.nanoTime();
