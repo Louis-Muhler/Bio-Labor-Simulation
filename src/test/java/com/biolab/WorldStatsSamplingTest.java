@@ -137,6 +137,9 @@ class WorldStatsSamplingTest {
                 engine.update();
             }
 
+            // Flush async appender so tick-30 sample is visible to direct store queries.
+            engine.captureState();
+
             List<WorldStatsSample> samples = engine.getWorldStatsStore().queryRangeByTick(
                     EnumSet.of(
                             WorldMetricId.AVG_HEALTH_PERCENT,
@@ -200,6 +203,9 @@ class WorldStatsSamplingTest {
             for (int i = 0; i < 30; i++) {
                 engine.update();
             }
+
+            // Flush async appender so tick-30 sample is visible to direct store queries.
+            engine.captureState();
 
             List<WorldStatsSample> samples = engine.getWorldStatsStore().queryRangeByTick(
                     EnumSet.of(WorldMetricId.AVG_STRENGTH, WorldMetricId.AVG_DEFENSE),

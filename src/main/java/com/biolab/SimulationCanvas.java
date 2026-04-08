@@ -503,9 +503,9 @@ public class SimulationCanvas extends JPanel {
 
                     // Vision / aggro radius circle
                     int debugVisionRadius = engine.getDebugVisionRadius();
-                    int visionR = Math.max(1, debugVisionRadius > 0
+                    int visionR = debugVisionRadius > 0
                             ? debugVisionRadius
-                            : DEFAULT_DEBUG_VISION_RADIUS);
+                            : DEFAULT_DEBUG_VISION_RADIUS;
                     g2d.setComposite(AC_DEBUG_VISION);
                     g2d.setColor(DEBUG_VISION_COLOR);
                     g2d.drawOval((int) mx - visionR, (int) my - visionR, visionR * 2, visionR * 2);

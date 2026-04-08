@@ -53,6 +53,14 @@ final class SimulationUpdateService {
 
             commandProcessor.processPending(runtime, logger);
 
+            if (Thread.currentThread().isInterrupted()) {
+                return stopRuntimeAndKeepLastConsistentSnapshot(
+                        currentSnapshot,
+                        "Simulation thread already interrupted before frame start",
+                        new InterruptedException("Frame update aborted before preparation")
+                );
+            }
+
             final double temp = environment.getTemperature();
             final double tox = environment.getToxicity();
             FramePreparationSystem.FrameBatch frameData = framePreparationSystem.prepare(foodSpawnRate);
