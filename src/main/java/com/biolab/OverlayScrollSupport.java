@@ -38,9 +38,9 @@ final class OverlayScrollSupport {
             return;
         }
         int maxValue = Math.max(bar.getMinimum(), bar.getMaximum() - bar.getVisibleAmount());
-        double pdouble preciseRotation = e.getPreciseWheelRotation();
-        double effectiveRotation = preciseRotation != 0.0
-                ? preciseRotation
+        double preciseValue = e.getPreciseWheelRotation();
+        double effectiveRotation = preciseValue != 0.0
+                ? preciseValue
                 : (double) e.getWheelRotation();
 
         int baseIncrement;

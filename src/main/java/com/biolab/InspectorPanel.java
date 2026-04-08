@@ -86,16 +86,13 @@ public class InspectorPanel extends JPanel {
         setLayout(new BorderLayout());
 
         contentCanvas = new ContentCanvas();
-        contentCanvas.setPreferredSize(new Dimension(
-                CONTENT_WIDTH,
-                NO_SELECTION_HEIGHT
-        ));
 
         scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(
                 contentCanvas,
                 new Insets(INSET, INSET, INSET, INSET),
                 18
         );
+        contentCanvas.recalculatePreferredSize();
 
         add(scrollPane, BorderLayout.CENTER);
     }
