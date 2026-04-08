@@ -26,8 +26,8 @@ final class SessionSaveCoordinator {
     private long sessionStartMillis;
     private ScheduledExecutorService autosaveExecutor;
     private ScheduledFuture<?> autosaveTask;
-    private Supplier<SimulationRuntime> autosaveEngineSupplier;
-    private BooleanSupplier autosaveGameplaySessionSupplier;
+    private volatile Supplier<SimulationRuntime> autosaveEngineSupplier;
+    private volatile BooleanSupplier autosaveGameplaySessionSupplier;
     private long autosaveIntervalSeconds;
 
     SessionSaveCoordinator(SaveGameRepository saveRepository,
@@ -56,7 +56,7 @@ final class SessionSaveCoordinator {
         this.sessionStartMillis = 0L;
     }
 
-    synchronized void saveCurrentWorld(SimulationRuntime engine, boolean gameplaySession) {
+    void saveCurrentWorld(SimulationRuntime engine, boolean gameplaySession) {
         if (engine == null || !gameplaySession) {
             return;
         }
@@ -68,9 +68,14 @@ final class SessionSaveCoordinator {
             logger.log(Level.WARNING, "Failed to capture state for autosave", ex);
             return;
         }
-        final long playedSeconds = elapsedSessionSeconds();
-        final SaveGameMetadata existingSave = currentSave;
-        final String worldName = currentWorldName;
+        final long playedSeconds;
+        final SaveGameMetadata existingSave;
+        final String worldName;
+        synchronized (this) {
+            playedSeconds = elapsedSessionSecondsLocked();
+            existingSave = currentSave;
+            worldName = currentWorldName;
+        }
 
         boolean accepted = asyncSaveService.submit(() -> {
             try {
@@ -103,12 +108,6 @@ final class SessionSaveCoordinator {
         });
         if (!accepted) {
             logger.fine("Save submission skipped because save worker is shutting down");
-        }
-    }
-
-    synchronized void flushPendingSaves() {
-        if (!asyncSaveService.flushAndWait(2, TimeUnit.SECONDS)) {
-            logger.fine("Timed out while flushing pending saves");
         }
     }
 
@@ -178,7 +177,7 @@ final class SessionSaveCoordinator {
         asyncSaveService.shutdownAndFlush(2, TimeUnit.SECONDS);
     }
 
-    private long elapsedSessionSeconds() {
+    private long elapsedSessionSecondsLocked() {
         if (sessionStartMillis <= 0L) {
             return 0L;
         }

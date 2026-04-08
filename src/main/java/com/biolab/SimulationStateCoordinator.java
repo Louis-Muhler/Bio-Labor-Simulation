@@ -97,8 +97,8 @@ final class SimulationStateCoordinator {
         return snapshotFromCurrentWorld();
     }
 
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
+    private static double clampToWorldBounds(double value, double max) {
+        return Math.max(0.0, Math.min(max, value));
     }
 
     SimulationSnapshot spawnMicrobe(Microbe microbe) {
@@ -122,14 +122,14 @@ final class SimulationStateCoordinator {
     }
 
     private void clampMicrobeToWorld(Microbe microbe) {
-        double clampedX = clamp(microbe.getX(), 0.0, width);
-        double clampedY = clamp(microbe.getY(), 0.0, height);
+        double clampedX = clampToWorldBounds(microbe.getX(), width);
+        double clampedY = clampToWorldBounds(microbe.getY(), height);
         microbe.setPosition(clampedX, clampedY);
     }
 
     private FoodPellet clampFoodToWorld(FoodPellet foodPellet) {
-        double clampedX = clamp(foodPellet.getX(), 0.0, width);
-        double clampedY = clamp(foodPellet.getY(), 0.0, height);
+        double clampedX = clampToWorldBounds(foodPellet.getX(), width);
+        double clampedY = clampToWorldBounds(foodPellet.getY(), height);
         return new FoodPellet(clampedX, clampedY);
     }
 

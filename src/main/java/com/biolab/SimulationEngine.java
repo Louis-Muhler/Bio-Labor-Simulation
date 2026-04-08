@@ -6,6 +6,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 /**
@@ -22,7 +23,6 @@ public class SimulationEngine implements SimulationRuntime {
     private final Environment environment;
     private static final int THREAD_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors());
 
-    private final AtomicInteger availableReproductionSlots;
     private final ExecutorService executorService;
     private static final int INITIAL_FOOD_COUNT = 1200;
     private static final int MAX_FOOD_PELLETS = 6000;
@@ -54,7 +54,7 @@ public class SimulationEngine implements SimulationRuntime {
      * Fractional values are supported (e.g. 0.75 means 3 pellets every 4 ticks on average).
      */
     private volatile double foodSpawnRate = 0.75;
-    private volatile long simulationTick;
+    private final AtomicLong simulationTick = new AtomicLong();
     private double foodSpawnedPerSecond;
     private double foodConsumedPerSecond;
     private int spawnedSinceLastSample;
@@ -90,7 +90,7 @@ public class SimulationEngine implements SimulationRuntime {
 
         this.worldState = new WorldState();
         this.environment = new Environment();
-        this.availableReproductionSlots = new AtomicInteger(maxPopulation);
+        AtomicInteger availableReproductionSlots = new AtomicInteger(maxPopulation);
 
         this.executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         this.worldStatsStore = new WorldStatsStore();
@@ -153,7 +153,7 @@ public class SimulationEngine implements SimulationRuntime {
 
     @Override
     public long getSimulationTick() {
-        return simulationTick;
+        return simulationTick.get();
     }
 
     @Override
@@ -177,14 +177,6 @@ public class SimulationEngine implements SimulationRuntime {
     @Override
     public void enqueueCommand(SimulationCommand command) {
         context.commandProcessor().enqueue(command);
-    }
-
-    /**
-     * Returns the spatial cell size (world units).
-     * Used by the debug renderer as the approximate vision / aggro radius.
-     */
-    public static int getSpatialCellSize() {
-        return SPATIAL_CELL_SIZE;
     }
 
     /**
@@ -232,7 +224,7 @@ public class SimulationEngine implements SimulationRuntime {
             synchronized (worldState.dataLock()) {
                 return context.stateCoordinator().captureState(
                         foodSpawnRate,
-                        simulationTick,
+                        simulationTick.get(),
                         worldStatsStore.snapshotAll()
                 );
             }
@@ -254,7 +246,7 @@ public class SimulationEngine implements SimulationRuntime {
             ensureWorldStatsFlushed("loadState");
             synchronized (worldState.dataLock()) {
                 renderSnapshot = context.stateCoordinator().loadState(state, this::setFoodSpawnRate);
-                simulationTick = Math.max(0L, state.simulationTick());
+                simulationTick.set(Math.max(0L, state.simulationTick()));
                 worldStatsStore.replaceAll(state.worldStatsHistory());
                 worldStatsStore.backfillDerivedTraitMetrics();
                 spawnedSinceLastSample = 0;
@@ -295,11 +287,11 @@ public class SimulationEngine implements SimulationRuntime {
     public void update() {
         SimulationFrameResult frameResult = context.updateService().runUpdate(renderSnapshot, foodSpawnRate);
         renderSnapshot = frameResult.snapshot();
-        simulationTick++;
+        long nextTick = simulationTick.incrementAndGet();
         spawnedSinceLastSample += Math.max(0, frameResult.spawnedFoodCount());
         consumedSinceLastSample += Math.max(0, frameResult.consumedFoodCount());
 
-        if (isStatsSampleTick(simulationTick)) {
+        if (isStatsSampleTick(nextTick)) {
             // Keep variable names for binary compatibility; values are now stored as averages per tick.
             foodSpawnedPerSecond = perTickAverage(spawnedSinceLastSample);
             foodConsumedPerSecond = perTickAverage(consumedSinceLastSample);
@@ -387,7 +379,7 @@ public class SimulationEngine implements SimulationRuntime {
             double value = definition.extractor().applyAsDouble(contextSnapshot);
             valuesMap.put(definition.id(), value);
         }
-        return new WorldStatsSample(timestampMillis, simulationTick, valuesMap);
+        return new WorldStatsSample(timestampMillis, simulationTick.get(), valuesMap);
     }
 
     private void recomputeLatestRatesFromStore() {
