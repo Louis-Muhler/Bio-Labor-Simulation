@@ -137,6 +137,17 @@ class WorldStatsSamplingTest {
                 engine.update();
             }
 
+            List<WorldStatsSample> preFlushSamples = engine.getWorldStatsStore().queryRangeByTick(
+                    EnumSet.of(WorldMetricId.AVG_HEALTH_PERCENT),
+                    30,
+                    30,
+                    1
+            );
+            assertTrue(
+                    preFlushSamples.isEmpty(),
+                    "Before captureState(), tick-30 should not yet be visible in the async store"
+            );
+
             // Flush async appender so tick-30 sample is visible to direct store queries.
             List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
             assertTrue(
@@ -208,6 +219,17 @@ class WorldStatsSamplingTest {
             for (int i = 0; i < 30; i++) {
                 engine.update();
             }
+
+            List<WorldStatsSample> preFlushSamples = engine.getWorldStatsStore().queryRangeByTick(
+                    EnumSet.of(WorldMetricId.AVG_STRENGTH),
+                    30,
+                    30,
+                    1
+            );
+            assertTrue(
+                    preFlushSamples.isEmpty(),
+                    "Before captureState(), tick-30 should not yet be visible in the async store"
+            );
 
             // Flush async appender so tick-30 sample is visible to direct store queries.
             List<WorldStatsSample> flushedHistory = engine.captureState().worldStatsHistory();
