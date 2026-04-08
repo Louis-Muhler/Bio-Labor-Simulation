@@ -139,6 +139,13 @@ public class MicrobeCreatorPanel extends JPanel {
         microbeSection.setLayout(new BoxLayout(microbeSection, BoxLayout.Y_AXIS));
         microbeSection.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT, MAX_HEALTH_COLOR);
+        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT, MAX_ENERGY_COLOR);
+        microbeSection.add(microbeHealthRow);
+        microbeSection.add(Box.createVerticalStrut(HEALTH_ENERGY_GAP));
+        microbeSection.add(microbeEnergyRow);
+        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
+
         heatRow = wrapTraitRow(heatTrait);
         microbeSection.add(heatRow);
         microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
@@ -150,14 +157,8 @@ public class MicrobeCreatorPanel extends JPanel {
         microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
         dietRow = wrapTraitRow(dietTrait);
         microbeSection.add(dietRow);
-        microbeSection.add(Box.createVerticalStrut(TRAIT_ROW_GAP));
-
-        microbeHealthRow = rowWithLabel("Max Health", maxHealthInput, LABEL_FONT, MAX_HEALTH_COLOR);
-        microbeEnergyRow = rowWithLabel("Max Energy", maxEnergyInput, LABEL_FONT, MAX_ENERGY_COLOR);
-        microbeSection.add(microbeHealthRow);
-        microbeSection.add(Box.createVerticalStrut(HEALTH_ENERGY_GAP));
-        microbeSection.add(microbeEnergyRow);
         microbeSection.add(Box.createVerticalStrut(TRAIT_BLOCK_TOP_GAP));
+
 
         previewShell = OverlayControlFactory.wrapInInnerFrame(previewCanvas);
         previewShell.setPreferredSize(new Dimension(1, 186));
