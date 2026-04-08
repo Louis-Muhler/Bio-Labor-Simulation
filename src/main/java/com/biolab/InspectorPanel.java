@@ -53,6 +53,7 @@ public class InspectorPanel extends JPanel {
      * Combined inset (FRAME_MARGIN + FRAME_PADDING) applied to all four sides of the scroll pane border.
      */
     private static final int INSET = FRAME_MARGIN + FRAME_PADDING;
+    private static final int CONTENT_WIDTH = PANEL_WIDTH - 2 * FRAME_MARGIN - 2 * FRAME_PADDING;
     /**
      * Height of the placeholder box shown when no microbe is selected.
      */
@@ -86,7 +87,7 @@ public class InspectorPanel extends JPanel {
 
         contentCanvas = new ContentCanvas();
         contentCanvas.setPreferredSize(new Dimension(
-                PANEL_WIDTH - 2 * FRAME_MARGIN - 2 * FRAME_PADDING,
+                CONTENT_WIDTH,
                 NO_SELECTION_HEIGHT
         ));
 
@@ -346,7 +347,7 @@ public class InspectorPanel extends JPanel {
         /**
          * Content width – frame margin and padding are handled by the scroll-pane border.
          */
-        private static final int CW = PANEL_WIDTH - 2 * FRAME_MARGIN - 2 * FRAME_PADDING;
+        private static final int CW = CONTENT_WIDTH;
         private Microbe selectedMicrobe;
 
         /**
