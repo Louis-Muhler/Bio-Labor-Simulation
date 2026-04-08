@@ -45,21 +45,23 @@ final class MicrobeSelectionCoordinator {
         if (selectionBlockedSupplier.getAsBoolean()) {
             return;
         }
+        if (microbe == null) {
+            forceClearSelection();
+            return;
+        }
         Microbe previous = selectedMicrobe;
         if (previous != null) {
             previous.setSelected(false);
         }
         selectedMicrobe = microbe;
-        if (microbe != null) {
-            microbe.setSelected(true);
-        }
+        microbe.setSelected(true);
         OverlayManager overlayManager = overlaySupplier.get();
         if (overlayManager != null) {
             overlayManager.getInspectorPanel().setSelectedMicrobe(microbe);
             overlayManager.getInspectorPanel().showPanel();
         }
         SimulationCanvas canvas = canvasSupplier.get();
-        if (canvas != null && microbe != null) {
+        if (canvas != null) {
             canvas.startFollowing(microbe);
         }
     }
@@ -156,18 +158,7 @@ final class MicrobeSelectionCoordinator {
             if (next != null) {
                 onMicrobeSelected(next);
             } else {
-                OverlayManager overlayManager = overlaySupplier.get();
-                if (overlayManager != null) {
-                    overlayManager.getInspectorPanel().hidePanel();
-                }
-                SimulationCanvas canvas = canvasSupplier.get();
-                if (canvas != null) {
-                    canvas.stopFollowing();
-                }
-                JLayeredPane layeredPane = layeredPaneSupplier.get();
-                if (layeredPane != null) {
-                    layeredPane.repaint();
-                }
+                forceClearSelection();
             }
         });
     }

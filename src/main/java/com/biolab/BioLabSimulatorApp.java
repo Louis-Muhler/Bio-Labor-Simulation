@@ -325,7 +325,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
 
     private void createWorldAndStart(WorldConfig config) {
         startSimulationSession(config, true);
-        transitionOrRecover(AppUiState.GAMEPLAY);
+        if (!transitionOrRecover(AppUiState.GAMEPLAY)) {
+            return;
+        }
         uiFlowCoordinator.removeMainMenu();
         uiFlowCoordinator.removeSaveBrowser(false);
 
@@ -370,7 +372,9 @@ public class BioLabSimulatorApp extends JFrame implements SimulationCanvas.Selec
                             state.foodSpawnRate()
                     );
                     startSimulationSession(config, true);
-                    transitionOrRecover(AppUiState.GAMEPLAY);
+                    if (!transitionOrRecover(AppUiState.GAMEPLAY)) {
+                        return;
+                    }
                     SimulationRuntime engine = simulationSessionCoordinator.engine();
                     if (engine != null) {
                         engine.loadState(state);
