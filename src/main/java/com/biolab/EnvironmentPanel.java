@@ -4,8 +4,6 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicSliderUI;
 import javax.swing.plaf.basic.BasicSpinnerUI;
-import javax.swing.text.DefaultFormatter;
-import javax.swing.text.NumberFormatter;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.util.Locale;
@@ -190,32 +188,20 @@ public class EnvironmentPanel extends JPanel {
     }
 
     private static void styleFoodSpinner(JSpinner spinner) {
-        OverlayControlFactory.styleSpinner(spinner);
-        spinner.setEditor(new JSpinner.NumberEditor(spinner, "0.00##"));
+        spinner.setUI(new ColoredSpinnerUI(FOOD_SPINNER_BORDER));
+        spinner.setOpaque(false);
+        spinner.setBorder(BorderFactory.createEmptyBorder());
+        spinner.setBackground(OverlayTheme.CONTROL_BG);
 
         JComponent editor = spinner.getEditor();
         if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
-            JFormattedTextField field = defaultEditor.getTextField();
-            field.setFont(new Font("Segoe UI", Font.BOLD, 14));
-            field.setForeground(FOOD_SPINNER_BORDER);
-            field.setCaretColor(FOOD_SPINNER_BORDER);
-            field.setOpaque(false);
-            field.setHorizontalAlignment(SwingConstants.LEFT);
-            field.setBorder(new EmptyBorder(6, 0, 6, 0));
-            field.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
-
-            if (field.getFormatter() instanceof NumberFormatter numberFormatter) {
-                numberFormatter.setValueClass(Double.class);
-                numberFormatter.setMinimum(0.0);
-                numberFormatter.setMaximum(MAX_FOOD_SPAWN_PER_TICK);
-                numberFormatter.setCommitsOnValidEdit(true);
-                numberFormatter.setAllowsInvalid(true);
-            } else if (field.getFormatter() instanceof DefaultFormatter defaultFormatter) {
-                defaultFormatter.setCommitsOnValidEdit(true);
-            }
-
-            defaultEditor.setBorder(BorderFactory.createEmptyBorder());
-            defaultEditor.setOpaque(false);
+            JTextField textField = defaultEditor.getTextField();
+            textField.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            textField.setBorder(new EmptyBorder(6, 10, 6, 10));
+            textField.setHorizontalAlignment(SwingConstants.LEFT);
+            textField.setForeground(FOOD_SPINNER_BORDER);
+            textField.setCaretColor(FOOD_SPINNER_BORDER);
+            textField.setOpaque(false);
         }
     }
 
@@ -379,7 +365,13 @@ public class EnvironmentPanel extends JPanel {
         }
     }
 
-    private static final class BlueSpinnerUI extends BasicSpinnerUI {
+    private static final class ColoredSpinnerUI extends BasicSpinnerUI {
+        private final Color accent;
+
+        private ColoredSpinnerUI(Color accent) {
+            this.accent = accent;
+        }
+
         @Override
         public void installUI(JComponent c) {
             super.installUI(c);
@@ -394,7 +386,7 @@ public class EnvironmentPanel extends JPanel {
             int h = c.getHeight();
             g2.setColor(OverlayTheme.CONTROL_BG);
             g2.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
-            g2.setColor(FOOD_SPINNER_BORDER);
+            g2.setColor(accent);
             g2.setStroke(new BasicStroke(1.5f));
             g2.drawRoundRect(0, 0, w - 1, h - 1, 10, 10);
             g2.dispose();
@@ -425,8 +417,13 @@ public class EnvironmentPanel extends JPanel {
                 protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(hovered ? new Color(95, 145, 255, 255) : FOOD_SPINNER_BORDER);
-                    g2.setStroke(new BasicStroke(hovered ? 2.8f : 2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    Color hoverColor = new Color(
+                            Math.min(255, accent.getRed() + 35),
+                            Math.min(255, accent.getGreen() + 35),
+                            Math.min(255, accent.getBlue() + 35)
+                    );
+                    g2.setColor(hovered ? hoverColor : accent);
+                    g2.setStroke(new BasicStroke(hovered ? 3f : 2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     int cx = getWidth() / 2;
                     int cy = getHeight() / 2;
                     int aw = 4;
