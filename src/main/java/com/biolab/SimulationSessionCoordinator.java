@@ -2,11 +2,14 @@ package com.biolab;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.logging.Logger;
 
 /**
  * Owns gameplay-session runtime objects (engine, canvas, overlays, loop) and their lifecycle.
  */
 final class SimulationSessionCoordinator {
+    private static final Logger LOGGER = Logger.getLogger(SimulationSessionCoordinator.class.getName());
+    private static final long LOOP_STOP_TIMEOUT_MS = 3_000L;
     private final JFrame hostFrame;
     private final SettingsManager settingsManager;
     private final SessionSaveCoordinator sessionSaveCoordinator;
@@ -106,7 +109,11 @@ final class SimulationSessionCoordinator {
             overlayManager.removeAllOverlays();
         }
         if (loopController != null) {
-            loopController.stop();
+            boolean stopped = loopController.stopAndAwait(LOOP_STOP_TIMEOUT_MS);
+            if (!stopped) {
+                LOGGER.severe("Simulation loop did not stop before engine teardown");
+                throw new IllegalStateException("Simulation loop did not stop before engine teardown");
+            }
             loopController = null;
         }
         if (engine != null && engine.isRunning()) {

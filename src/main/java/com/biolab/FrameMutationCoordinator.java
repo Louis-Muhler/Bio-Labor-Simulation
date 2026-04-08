@@ -15,7 +15,7 @@ final class FrameMutationCoordinator {
 
     void beginFrame() throws InterruptedException {
         synchronized (this) {
-            while (exclusiveMutationInProgress) {
+            while (exclusiveMutationInProgress || frameInProgress) {
                 wait();
             }
             frameInProgress = true;
@@ -38,16 +38,13 @@ final class FrameMutationCoordinator {
         }
 
         synchronized (this) {
-            boolean interrupted = false;
             while (frameInProgress || exclusiveMutationInProgress) {
                 try {
                     wait();
                 } catch (InterruptedException e) {
-                    interrupted = true;
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for exclusive world mutation", e);
                 }
-            }
-            if (interrupted) {
-                Thread.currentThread().interrupt();
             }
             exclusiveMutationInProgress = true;
         }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.awt.*;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -122,6 +123,37 @@ class MicrobeTest {
                 "X out of bounds: " + m.getX());
         assertTrue(m.getY() >= 0 && m.getY() <= worldSize,
                 "Y out of bounds: " + m.getY());
+    }
+
+    @Test
+    void positionSnapshotShouldNotExposeMixedXYUnderConcurrentUpdates() throws Exception {
+        Microbe microbe = new Microbe(0, 0);
+        AtomicBoolean writerDone = new AtomicBoolean(false);
+        AtomicBoolean mismatchDetected = new AtomicBoolean(false);
+
+        Thread writer = new Thread(() -> {
+            for (int i = 0; i < 20_000; i++) {
+                microbe.setPosition(i, -i);
+            }
+            writerDone.set(true);
+        }, "microbe-position-writer");
+
+        Thread reader = new Thread(() -> {
+            while (!writerDone.get()) {
+                Microbe.PositionSnapshot position = microbe.getPositionSnapshot();
+                if (position.y() != -position.x()) {
+                    mismatchDetected.set(true);
+                    return;
+                }
+            }
+        }, "microbe-position-reader");
+
+        writer.start();
+        reader.start();
+        writer.join(2_000);
+        reader.join(2_000);
+
+        assertFalse(mismatchDetected.get(), "Position snapshot should always provide a consistent x/y pair");
     }
 
     // ===== Health & Death =====

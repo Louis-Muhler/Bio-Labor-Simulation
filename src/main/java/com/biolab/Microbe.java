@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@code health}, {@code energy}, {@code age}, {@code velocityX/Y}) are published to the EDT
  * through immutable render snapshots created by {@link #toRenderState()} at the end of each
  * engine update.
- * Only {@code isSelected} is {@code volatile} because it is written directly from the
- * EDT outside the lock.</p>
+ * World-space position is additionally published as an atomic pair via
+ * {@link PositionSnapshot} to avoid mixed x/y reads across threads.</p>
  */
 public class Microbe {
 
@@ -57,7 +57,7 @@ public class Microbe {
      * Thread A may now write to a microbe that is owned by Thread B.
      */
     private final Object stateLock = new Object();
-    private volatile double y;
+    private double y;
     private double velocityX;
     private double velocityY;
     // Ancestry tracking for evolution visualization
@@ -98,12 +98,14 @@ public class Microbe {
      */
     private final int absoluteGeneration;
     // Mutable simulation state – written by one worker thread per frame.
-    private volatile double x;
+    private double x;
+    private volatile PositionSnapshot positionSnapshot;
     private double health;
     private double energy;
     private int age;
     // isSelected is written directly from the EDT (outside dataLock), so it must be volatile
     private volatile boolean isSelected = false;
+    private volatile boolean dead;
 
     /**
      * Timestamp (ms) of the last successful attack this microbe landed.
@@ -164,6 +166,7 @@ public class Microbe {
         this.absoluteGeneration = 1;
         this.x = x;
         this.y = y;
+        this.positionSnapshot = new PositionSnapshot(x, y);
         ThreadLocalRandom random = ThreadLocalRandom.current();
         // Triangle-tradeoff: strong genes in one axis reduce headroom in others.
         double offenseAxis = random.nextDouble();
@@ -183,6 +186,7 @@ public class Microbe {
         this.maxEnergy = createSeedMaxEnergy(agilityAxis);
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
+        this.dead = (this.health <= 0.0 || this.energy <= 0.0);
         this.age = 0;
         this.ancestry = new ArrayList<>();
         this.unmodifiableAncestry = Collections.unmodifiableList(ancestry);
@@ -219,6 +223,7 @@ public class Microbe {
         this.absoluteGeneration = absoluteGeneration;
         this.x = x;
         this.y = y;
+        this.positionSnapshot = new PositionSnapshot(x, y);
         this.heatResistance = heatResistance;
         this.toxinResistance = toxinResistance;
         this.speed = speed;
@@ -227,6 +232,7 @@ public class Microbe {
         this.maxEnergy = sanitizeMaxEnergy(maxEnergy);
         this.health = clamp(health, 0.0, this.maxHealth);
         this.energy = clamp(energy, 0.0, this.maxEnergy);
+        this.dead = (this.health <= 0.0 || this.energy <= 0.0);
         this.age = age;
         this.velocityX = velocityX;
         this.velocityY = velocityY;
@@ -251,6 +257,7 @@ public class Microbe {
         this.absoluteGeneration = parent.absoluteGeneration + 1;
         this.x = x;
         this.y = y;
+        this.positionSnapshot = new PositionSnapshot(x, y);
 
         // Inherit genes with slight mutation
         this.heatResistance = mutate(parent.heatResistance);
@@ -262,6 +269,7 @@ public class Microbe {
 
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * REPRODUCTION_START_ENERGY_RATIO;
+        this.dead = (this.health <= 0.0 || this.energy <= 0.0);
         this.age = 0;
 
         // ── Smart ancestry thinning ──────────────────────────────────────
@@ -492,6 +500,10 @@ public class Microbe {
         return computeCapacityLoad(maxHealth, maxEnergy);
     }
 
+    private void refreshDeadFlagLocked() {
+        dead = (health <= 0.0 || energy <= 0.0);
+    }
+
     /**
      * Sets random velocity based on speed gene.
      */
@@ -525,6 +537,7 @@ public class Microbe {
         double baseVY;
         synchronized (stateLock) {
             energy -= energyCost;
+            refreshDeadFlagLocked();
             baseVX = velocityX;
             baseVY = velocityY;
         }
@@ -537,11 +550,11 @@ public class Microbe {
         double agilityDrag = Math.min(MAX_AGILITY_DRAG,
                 load * AGILITY_DRAG_PER_LOAD + getDefenseTrait() * AGILITY_DRAG_PER_DEFENSE);
         double agilityFactor = 1.0 - agilityDrag;
-        x += appliedVX * vitality * energySpeedFactor * agilityFactor;
-        y += appliedVY * vitality * energySpeedFactor * agilityFactor;
+        double nextX = x + appliedVX * vitality * energySpeedFactor * agilityFactor;
+        double nextY = y + appliedVY * vitality * energySpeedFactor * agilityFactor;
 
-        boolean bounceX = (x < 0 || x > width);
-        boolean bounceY = (y < 0 || y > height);
+        boolean bounceX = (nextX < 0 || nextX > width);
+        boolean bounceY = (nextY < 0 || nextY > height);
         if (bounceX || bounceY) {
             synchronized (stateLock) {
                 if (bounceX) {
@@ -554,11 +567,15 @@ public class Microbe {
         }
 
         if (bounceX) {
-            x = Math.max(0, Math.min(width, x));
+            nextX = Math.max(0, Math.min(width, nextX));
         }
         if (bounceY) {
-            y = Math.max(0, Math.min(height, y));
+            nextY = Math.max(0, Math.min(height, nextY));
         }
+
+        x = nextX;
+        y = nextY;
+        positionSnapshot = new PositionSnapshot(nextX, nextY);
 
         // Random direction changes for more organic movement
         if (ThreadLocalRandom.current().nextDouble() < 0.02 && getEnergyRatio() > 0.30) {
@@ -579,6 +596,7 @@ public class Microbe {
         synchronized (stateLock) {
             health -= totalDamage;
             age++;
+            refreshDeadFlagLocked();
         }
     }
 
@@ -779,6 +797,7 @@ public class Microbe {
             age = 0;
             health = Math.max(0.0, health - maxHealth * healthCostRatio);
             energy = Math.max(0.0, energy - maxEnergy * energyCostRatio);
+            refreshDeadFlagLocked();
         }
     }
 
@@ -839,6 +858,7 @@ public class Microbe {
             if (energyGain > 0 && health > 0) {
                 health = Math.min(maxHealth, health + energyGain * 0.06);
             }
+            refreshDeadFlagLocked();
         }
     }
 
@@ -876,6 +896,7 @@ public class Microbe {
         if (health < 0) {
             health = 0;
         }
+        refreshDeadFlagLocked();
         return energyTransferred;
     }
 
@@ -902,9 +923,10 @@ public class Microbe {
      * Uses squared distance to avoid {@code Math.sqrt()}.
      */
     public boolean contains(double px, double py) {
+        PositionSnapshot position = positionSnapshot;
         final int hitRadius = getSize() * 3;
-        double dx = px - x;
-        double dy = py - y;
+        double dx = px - position.x();
+        double dy = py - position.y();
         return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
     }
 
@@ -927,14 +949,18 @@ public class Microbe {
      * Returns the current x position.
      */
     public double getX() {
-        return x;
+        return positionSnapshot.x();
     }
 
     /**
      * Returns the current y position.
      */
     public double getY() {
-        return y;
+        return positionSnapshot.y();
+    }
+
+    public PositionSnapshot getPositionSnapshot() {
+        return positionSnapshot;
     }
 
     /**
@@ -944,6 +970,7 @@ public class Microbe {
     void setPosition(double newX, double newY) {
         this.x = newX;
         this.y = newY;
+        this.positionSnapshot = new PositionSnapshot(newX, newY);
     }
 
     /**
@@ -996,9 +1023,7 @@ public class Microbe {
     }
 
     public boolean isDead() {
-        synchronized (stateLock) {
-            return health <= 0 || energy <= 0;
-        }
+        return dead;
     }
 
     /**
@@ -1119,8 +1144,9 @@ public class Microbe {
      * @param strength blend factor in [0,1], higher = snappier turn
      */
     public void steerTowards(double tx, double ty, double strength) {
-        double dx = tx - x;
-        double dy = ty - y;
+        PositionSnapshot position = positionSnapshot;
+        double dx = tx - position.x();
+        double dy = ty - position.y();
         double distSq = dx * dx + dy * dy;
         if (distSq <= 1e-9) return;
 
@@ -1140,6 +1166,7 @@ public class Microbe {
      * Captures a single immutable snapshot of all render-relevant values.
      */
     public RenderState toRenderState() {
+        PositionSnapshot position = positionSnapshot;
         double healthRatio;
         double energyRatio;
         synchronized (stateLock) {
@@ -1150,8 +1177,8 @@ public class Microbe {
         Color renderBrightColor = computeBrightColor(renderColor);
         return new RenderState(
                 id,
-                x,
-                y,
+                position.x(),
+                position.y(),
                 getSize(),
                 renderColor,
                 renderBrightColor,
@@ -1175,6 +1202,7 @@ public class Microbe {
     }
 
     public PersistedState toPersistedState() {
+        PositionSnapshot position = positionSnapshot;
         double h;
         double e;
         double vx;
@@ -1191,8 +1219,8 @@ public class Microbe {
                 id,
                 parentId,
                 absoluteGeneration,
-                x,
-                y,
+                position.x(),
+                position.y(),
                 vx,
                 vy,
                 heatResistance,
@@ -1212,6 +1240,9 @@ public class Microbe {
                 adrenalineTimer,
                 List.copyOf(ancestry)
         );
+    }
+
+    public record PositionSnapshot(double x, double y) {
     }
 
     /**

@@ -19,7 +19,8 @@ import java.util.logging.Logger;
  */
 public class SimulationLoopController {
     private static final Logger LOGGER = Logger.getLogger(SimulationLoopController.class.getName());
-    // Avoid OS timer quantization for short waits (common on Windows).
+    private static final long DEFAULT_STOP_TIMEOUT_MS = 3_000L;
+    // Avoid OS timer quantization for short waits.
     private static final long OS_SLEEP_THRESHOLD_NS = 25_000_000L;
     private static final long OS_SLEEP_GUARD_NS = 5_000_000L;
     private static final long YIELD_THRESHOLD_NS = 1_000_000L;
@@ -241,16 +242,37 @@ public class SimulationLoopController {
 
     /** Signals the simulation loop thread to exit cleanly. */
     public synchronized void stop() {
+        stopAndAwait(DEFAULT_STOP_TIMEOUT_MS);
+    }
+
+    synchronized boolean stopAndAwait(long timeoutMs) {
         running = false;
         Thread thread = simulationThread;
-        if (thread != null) {
-            thread.interrupt();
+        if (thread == null) {
+            simulationThread = null;
+            return true;
+        }
+
+        thread.interrupt();
+        long remainingMs = Math.max(0L, timeoutMs);
+        long deadline = System.nanoTime() + remainingMs * 1_000_000L;
+        while (thread.isAlive() && remainingMs > 0L) {
             try {
-                thread.join(300);
+                thread.join(Math.min(remainingMs, 250L));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                break;
             }
+            remainingMs = Math.max(0L, (deadline - System.nanoTime()) / 1_000_000L);
         }
-        simulationThread = null;
+
+        boolean stopped = !thread.isAlive();
+        if (!stopped) {
+            LOGGER.warning("Simulation loop thread did not stop before timeout");
+        }
+        if (stopped) {
+            simulationThread = null;
+        }
+        return stopped;
     }
 }
