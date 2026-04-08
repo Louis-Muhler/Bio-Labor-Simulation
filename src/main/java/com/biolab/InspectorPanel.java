@@ -344,10 +344,6 @@ public class InspectorPanel extends JPanel {
          * Scale factor applied to the on-canvas microbe size (5 px) for the specimen preview.
          */
         private static final double PREVIEW_SCALE = 5.0;
-        /**
-         * Content width – frame margin and padding are handled by the scroll-pane border.
-         */
-        private static final int CW = CONTENT_WIDTH;
         private Microbe selectedMicrobe;
 
         /**
@@ -418,12 +414,12 @@ public class InspectorPanel extends JPanel {
                 // Title
                 g2.setColor(ACCENT);
                 g2.setFont(TITLE_FONT);
-                drawCentered(g2, "SPECIMEN ANALYSIS", CW / 2, y + 15);
+                drawCentered(g2, "SPECIMEN ANALYSIS", CONTENT_WIDTH / 2, y + 15);
                 y += LINE_H + 5;
 
                 // Separator
                 g2.setColor(GRID_COLOR);
-                g2.fillRect(0, y, CW, 2);
+                g2.fillRect(0, y, CONTENT_WIDTH, 2);
                 y += LINE_H;
 
                 // Vital Signs
@@ -482,7 +478,7 @@ public class InspectorPanel extends JPanel {
         void recalculatePreferredSize() {
             int contentHeight = computeContentHeight();
             int minHeight = selectedMicrobe == null || selectedMicrobe.isDead() ? NO_SELECTION_HEIGHT : 0;
-            setPreferredSize(new Dimension(CW, Math.max(minHeight, contentHeight)));
+            setPreferredSize(new Dimension(CONTENT_WIDTH, Math.max(minHeight, contentHeight)));
         }
 
         /**
@@ -520,7 +516,7 @@ public class InspectorPanel extends JPanel {
             y += LINE_H + 5;
 
             int chartX = 5;
-            int chartW = CW - 10;
+            int chartW = CONTENT_WIDTH - 10;
             int chartY = y;
 
             g2.setColor(CHART_BG);
@@ -845,12 +841,12 @@ public class InspectorPanel extends JPanel {
         private void drawColorIndicator(Graphics2D g2, int y, Microbe microbe) {
             g2.setColor(ACCENT);
             g2.setFont(LABEL_FONT);
-            drawCentered(g2, "SPECIMEN", CW / 2, y);
+            drawCentered(g2, "SPECIMEN", CONTENT_WIDTH / 2, y);
             y += 40;
 
             Microbe.RenderState renderState = microbe.toRenderState();
             int previewSize = (int) (renderState.size() * PREVIEW_SCALE);
-            int cx = CW / 2;
+            int cx = CONTENT_WIDTH / 2;
             int cy = y + previewSize;
             MicrobePreviewRenderer.paintPreview(g2, renderState, cx, cy, PREVIEW_SCALE);
         }
