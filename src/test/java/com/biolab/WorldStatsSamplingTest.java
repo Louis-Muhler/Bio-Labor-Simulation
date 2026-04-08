@@ -158,6 +158,7 @@ class WorldStatsSamplingTest {
 
             assertEquals(1, samples.size());
             WorldStatsSample sample = samples.get(0);
+            assertEquals(30L, sample.tick(), "Store query should return the flushed tick-30 sample");
             double expectedEnergy = engine.captureState().microbes().get(0).energy();
 
             assertEquals(80.0, sample.metricValues().get(WorldMetricId.AVG_HEALTH_ABSOLUTE), 0.001);
@@ -224,6 +225,7 @@ class WorldStatsSamplingTest {
 
             assertEquals(1, samples.size());
             WorldStatsSample sample = samples.get(0);
+            assertEquals(30L, sample.tick(), "Store query should return the flushed tick-30 sample");
             double sampledStrength = sample.metricValues().get(WorldMetricId.AVG_STRENGTH);
             double sampledDefense = sample.metricValues().get(WorldMetricId.AVG_DEFENSE);
 
