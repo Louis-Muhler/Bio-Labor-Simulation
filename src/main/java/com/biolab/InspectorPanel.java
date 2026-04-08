@@ -85,6 +85,7 @@ public class InspectorPanel extends JPanel {
         setLayout(new BorderLayout());
 
         contentCanvas = new ContentCanvas();
+        contentCanvas.recalculatePreferredSize();
 
         scrollPane = OverlayScrollSupport.createWheelOnlyScrollPane(
                 contentCanvas,
@@ -129,10 +130,7 @@ public class InspectorPanel extends JPanel {
     }
 
     private void refreshContentSizeForSelection() {
-        Microbe selected = contentCanvas.selectedMicrobe;
-        if (selected != null && !selected.isDead()) {
-            contentCanvas.recalculatePreferredSize();
-        }
+        contentCanvas.recalculatePreferredSize();
     }
 
     private void resetScrollToTopSafely() {
@@ -478,7 +476,9 @@ public class InspectorPanel extends JPanel {
         }
 
         void recalculatePreferredSize() {
-            setPreferredSize(new Dimension(CW, computeContentHeight()));
+            int contentHeight = computeContentHeight();
+            int minHeight = selectedMicrobe == null || selectedMicrobe.isDead() ? NO_SELECTION_HEIGHT : 0;
+            setPreferredSize(new Dimension(CW, Math.max(minHeight, contentHeight)));
         }
 
         /**
