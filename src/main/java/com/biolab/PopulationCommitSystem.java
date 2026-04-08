@@ -1,6 +1,7 @@
 package com.biolab;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -25,8 +26,13 @@ final class PopulationCommitSystem {
             List<FoodPellet> foodPellets = worldState.food().pellets();
             microbes.removeIf(Microbe::isDead);
             worldState.index().byId().entrySet().removeIf(e -> e.getValue().isDead());
-            int consumedFoodCount = (int) foodPellets.stream().filter(FoodPellet::isConsumed).count();
-            foodPellets.removeIf(FoodPellet::isConsumed);
+            int consumedFoodCount = 0;
+            for (Iterator<FoodPellet> iterator = foodPellets.iterator(); iterator.hasNext(); ) {
+                if (iterator.next().isConsumed()) {
+                    iterator.remove();
+                    consumedFoodCount++;
+                }
+            }
 
             int currentPopulation = microbes.size();
             List<Microbe> newbornsCopy;
@@ -49,10 +55,11 @@ final class PopulationCommitSystem {
                 }
             }
 
-            SimulationSnapshot snapshot = new SimulationSnapshot(
-                    microbes.stream().map(Microbe::toRenderState).toList(),
-                    List.copyOf(foodPellets)
-            );
+            List<Microbe.RenderState> renderStates = new ArrayList<>(microbes.size());
+            for (Microbe microbe : microbes) {
+                renderStates.add(microbe.toRenderState());
+            }
+            SimulationSnapshot snapshot = new SimulationSnapshot(renderStates, List.copyOf(foodPellets));
             return new SimulationFrameResult(snapshot, spawnedFoodCount, consumedFoodCount);
         }
     }
@@ -61,8 +68,13 @@ final class PopulationCommitSystem {
         // Even empty frames run cleanup under the same commit lock to keep semantics uniform.
         synchronized (worldState.dataLock()) {
             List<FoodPellet> foodPellets = worldState.food().pellets();
-            int consumedFoodCount = (int) foodPellets.stream().filter(FoodPellet::isConsumed).count();
-            foodPellets.removeIf(FoodPellet::isConsumed);
+            int consumedFoodCount = 0;
+            for (Iterator<FoodPellet> iterator = foodPellets.iterator(); iterator.hasNext(); ) {
+                if (iterator.next().isConsumed()) {
+                    iterator.remove();
+                    consumedFoodCount++;
+                }
+            }
             return new SimulationFrameResult(
                     new SimulationSnapshot(List.of(), List.copyOf(foodPellets)),
                     spawnedFoodCount,

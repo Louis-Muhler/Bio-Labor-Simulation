@@ -1,5 +1,6 @@
 package com.biolab;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.DoubleConsumer;
 
@@ -31,13 +32,16 @@ final class SimulationStateCoordinator {
                                  List<WorldStatsSample> worldStatsHistory) {
         List<Microbe> microbes = worldState.population().microbes();
         List<FoodPellet> foodPellets = worldState.food().pellets();
-        List<Microbe.PersistedState> microbesState = microbes.stream()
-                .map(Microbe::toPersistedState)
-                .toList();
-        List<SimulationState.FoodState> foodState = foodPellets.stream()
-                .filter(food -> !food.isConsumed())
-                .map(food -> new SimulationState.FoodState(food.getX(), food.getY()))
-                .toList();
+        List<Microbe.PersistedState> microbesState = new ArrayList<>(microbes.size());
+        for (Microbe microbe : microbes) {
+            microbesState.add(microbe.toPersistedState());
+        }
+        List<SimulationState.FoodState> foodState = new ArrayList<>(foodPellets.size());
+        for (FoodPellet food : foodPellets) {
+            if (!food.isConsumed()) {
+                foodState.add(new SimulationState.FoodState(food.getX(), food.getY()));
+            }
+        }
 
         return new SimulationState(
                 width,
@@ -132,9 +136,10 @@ final class SimulationStateCoordinator {
     private SimulationSnapshot snapshotFromCurrentWorld() {
         List<Microbe> microbes = worldState.population().microbes();
         List<FoodPellet> foodPellets = worldState.food().pellets();
-        return new SimulationSnapshot(
-                microbes.stream().map(Microbe::toRenderState).toList(),
-                List.copyOf(foodPellets)
-        );
+        List<Microbe.RenderState> renderStates = new ArrayList<>(microbes.size());
+        for (Microbe microbe : microbes) {
+            renderStates.add(microbe.toRenderState());
+        }
+        return new SimulationSnapshot(renderStates, List.copyOf(foodPellets));
     }
 }

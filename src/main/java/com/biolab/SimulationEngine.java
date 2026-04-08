@@ -131,9 +131,10 @@ public class SimulationEngine implements SimulationRuntime {
         }
 
         // Publish initial snapshot so the EDT can render before the first update()
-        List<Microbe.RenderState> initialMicrobeStates = microbes.stream()
-                .map(Microbe::toRenderState)
-                .toList();
+        List<Microbe.RenderState> initialMicrobeStates = new java.util.ArrayList<>(microbes.size());
+        for (Microbe microbe : microbes) {
+            initialMicrobeStates.add(microbe.toRenderState());
+        }
         renderSnapshot = new SimulationSnapshot(initialMicrobeStates, List.copyOf(foodPellets));
     }
 

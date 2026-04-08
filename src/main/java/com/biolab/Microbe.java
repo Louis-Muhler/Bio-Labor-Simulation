@@ -92,6 +92,7 @@ public class Microbe {
     private static final double ENERGY_TRANSFER_BULK_PENALTY = 0.08;
     private final double maxHealth;
     private final double maxEnergy;
+    private final int cachedSize;
     /**
      * Absolute generation counter: 1 for seed microbes, parent.absoluteGeneration + 1
      * for every child born through reproduction.  Never changes after construction.
@@ -184,6 +185,8 @@ public class Microbe {
         this.toxinResistance = clamp01(baseDefense + (random.nextDouble() - 0.5) * 0.18);
         this.maxHealth = createSeedMaxHealth(defenseAxis);
         this.maxEnergy = createSeedMaxEnergy(agilityAxis);
+        this.cachedSize = computeSizeFromTraits(this.heatResistance, this.toxinResistance, this.speed, this.diet,
+                this.maxHealth, this.maxEnergy);
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
         this.dead = (this.health <= 0.0 || this.energy <= 0.0);
@@ -230,6 +233,8 @@ public class Microbe {
         this.diet = diet;
         this.maxHealth = sanitizeMaxHealth(maxHealth);
         this.maxEnergy = sanitizeMaxEnergy(maxEnergy);
+        this.cachedSize = computeSizeFromTraits(this.heatResistance, this.toxinResistance, this.speed, this.diet,
+                this.maxHealth, this.maxEnergy);
         this.health = clamp(health, 0.0, this.maxHealth);
         this.energy = clamp(energy, 0.0, this.maxEnergy);
         this.dead = (this.health <= 0.0 || this.energy <= 0.0);
@@ -266,6 +271,8 @@ public class Microbe {
         this.diet = mutate(parent.diet);
         this.maxHealth = mutateCap(parent.maxHealth, MIN_MAX_HEALTH);
         this.maxEnergy = mutateCap(parent.maxEnergy, MIN_MAX_ENERGY);
+        this.cachedSize = computeSizeFromTraits(this.heatResistance, this.toxinResistance, this.speed, this.diet,
+                this.maxHealth, this.maxEnergy);
 
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * REPRODUCTION_START_ENERGY_RATIO;
@@ -388,6 +395,8 @@ public class Microbe {
         this.diet = Math.max(0.0, Math.min(1.0, forcedDiet));
         this.maxHealth = createSeedMaxHealth((this.heatResistance + this.toxinResistance) * 0.5);
         this.maxEnergy = createSeedMaxEnergy(this.speed);
+        this.cachedSize = computeSizeFromTraits(this.heatResistance, this.toxinResistance, this.speed, this.diet,
+                this.maxHealth, this.maxEnergy);
         this.health = this.maxHealth;
         this.energy = this.maxEnergy * INITIAL_ENERGY_RATIO;
         this.dead = (this.health <= 0.0 || this.energy <= 0.0);
@@ -496,6 +505,21 @@ public class Microbe {
         double energyLoad = Math.max(0.0, (maxEnergy / BASE_MAX_ENERGY) - 1.0);
         // Health-heavy builds get a slightly higher burden than battery-heavy builds.
         return healthLoad * 0.60 + energyLoad * 0.40;
+    }
+
+    private static int computeSizeFromTraits(double heatResistance,
+                                             double toxinResistance,
+                                             double speed,
+                                             double diet,
+                                             double maxHealth,
+                                             double maxEnergy) {
+        double defense = clamp01((heatResistance + toxinResistance) * 0.5);
+        double strength = clamp01(0.70 * diet + 0.30 * (1.0 - speed));
+        double load = clamp01(computeCapacityLoad(maxHealth, maxEnergy));
+        double bulk = 0.35 * defense + 0.25 * strength + 0.40 * load;
+        double agilityPenalty = speed * (0.24 + load * 0.16);
+        double sizeFactor = clamp01(0.18 + bulk - agilityPenalty);
+        return 5 + (int) Math.round(sizeFactor * 8.0);
     }
 
     private double capacityLoad() {
@@ -979,13 +1003,7 @@ public class Microbe {
      * Returns the visual radius of this microbe.
      */
     public int getSize() {
-        double defense = getDefenseTrait();
-        double strength = getStrengthTrait();
-        double load = clamp01(capacityLoad());
-        double bulk = 0.35 * defense + 0.25 * strength + 0.40 * load;
-        double agilityPenalty = speed * (0.24 + load * 0.16);
-        double sizeFactor = clamp01(0.18 + bulk - agilityPenalty);
-        return 5 + (int) Math.round(sizeFactor * 8.0);
+        return cachedSize;
     }
 
     /**
