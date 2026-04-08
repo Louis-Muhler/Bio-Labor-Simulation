@@ -132,6 +132,13 @@ public class InspectorPanel extends JPanel {
 
     private void refreshContentSizeForSelection() {
         contentCanvas.recalculatePreferredSize();
+        JViewport viewport = scrollPane.getViewport();
+        Dimension preferred = contentCanvas.getPreferredSize();
+        if (viewport != null && preferred != null) {
+            viewport.setViewSize(preferred);
+            viewport.revalidate();
+        }
+        contentCanvas.revalidate();
     }
 
     private void resetScrollToTopSafely() {

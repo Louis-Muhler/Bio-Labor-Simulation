@@ -4,6 +4,8 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicSliderUI;
 import javax.swing.plaf.basic.BasicSpinnerUI;
+import javax.swing.text.DefaultFormatter;
+import javax.swing.text.NumberFormatter;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.util.Locale;
@@ -69,6 +71,7 @@ public class EnvironmentPanel extends JPanel {
     private final JLabel toxicityValueLabel;
     private final JLabel foodValueLabel;
     private final JSpinner foodSpawnSpinner;
+    private final Timer controlSyncTimer;
     private boolean syncingFoodSpinner;
     private boolean syncingControls;
 
@@ -137,6 +140,13 @@ public class EnvironmentPanel extends JPanel {
         });
 
         syncControlsFromEngine();
+        syncFoodSpinnerFromEngine();
+
+        controlSyncTimer = new Timer(120, e -> {
+            syncControlsFromEngine();
+            syncFoodSpinnerFromEngine();
+        });
+        controlSyncTimer.start();
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -180,20 +190,30 @@ public class EnvironmentPanel extends JPanel {
     }
 
     private static void styleFoodSpinner(JSpinner spinner) {
-        spinner.setUI(new BlueSpinnerUI());
-        spinner.setOpaque(false);
-        spinner.setBorder(BorderFactory.createEmptyBorder());
-        spinner.setBackground(OverlayTheme.CONTROL_BG);
+        OverlayControlFactory.styleSpinner(spinner);
+        spinner.setEditor(new JSpinner.NumberEditor(spinner, "0.00##"));
 
         JComponent editor = spinner.getEditor();
         if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
-            JTextField field = defaultEditor.getTextField();
+            JFormattedTextField field = defaultEditor.getTextField();
             field.setFont(new Font("Segoe UI", Font.BOLD, 14));
             field.setForeground(FOOD_SPINNER_BORDER);
             field.setCaretColor(FOOD_SPINNER_BORDER);
             field.setOpaque(false);
             field.setHorizontalAlignment(SwingConstants.LEFT);
             field.setBorder(new EmptyBorder(6, 0, 6, 0));
+            field.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
+
+            if (field.getFormatter() instanceof NumberFormatter numberFormatter) {
+                numberFormatter.setValueClass(Double.class);
+                numberFormatter.setMinimum(0.0);
+                numberFormatter.setMaximum(MAX_FOOD_SPAWN_PER_TICK);
+                numberFormatter.setCommitsOnValidEdit(true);
+                numberFormatter.setAllowsInvalid(true);
+            } else if (field.getFormatter() instanceof DefaultFormatter defaultFormatter) {
+                defaultFormatter.setCommitsOnValidEdit(true);
+            }
+
             defaultEditor.setBorder(BorderFactory.createEmptyBorder());
             defaultEditor.setOpaque(false);
         }
@@ -289,10 +309,24 @@ public class EnvironmentPanel extends JPanel {
             y += 14;
 
             layoutControls(x, y, contentWidth);
-            syncControlsFromEngine();
-            syncFoodSpinnerFromEngine();
         } finally {
             g2d.dispose();
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if (controlSyncTimer != null) {
+            controlSyncTimer.stop();
+        }
+        super.removeNotify();
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (controlSyncTimer != null && !controlSyncTimer.isRunning()) {
+            controlSyncTimer.start();
         }
     }
 
