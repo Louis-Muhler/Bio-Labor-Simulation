@@ -406,7 +406,8 @@ public class SimulationEngine implements SimulationRuntime {
      * May be called from any thread (volatile write).
      */
     public void setFoodSpawnRate(double rate) {
-        this.foodSpawnRate = Math.max(0.0, rate);
+        double sanitized = Double.isFinite(rate) ? rate : 0.0;
+        this.foodSpawnRate = Math.max(0.0, sanitized);
     }
 
     /**

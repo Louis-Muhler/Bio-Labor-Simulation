@@ -43,8 +43,8 @@ public record SaveGameMetadata(
     }
 
     public static SaveGameMetadata fromProperties(Properties props) {
-        String id = props.getProperty("save.id", "");
-        String mapName = props.getProperty("map.name", "Unnamed World");
+        String id = props.getProperty("save.id", props.getProperty("saveId", ""));
+        String mapName = props.getProperty("map.name", props.getProperty("mapName", "Unnamed World"));
         long created = parseLong(props.getProperty("created.at"), Instant.now().getEpochSecond());
         long lastPlayed = parseLong(props.getProperty("last.played.at"), created);
         long playtime = parseLong(props.getProperty("playtime.seconds"), 0);

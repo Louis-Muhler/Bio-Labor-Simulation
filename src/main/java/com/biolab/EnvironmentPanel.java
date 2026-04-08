@@ -72,10 +72,6 @@ public class EnvironmentPanel extends JPanel {
     private boolean syncingFoodSpinner;
     private boolean syncingControls;
 
-    // ────────────────────────────────────────────────────────────────────
-    // Construction
-    // ────────────────────────────────────────────────────────────────────
-
     /**
      * @param engine the simulation engine whose environment parameters are controlled
      */
@@ -105,7 +101,7 @@ public class EnvironmentPanel extends JPanel {
         add(foodValueLabel);
 
         foodSpawnSpinner = new JSpinner(new SpinnerNumberModel(
-                Math.max(0.0, engine.getFoodSpawnRate()),
+                sanitizeFoodSpawnRate(engine.getFoodSpawnRate()),
                 0.0,
                 MAX_FOOD_SPAWN_PER_TICK,
                 FOOD_STEP_PER_CLICK
@@ -115,12 +111,12 @@ public class EnvironmentPanel extends JPanel {
             if (syncingFoodSpinner) {
                 return;
             }
-            double next = ((Number) foodSpawnSpinner.getValue()).doubleValue();
+            double next = sanitizeFoodSpawnRate(((Number) foodSpawnSpinner.getValue()).doubleValue());
             engine.enqueueCommand(SimulationCommand.setFoodSpawnRate(next));
             updateFoodValueLabel(next);
         });
         add(foodSpawnSpinner);
-        updateFoodValueLabel(engine.getFoodSpawnRate());
+        updateFoodValueLabel(sanitizeFoodSpawnRate(engine.getFoodSpawnRate()));
 
         temperatureSlider.addChangeListener(e -> {
             if (syncingControls) {
@@ -141,6 +137,17 @@ public class EnvironmentPanel extends JPanel {
         });
 
         syncControlsFromEngine();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Construction
+    // ────────────────────────────────────────────────────────────────────
+
+    private static double sanitizeFoodSpawnRate(double value) {
+        if (!Double.isFinite(value)) {
+            return 0.0;
+        }
+        return Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, value));
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -197,7 +204,10 @@ public class EnvironmentPanel extends JPanel {
     // ────────────────────────────────────────────────────────────────────
 
     private void syncFoodSpinnerFromEngine() {
-        double runtimeValue = Math.max(0.0, Math.min(MAX_FOOD_SPAWN_PER_TICK, engine.getFoodSpawnRate()));
+        if (isFoodSpinnerEditing()) {
+            return;
+        }
+        double runtimeValue = sanitizeFoodSpawnRate(engine.getFoodSpawnRate());
         updateFoodValueLabel(runtimeValue);
         double spinnerValue = ((Number) foodSpawnSpinner.getValue()).doubleValue();
         if (Math.abs(runtimeValue - spinnerValue) < 0.0001) {
@@ -228,6 +238,14 @@ public class EnvironmentPanel extends JPanel {
 
     private void updateFoodValueLabel(double value) {
         foodValueLabel.setText(String.format(Locale.ROOT, "%.2f per tick", value));
+    }
+
+    private boolean isFoodSpinnerEditing() {
+        JComponent editor = foodSpawnSpinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor defaultEditor) {
+            return defaultEditor.getTextField().isFocusOwner();
+        }
+        return false;
     }
 
     @Override

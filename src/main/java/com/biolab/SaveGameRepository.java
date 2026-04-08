@@ -41,7 +41,7 @@ public class SaveGameRepository {
                         }
                         result.add(SaveGameMetadata.fromProperties(props));
                     }
-                } catch (IOException ignored) {
+                } catch (IOException | RuntimeException ignored) {
                     // Skip invalid save folders.
                 }
             });
