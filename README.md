@@ -1,67 +1,95 @@
 # Bio-Labor Simulation
 
-This repository contains a semester project for the **Software Engineering 2** course.
+Semester project (Software Engineering 2): a real-time simulation of an evolving microbial ecosystem.
 
-The project is a real-time simulation of a biological ecosystem. The primary goal is to implement a multithreaded application that manages a large number of autonomous agents (microbes/entities) interacting with their environment.
+The main focus is a robust implementation of **multithreading and concurrency** together with an interactive Swing UI.
 
-## Project Concept
+## Project Overview
 
-The simulation creates an environment where entities evolve over time. The core loop revolves around natural selection: agents with traits better suited to the current environment survive and reproduce, while others perish.
+- Simulation of many autonomous microbes with inheritance, mutation, selection, and environmental pressure
+- Real-time visualization with camera, selection/inspector, overlays, and debug mode
+- Persistent saves and settings including autosave
+- Architecture with clear separation between UI, session lifecycle, and simulation core
 
-The project is designed to be modular and scalable. We are starting with a basic implementation of movement and survival logic, but the architecture allows us to layer in more complex behaviors, genetic variations, and environmental stressors as development progresses.
+## Architecture (Current)
 
-**Key Objectives:**
-* Simulate a large population of independent entities.
-* Implement evolutionary mechanisms (selection, mutation, inheritance).
-* Allow user interaction to influence the simulation parameters dynamically.
+### High-Level Flow
 
-## Technical Focus
+1. `BioLabSimulatorApp` controls UI flow and top-level states.
+2. `SimulationSessionCoordinator` starts/stops runtime sessions (engine, canvas, overlays, loop).
+3. `SimulationLoopController` schedules updates (TPS) and rendering (FPS) independently.
+4. `SimulationEngine` executes frames via `SimulationUpdateService`.
+5. `SimulationFrameOrchestrator` partitions microbes into chunks and processes them in parallel.
+6. `PopulationCommitSystem` commits results atomically and publishes a new `SimulationSnapshot`.
 
-The main technical requirement for this project is **Multithreading**.
+### Key Components
 
-Simulating thousands of agents calculating their behavior, movement, and interactions simultaneously requires efficient resource management. We are using Java's concurrency tools to parallelize the workload, ensuring the simulation remains fluid and responsive even under high load.
+- `SimulationEngineContext`: wiring of engine services
+- `FrameMutationCoordinator`: exclusivity between frame updates and exclusive mutations (for example load/capture/spawn)
+- `SimulationCommandProcessor`: thread-safe command queue with coalescing for high-frequency slider inputs
+- `SpatialGrid` and `MicrobeGrid`: spatial indices for local neighborhood queries
 
-**Tech Stack:**
-* Java
-* Java Swing (for the visualization)
-* Java Concurrency Utilities
+## Concurrency Model
 
-## Getting Started
+### Core Principles
 
-1.  Clone the repository.
-2.  Open the project in your preferred Java IDE (IntelliJ, Eclipse, VS Code).
-3.  Build the project using Maven: `mvn clean compile`
-4.  Run the main application class to start the simulation window: `mvn exec:java -Dexec.mainClass="com.biolab.BioLabSimulatorApp"`
+- **Single writer per frame commit**: world lists are mutated only during commit under `worldState.dataLock()`.
+- **Parallel worker phase**: microbe behavior runs in chunks on an `ExecutorService`.
+- **Atomic snapshot publication**: UI reads a `volatile` `SimulationSnapshot` lock-free.
+- **Exclusive mutations**: save/load/debug spawn do not interleave with an active frame.
+
+### Tick vs Render
+
+- Tick speed via `SimulationLoopController.cycleSpeed()`:
+  - `1x`, `2x`, `5x`, `10x`, `25x`, `50x`, `100x`, `MAX`
+- Render FPS is configured separately via `setRenderFps(int)` (internally clamped to `10..240`)
+
+## Requirements
+
+- Java 17+
+- Maven 3.9+
+- Windows, Linux, or macOS (primarily tested on Windows)
+
+## Build, Test, Run
+
+Run from the project root:
+
+```powershell
+mvn clean compile
+mvn test
+mvn exec:java -Dexec.mainClass="com.biolab.BioLabSimulatorApp"
+```
+
+Optional package build:
+
+```powershell
+mvn clean package
+```
 
 ## Features
 
-### Interactive Simulation
-- Real-time visualization of microbe population with genetic traits
-- Adjustable environmental parameters (temperature and toxicity)
-- Natural selection mechanics where microbes evolve based on environmental pressures
+- Real-time simulation with herbivore/carnivore behavior paths
+- Adjustable environment parameters (temperature, toxicity, food spawn rate)
+- Overlay system (Inspector, Environment, World Stats, Creator)
+- Main menu, save browser, and settings flows via `AppUiStateMachine`
+- Autosave via `SessionSaveCoordinator` + `AsyncSaveService`
+- Debug mode (AI intent lines, radius, IDs, simulation-rate display)
 
-### Settings and Saves
+## Storage Locations
 
-- **Persistent Configuration**: Settings are stored under the app data root (`%LOCALAPPDATA%/BioLabSimulator/settings`
-  on Windows)
-- **Savegames**: Save files and metadata are stored alongside settings in `%LOCALAPPDATA%/BioLabSimulator/saves` on
-  Windows
-- **Settings Overlay**: Access via the gear button in the top-left overlay
-  - Automatically pauses simulation when open
-  - Semi-transparent overlay with blur effect
-  - Close with ESC key or Cancel button
+- Settings: `%LOCALAPPDATA%/BioLabSimulator/settings`
+- Saves: `%LOCALAPPDATA%/BioLabSimulator/saves`
 
-### Display Options
-- **Fullscreen Mode**: Toggle between windowed and fullscreen display
-- **Multiple Resolutions**: Support for various screen resolutions:
-  - 16:9 ratios: 1280x720 (HD), 1920x1080 (Full HD), 2560x1440 (QHD), 3840x2160 (4K UHD)
-  - 21:9 ultrawide: 2560x1080, 3440x1440 (WQHD)
-  - 16:10: 1440x900, 1680x1050, 1920x1200
-  - 4:3: 1024x768, 1280x960, 1600x1200
+## Known Limitations
 
-### Performance Options
-- **Configurable FPS**: Choose target frame rate (30, 60, 120, 144, or Unlimited)
-- **Robust Error Handling**: Configuration file errors are handled gracefully with fallback to defaults
+- Large spawn bursts can still be expensive because spawn operations currently run individually through the runtime.
+- At very high population density, lock contention (`Microbe.stateLock`) can limit parallel speedup.
+
+## Quality Assurance
+
+- Extensive unit tests in `src/test/java/com/biolab`
+- Concurrency-focused coverage (for example `FrameMutationCoordinatorTest`, `SimulationUpdateServiceTest`,
+  `SimulationEngineAtomicStateTest`)
 
 ---
-*Note: This project is currently under active development for university coursework.*
+Project status: Completed (final/semester project).
